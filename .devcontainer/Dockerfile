@@ -34,6 +34,7 @@ RUN apt-get update \
       ripgrep \
       sqlite3 \
       sudo \
+      xz-utils \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
     && corepack install --global pnpm@${PNPM_VERSION} \
