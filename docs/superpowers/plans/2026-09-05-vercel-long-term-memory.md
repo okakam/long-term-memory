@@ -97,11 +97,11 @@
 - 実装する: `MemorySchema`、`EntitySchema`、`TripleSchema`、`SourceRefSchema`、`bodyChars(body): number`、`serializeMemory(memory): string`、`parseMemoryString(text): Memory` を §5.1–§5.3 のとおりに実装する。
 - 実装する: `memoryObjectKey(projectId, name, contentHash): string` と `memoryPrefix(projectId, name?): string`。Blob key にユーザー入力由来のパス逸脱要素を含めない。
 
-- [ ] **手順 1: frontmatter のテストを先に作成する。** 固定キー順、末尾改行、Date から ISO への変換、YAML boolean alias、不正 triple の破棄、空でない `supersedes`、Unicode code point の本文長、最後の `MemorySchema.parse` 拒否を網羅する。
-- [ ] **手順 2: スキーマとシリアライザを実装する。** フィールド順を厳密に保ち、空の `entities`、`triples`、`source_refs`、`supersedes` は省略する。`supersedes` の名前は空を許さず、parse 時に本文境界の改行を正規化する。
-- [ ] **手順 3: adapter 契約テストを作成する。** 一時 filesystem store と mock Blob client の両方で同じ CRUD/list/hash テストを実行する。Blob が private であること、content-hash key が決定的であること、Blob mode が `LTM_HOME` に依存しないこと、不正な project/name を安全に拒否することを検証する。
-- [ ] **手順 4: 両 adapter を実装する。** ローカル adapter は `atomicWriteText` を使う。Blob adapter は `put(..., { access: 'private', addRandomSuffix: false })`、`get`、`list`、`del` を使い、`BLOB_READ_WRITE_TOKEN` は遅延検証して本番 env なしでも `next build` を通す。
-- [ ] **手順 5: 対象テストを実行してコミットする。** `pnpm vitest run tests/lib/markdown tests/storage` を実行し、`feat: add canonical markdown storage ports` でコミットする。
+- [x] **手順 1: frontmatter のテストを先に作成する。** 固定キー順、末尾改行、Date から ISO への変換、YAML boolean alias、不正 triple の破棄、空でない `supersedes`、Unicode code point の本文長、最後の `MemorySchema.parse` 拒否を網羅する。
+- [x] **手順 2: スキーマとシリアライザを実装する。** フィールド順を厳密に保ち、空の `entities`、`triples`、`source_refs`、`supersedes` は省略する。`supersedes` の名前は空を許さず、parse 時に本文境界の改行を正規化する。
+- [x] **手順 3: adapter 契約テストを作成する。** 一時 filesystem store と mock Blob client の両方で同じ CRUD/list/hash テストを実行する。Blob が private であること、content-hash key が決定的であること、Blob mode が `LTM_HOME` に依存しないこと、不正な project/name を安全に拒否することを検証する。
+- [x] **手順 4: 両 adapter を実装する。** ローカル adapter は `atomicWriteText` を使う。Blob adapter は `put(..., { access: 'private', addRandomSuffix: false })`、`get`、`list`、`del` を使い、`BLOB_READ_WRITE_TOKEN` は遅延検証して本番 env なしでも `next build` を通す。
+- [x] **手順 5: 対象テストを実行してコミットする。** `pnpm vitest run tests/lib/markdown tests/storage` を実行し、`feat: add canonical markdown storage ports` でコミットする。
 
 ### タスク 2: 索引スキーマ、マイグレーション、Vercel 対応永続化
 
