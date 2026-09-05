@@ -11,6 +11,10 @@
 
 Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存され、Compose の `long-term-memory-codex` volume でコンテナ再作成後も保持されます。API キーや認証情報は Dockerfile に記述しません。
 
+## VS Code 拡張機能
+
+`devcontainer.json` の `customizations.vscode.extensions` に `openai.chatgpt` を指定しています。既存のコンテナに反映するには、VS Code で「Dev Containers: Rebuild Container」を実行してください。
+
 ## バージョン
 
 Codex CLI は Dockerfile の `CODEX_VERSION`（現在 `0.153.4`）で固定しています。更新時は Dockerfile と compose.yaml の両方を変更してイメージを再ビルドしてください。
