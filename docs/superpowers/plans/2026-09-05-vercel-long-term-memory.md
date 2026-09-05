@@ -113,11 +113,11 @@
 - 実装する: §6.1 の schema v5 テーブル（`memories`、`tags`、`links`、`supersedes`、`memories_fts`、`entities`、`entity_aliases`、`memory_entities`、`entity_edges`）と索引。
 - 実装する: `CURRENT_VERSION = 5`、厳密な `REBUILDABLE_TABLES` 一覧、`migrate(db)`、`openLocalDb(path)`、`openTursoDb()`。
 
-- [ ] **手順 1: schema/migration テストを追加する。** `REBUILDABLE_TABLES` に全テーブル/仮想テーブルが載ること、`schema_version` が保持されること、migration が FK 安全な順序で削除すること、`contentless_delete=1` が動くこと、Markdown だけから索引を復元できることを検証する。
-- [ ] **手順 2: ローカル SQLite adapter を実装する。** WAL と外部キーを有効化し、コメント行を除去してから SQL を `/;\s*\n/` で分割し、rowid を使って `DELETE FROM memories_fts WHERE rowid = ?` を実行する。
-- [ ] **手順 3: Turso adapter を実装する。** `createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN })` は遅延初期化する。パラメータ化 query/transaction API を共通化し、モジュール import 時には初期化しない。
-- [ ] **手順 4: provider の機能チェックを追加する。** CI/deploy の preflight で FTS probe を実行し、trigram、重み付き bm25、contentless delete のいずれかが未対応なら migration 前に明確なエラーで停止する。
-- [ ] **手順 5: DB テストを実行する。** `pnpm vitest run tests/lib/db tests/storage/turso-index.test.ts` を実行し、`feat: add rebuildable SQLite and Turso index adapters` でコミットする。
+- [x] **手順 1: schema/migration テストを追加する。** `REBUILDABLE_TABLES` に全テーブル/仮想テーブルが載ること、`schema_version` が保持されること、migration が FK 安全な順序で削除すること、`contentless_delete=1` が動くこと、Markdown だけから索引を復元できることを検証する。
+- [x] **手順 2: ローカル SQLite adapter を実装する。** WAL と外部キーを有効化し、コメント行を除去してから SQL を `/;\s*\n/` で分割し、rowid を使って `DELETE FROM memories_fts WHERE rowid = ?` を実行する。
+- [x] **手順 3: Turso adapter を実装する。** `createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN })` は遅延初期化する。パラメータ化 query/transaction API を共通化し、モジュール import 時には初期化しない。
+- [x] **手順 4: provider の機能チェックを追加する。** CI/deploy の preflight で FTS probe を実行し、trigram、重み付き bm25、contentless delete のいずれかが未対応なら migration 前に明確なエラーで停止する。
+- [x] **手順 5: DB テストを実行する。** `pnpm vitest run tests/lib/db tests/storage/turso-index.test.ts` を実行し、`feat: add rebuildable SQLite and Turso index adapters` でコミットする。
 
 ### タスク 3: コアサービス、KG、reconcile、ロック、原子的な可視性
 

@@ -34,7 +34,9 @@
 
 ## 現在の実装と検証
 
-- タスク 0 の Next.js 足場、storage 契約、FTS5 probe を実装した。2026-09-05 に Turso リモート互換性ゲート（FTS5 trigram、weighted bm25、contentless delete）へ合格したため、タスク 1 以降へ進める。
+- タスク 0 の Next.js 足場、storage 契約、FTS5 probe を実装した。2026-09-05 に Turso リモート互換性ゲート（FTS5 trigram、weighted bm25、contentless delete）へ合格した。
+- タスク 1 の Markdown 正本データモデル、frontmatter の serialize/parse、ローカル filesystem / Vercel Blob adapter を実装し、対象 45 テストを通過した。
+- タスク 2 の schema v5、再構築 migration、WAL/FK 付きローカル SQLite adapter、遅延初期化 Turso/libSQL adapter を実装し、全 57 テスト・lint・型検査・production build を通過した。リモート probe の合格記録はタスク 0 に基づく。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
 - `pnpm tsx scripts/probe-turso.ts` はリモート Turso URL を必須とする。ローカル libSQL のテスト成功をリモートゲート合格として扱わない。
