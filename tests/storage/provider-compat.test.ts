@@ -1,6 +1,19 @@
 import { createClient } from '@libsql/client';
-import { expect, test } from 'vitest';
+import type { IndexStore } from '@/lib/storage/contracts';
+import { expect, expectTypeOf, test } from 'vitest';
 import { probeFtsCompatibility } from '../../scripts/probe-turso';
+
+interface MemoryRow {
+  id: string;
+  score: number;
+}
+
+const queryMemoryRows = (store: IndexStore) =>
+  store.query<MemoryRow>('SELECT id, score FROM memories');
+
+test('IndexStore.query accepts typed row interfaces', () => {
+  expectTypeOf(queryMemoryRows).returns.toEqualTypeOf<Promise<MemoryRow[]>>();
+});
 test('local libSQL supports Japanese trigram, weighted bm25 and contentless row deletion', async () => {
   const client = createClient({ url: ':memory:' });
   try {

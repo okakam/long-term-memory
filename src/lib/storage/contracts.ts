@@ -13,7 +13,7 @@ export interface MarkdownStore {
 export type SqlValue = string | number | bigint | Uint8Array | null;
 export interface IndexStore {
   exec(sql: string, args?: readonly SqlValue[]): Promise<void>;
-  query<T extends Record<string, unknown>>(sql: string, args?: readonly SqlValue[]): Promise<T[]>;
+  query<T extends object>(sql: string, args?: readonly SqlValue[]): Promise<T[]>;
   transaction<T>(fn: (store: IndexStore) => Promise<T>): Promise<T>;
   close?(): void | Promise<void>;
 }

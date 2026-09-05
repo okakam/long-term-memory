@@ -4,6 +4,8 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 
 FROM ${NODE_IMAGE}
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG PNPM_VERSION=11.1.3
 ARG CODEX_VERSION=0.153.4
 
