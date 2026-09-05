@@ -131,12 +131,12 @@
 - 実装する: `withProjectLock(projectId, fn)`。local mode は `KeyedMutex` に委譲し、Vercel mode はランダム owner token 付き Redis key `ltm:lock:<projectId>` を取得し、token が一致する場合だけ解放する。
 - 実装する: filesystem file または Blob prefix を列挙できる `reconcile()` と `reindex()`。
 
-- [ ] **手順 1: サービス契約テストを作成する。** save/get/list/update/forget/rename/link、名前重複、本文長、Unicode、tags の `match='all'`、BFS 深さ上限、project 一覧、非同期直列化、§5.1 の全エラー型を網羅する。
-- [ ] **手順 2: 実装前に失敗順序テストを作成する。** Blob put、DB insert、update pointer、Blob delete の各失敗を再現する。update では旧可視本文が残ること、save 失敗が索引化されないこと、Blob cleanup が失敗しても delete が記憶を隠すこと、孤立 object が GC 対象として報告されることを検証する。
-- [ ] **手順 3: KG と reconcile を実装する。** entity、alias、membership、triple の適用/撤回を transaction 内で行う。ファイル単位の savepoint を使い、upsert 前に ID を `seenIds` へ追加し、欠落/不正 Markdown を掃除し、link と supersedes の project scope を保持する。
-- [ ] **手順 4: Vercel の順序でサービス書き込みを実装する。** save は immutable Blob を書いてから index/KG/FTS を transaction で登録する。update/rename は新 Blob → index pointer と参照の transaction 更新 → 旧 Blob 削除の順、forget は index の可視性を先に外して Blob を best-effort 削除する。全非同期メソッドを `withProjectLock` で包む。
-- [ ] **手順 5: 孤立 object の GC と復旧を追加する。** `reconcile-objects.ts` で `memories.file_path` が参照していない content-hash object を列挙し、設定した猶予期間より古いものだけ削除する。参照中の object は絶対に削除しない。
-- [ ] **手順 6: コアテストを実行してコミットする。** `pnpm vitest run tests/lib/memory tests/lib/lock tests/storage/atomic-failure.test.ts` を実行し、`feat: implement memory service and cross-store write safety` でコミットする。
+- [x] **手順 1: サービス契約テストを作成する。** save/get/list/update/forget/rename/link、名前重複、本文長、Unicode、tags の `match='all'`、BFS 深さ上限、project 一覧、非同期直列化、§5.1 の全エラー型を網羅する。
+- [x] **手順 2: 実装前に失敗順序テストを作成する。** Blob put、DB insert、update pointer、Blob delete の各失敗を再現する。update では旧可視本文が残ること、save 失敗が索引化されないこと、Blob cleanup が失敗しても delete が記憶を隠すこと、孤立 object が GC 対象として報告されることを検証する。
+- [x] **手順 3: KG と reconcile を実装する。** entity、alias、membership、triple の適用/撤回を transaction 内で行う。ファイル単位の savepoint を使い、upsert 前に ID を `seenIds` へ追加し、欠落/不正 Markdown を掃除し、link と supersedes の project scope を保持する。
+- [x] **手順 4: Vercel の順序でサービス書き込みを実装する。** save は immutable Blob を書いてから index/KG/FTS を transaction で登録する。update/rename は新 Blob → index pointer と参照の transaction 更新 → 旧 Blob 削除の順、forget は index の可視性を先に外して Blob を best-effort 削除する。全非同期メソッドを `withProjectLock` で包む。
+- [x] **手順 5: 孤立 object の GC と復旧を追加する。** `reconcile-objects.ts` で `memories.file_path` が参照していない content-hash object を列挙し、設定した猶予期間より古いものだけ削除する。参照中の object は絶対に削除しない。
+- [x] **手順 6: コアテストを実行してコミットする。** `pnpm vitest run tests/lib/memory tests/lib/lock tests/storage/atomic-failure.test.ts` を実行し、`feat: implement memory service and cross-store write safety` でコミットする。
 
 ### タスク 4: 検索、連想想起、リランキング、評価
 
@@ -147,12 +147,19 @@
 **インターフェース:**
 - `ftsTokens`、`ftsPhrases`、`searchFulltextIds`、`searchFulltext`、`personalizedPageRank`、`rankMemoriesByPpr`、`rrfMerge`、`decayFactor`、`normalizeRelevance`、`rerank` を §8 の定数どおりに実装する。
 
-- [ ] **手順 1: FTS テストを作成する。** 日本語部分一致、2 文字の `LIKE` fallback、引用符付き `better-sqlite3`/`Server.connect` token、AND→OR retry、bm25 列順、正規化前の type/tag filter を検証する。
-- [ ] **手順 2: FTS 検索を実装する。** 3 code point 以上の token が 1 つでもあるときだけ trigram MATCH を使う。それ以外は name/description を OR `LIKE` で検索し、JavaScript で新しい順の relevance を付けてから `rerank` を呼ぶ。
-- [ ] **手順 3: graph/PPR テストを作成する。** 重み付き無向の membership/triple/manual link、自己ループ除外、正規名と alias の seed 解決、dangling mass 保存、孤立/未知 seed、memory のみの出力を網羅する。
-- [ ] **手順 4: 連想検索を実装する。** 候補 pool は `Math.max(limit * 5, 200)` とし、bm25/PPR の両経路で正規化前に filter を適用する。最終 slice だけ hydrate し、PPR が空なら rerank 済み FTS hit に fallback する。
-- [ ] **手順 5: 時間減衰と supersession を追加する。** 両検索経路へ `final = normalize(relevance) + 0.2 * decay - (superseded ? 0.5 : 0)` を適用する。user/feedback の減衰は無効にし、6 種類全ての読み取り結果へ `superseded_by` を付与する。
-- [ ] **手順 6: 評価を実行する。** `pnpm tsx scripts/eval-recall.ts docs/eval/gold-queries.json` の前に Markdown からクリーンな索引を再構築する。動的 subset ごとの recall@5 と MRR を報告し、`feat: add hybrid FTS and associative recall` でコミットする。
+- [x] **手順 1: FTS テストを作成する。** 日本語部分一致、2 文字の `LIKE` fallback、引用符付き `better-sqlite3`/`Server.connect` token、AND→OR retry、bm25 列順、正規化前の type/tag filter を検証する。
+- [x] **手順 2: FTS 検索を実装する。** 3 code point 以上の token が 1 つでもあるときだけ trigram MATCH を使う。それ以外は name/description を OR `LIKE` で検索し、JavaScript で新しい順の relevance を付けてから `rerank` を呼ぶ。
+- [x] **手順 3: graph/PPR テストを作成する。** 重み付き無向の membership/triple/manual link、自己ループ除外、正規名と alias の seed 解決、dangling mass 保存、孤立/未知 seed、memory のみの出力を網羅する。
+- [x] **手順 4: 連想検索を実装する。** 候補 pool は `Math.max(limit * 5, 200)` とし、bm25/PPR の両経路で正規化前に filter を適用する。最終 slice だけ hydrate し、PPR が空なら rerank 済み FTS hit に fallback する。
+- [x] **手順 5: 時間減衰と supersession を追加する。** 両検索経路へ `final = normalize(relevance) + 0.2 * decay - (superseded ? 0.5 : 0)` を適用する。user/feedback の減衰は無効にし、6 種類全ての読み取り結果へ `superseded_by` を付与する。
+- [x] **手順 6: 評価を実行する。** `pnpm tsx scripts/eval-recall.ts docs/eval/gold-queries.json` の前に Markdown からクリーンな索引を再構築する。動的 subset ごとの recall@5 と MRR を報告し、`feat: add hybrid FTS and associative recall` でコミットする。
+
+#### タスク 3/4 の検証記録（2026-09-05）
+
+- TDD でコアサービス、KG、reconcile、project lock、atomic failure、FTS trigram/LIKE、PPR、連想検索、RRF、時間減衰、supersession、評価メトリクスのテストを先行して追加した。
+- `MemoryService` の非同期書き込みを local `KeyedMutex` または Vercel の Redis lease lock へ接続し、Markdown を正本として DB/KG/FTS を再構築可能にした。
+- `pnpm vitest run tests/lib/memory tests/lib/lock tests/storage/atomic-failure.test.ts`、`pnpm exec tsc --noEmit`、`pnpm lint`、`pnpm test`、`NODE_ENV=production pnpm build` が成功した。
+- 検証時点の全体結果は 34 test suites・91 tests。リモート Turso の FTS5 互換性はタスク 0 の合格記録を使用した。
 
 ### タスク 5: MCP スキーマ、ツール、ステートレス Vercel トランスポート
 

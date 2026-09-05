@@ -40,6 +40,19 @@ export type Triple = z.infer<typeof TripleSchema>;
 export type SourceRef = z.infer<typeof SourceRefSchema>;
 export type Memory = z.infer<typeof MemorySchema>;
 
+export interface MemorySummary {
+  id: string;
+  name: string;
+  type: MemoryType;
+  description: string;
+  body_chars: number;
+  updated_at: string;
+  tags: string[];
+  links: string[];
+}
+
+export type MemorySearchResult = Memory & { relevance: number };
+
 export interface SaveInput {
   name: string;
   description: string;
