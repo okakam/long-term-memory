@@ -25,7 +25,7 @@ services:
       LTM_HOME: /workspace/.long-term-memory
       NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
-      PATH: /pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /home/node/.turso:/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       PNPM_HOME: /pnpm
     volumes:
       - type: bind

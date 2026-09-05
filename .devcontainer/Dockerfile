@@ -12,7 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     COREPACK_HOME=/pnpm/.corepack \
     CODEX_HOME=/home/node/.codex \
     PNPM_HOME=/pnpm \
-    PATH=/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    PATH=/home/node/.turso:/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     NODE_ENV=development \
     NEXT_TELEMETRY_DISABLED=1
 
@@ -47,5 +47,9 @@ RUN mkdir -p /workspace/node_modules /workspace/.long-term-memory /home/node/.co
     && chown -R node:node /workspace /home/node/.codex /pnpm
 
 USER node
+
+# Turso CLI とローカル libSQL server を node ユーザーの領域へ導入する。
+# 認証はイメージに含めず、コンテナ起動後に `turso auth login` で行う。
+RUN curl --fail --silent --show-error --location https://get.tur.so/install.sh | bash
 
 CMD ["sleep", "infinity"]
