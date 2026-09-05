@@ -1,0 +1,10 @@
+.git
+.gitignore
+.codex
+.devcontainer
+.long-term-memory
+.next
+node_modules
+*.log
+*.local
+!.env.example
