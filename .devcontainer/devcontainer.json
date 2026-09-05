@@ -4,6 +4,9 @@
   "service": "app",
   "workspaceFolder": "/workspace",
   "remoteUser": "node",
+  "containerEnv": {
+    "CODEX_HOME": "/home/node/.codex"
+  },
   "shutdownAction": "stopCompose",
   "overrideCommand": false,
   "forwardPorts": [3000, 3939],
@@ -17,7 +20,7 @@
       "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "bash -lc 'if [ -f package.json ]; then pnpm install; fi'",
+  "postCreateCommand": "bash -lc 'if [ -f package.json ]; then pnpm install; fi; codex --version'",
   "customizations": {
     "vscode": {
       "extensions": [

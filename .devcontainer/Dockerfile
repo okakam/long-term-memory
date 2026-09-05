@@ -5,10 +5,12 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 FROM ${NODE_IMAGE}
 
 ARG PNPM_VERSION=11.1.3
+ARG CODEX_VERSION=0.153.4
 
 ENV DEBIAN_FRONTEND=noninteractive \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     COREPACK_HOME=/pnpm/.corepack \
+    CODEX_HOME=/home/node/.codex \
     PNPM_HOME=/pnpm \
     PATH=/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     NODE_ENV=development \
@@ -23,16 +25,20 @@ RUN apt-get update \
       git \
       git-flow \
       g++ \
+      gh \
       make \
       openssh-client \
       procps \
       python3 \
+      jq \
       ripgrep \
       sqlite3 \
       sudo \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
-    && corepack install --global pnpm@${PNPM_VERSION}
+    && corepack install --global pnpm@${PNPM_VERSION} \
+    && npm install --global @openai/codex@${CODEX_VERSION} \
+    && npm cache clean --force
 
 WORKDIR /workspace
 

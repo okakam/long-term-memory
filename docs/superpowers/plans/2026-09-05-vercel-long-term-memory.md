@@ -52,8 +52,8 @@
 ### 運用とクライアント資産
 
 - 作成: `vercel.json`, `.env.example`, `.github/workflows/test.yml`, `.github/workflows/vercel.yml`, `.github/workflows/curator.yml`。
- - 作成: `.devcontainer/Dockerfile`, `.devcontainer/compose.yaml`, `.devcontainer/devcontainer.json`, `.dockerignore` — 開発コンテナと volume 永続化を構成する。
- - 作成・変更: `Dockerfile`, `docker-compose.yml`, `scripts/start-mcp.sh`, `scripts/curator/*`, `launchd/*` — ローカル運用互換を保持。
+- 作成: `.devcontainer/Dockerfile`, `.devcontainer/compose.yaml`, `.devcontainer/devcontainer.json`, `.devcontainer/README.md`, `.dockerignore` — OpenAI Codex CLI / GitHub CLI / jq を含む開発コンテナと volume 永続化を構成する。
+- 作成・変更: `Dockerfile`, `docker-compose.yml`, `scripts/start-mcp.sh`, `scripts/curator/*`, `launchd/*` — ローカル運用互換を保持。
 - 作成: `skills/long-term-memory/SKILL.md`, `skills/shared-memory-curator/SKILL.md`, `claude-config/*`, `docs/post-mcp-setup.md`, `scripts/sync-embedded-docs.mjs`。
 
 ## 実装タスク

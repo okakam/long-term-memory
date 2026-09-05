@@ -302,6 +302,7 @@ coverage
 
 ```
 long-term-memory/
+├── AGENTS.md                   # エージェント向け開発・更新ルール
 ├── src/
 │   ├── app/                    # Next.js App Router（UI + API + MCP）
 │   ├── components/             # クライアントコンポーネント 4 つ
@@ -313,7 +314,7 @@ long-term-memory/
 ├── launchd/                    # macOS 日次ジョブ plist テンプレ
 ├── docs/                       # 設計・運用・評価
 ├── Dockerfile / docker-compose.yml / .env.example
-├── .devcontainer/Dockerfile / compose.yaml / devcontainer.json
+├── .devcontainer/Dockerfile / compose.yaml / devcontainer.json / README.md
 └── 設定ファイル（§2.3）
 ```
 
@@ -2000,7 +2001,7 @@ flowchart TD
 
 `.devcontainer/` は Next.js と MCP の実装作業を同じ環境で再現するための開発専用構成であり、13.1–13.2 の本番配布用 Dockerfile / compose とは分ける。
 
-- `Dockerfile` は `node:22-bookworm-slim` を基にし、pnpm 11.1.3、Git / Git Flow、`better-sqlite3` のビルドに必要な Python・make・g++、SQLite CLI を入れる。実行ユーザーは root ではなく `node` とする。
+- `Dockerfile` は `node:22-bookworm-slim` を基にし、pnpm 11.1.3、OpenAI Codex CLI 0.153.4、Git / Git Flow、GitHub CLI（`gh`）、`jq`、`better-sqlite3` のビルドに必要な Python・make・g++、SQLite CLI を入れる。実行ユーザーは root ではなく `node` とする。
 - `compose.yaml` はリポジトリを `/workspace` に bind mount し、名前付き volume `long-term-memory-node_modules` を `/workspace/node_modules` に、`long-term-memory-codex` を `/home/node/.codex` にマウントする。ソース変更を即時反映し、依存関係と Codex 設定だけをコンテナ再作成後も保持する。
 - `devcontainer.json` は Compose の `app` サービスへ接続し、ポート 3000（Next.js）/ 3939（MCP）を転送する。`package.json` が存在するときだけ `pnpm install` を実行するため、初期 docs-only 状態でもコンテナを起動できる。
 - ローカル開発では `AUTH_REQUIRED=0` とし、Vercel 本番の `AUTH_REQUIRED=1`（§19）と区別する。
