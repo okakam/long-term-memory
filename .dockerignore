@@ -8,3 +8,15 @@ node_modules
 *.log
 *.local
 !.env.example
+.github
+.claude
+.superpowers
+.worktrees
+.env*
+!.env.example
+.long-term-memory.*
+docs
+tests
+coverage
+.mcp.json
+.DS_Store

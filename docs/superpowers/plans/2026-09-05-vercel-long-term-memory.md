@@ -69,11 +69,22 @@
 - 実装する: `IndexStore { exec; query; transaction<T>(fn); close? }`。型付き行を返し、ローカル adapter 以外では `better-sqlite3` を直接使わない。
 - 実装する: `resolveStorageMode(): StorageMode`。各呼び出しで `LTM_STORAGE_DRIVER` を読み、テストが安全に環境変数を切り替えられるようにする。
 
-- [ ] **手順 1: 固定依存関係とスクリプトを追加する。** 仕様書 §2.2 の依存バージョンとスクリプトを取り込む。 `@libsql/client`、`@vercel/blob`、`@upstash/redis` を追加する。 ローカル/Docker 用の `better-sqlite3` は残し、ビルド許可を `pnpm-workspace.yaml` に記載する。
-- [ ] **手順 2: Next/Vitest/ESLint の設定を追加する。** `serverExternalPackages: ['better-sqlite3']`、`@/*` を使う strict TypeScript、Vitest の node 環境、§2.3 の ignore/build 設定を設定する。
-- [ ] **手順 3: 失敗する provider probe を先に作成する。** probe は `CREATE VIRTUAL TABLE ... USING fts5(... content='', contentless_delete=1, tokenize='trigram')` を実行し、日本語を挿入し、rowid で削除し、重み付き `bm25` を実行して、`TURSO_DATABASE_URL` で全操作が成功することを検証する。
+- [x] **手順 1: 固定依存関係とスクリプトを追加する。** 仕様書 §2.2 の依存バージョンとスクリプトを取り込む。 `@libsql/client`、`@vercel/blob`、`@upstash/redis` を追加する。 ローカル/Docker 用の `better-sqlite3` は残し、ビルド許可を `pnpm-workspace.yaml` に記載する。
+- [x] **手順 2: Next/Vitest/ESLint の設定を追加する。** `serverExternalPackages: ['better-sqlite3']`、`@/*` を使う strict TypeScript、Vitest の node 環境、§2.3 の ignore/build 設定を設定する。
+- [x] **手順 3: 失敗する provider probe を先に作成する。** probe は `CREATE VIRTUAL TABLE ... USING fts5(... content='', contentless_delete=1, tokenize='trigram')` を実行し、日本語を挿入し、rowid で削除し、重み付き `bm25` を実行して、`TURSO_DATABASE_URL` で全操作が成功することを検証する。
 - [ ] **手順 4: ゲートを実行する。** `pnpm install --frozen-lockfile`、`pnpm test`、`pnpm build`、続いて `TURSO_DATABASE_URL=... TURSO_AUTH_TOKEN=... pnpm tsx scripts/probe-turso.ts` を実行する。ローカル smoke テストが通り、provider probe が成功することを確認する。未対応機能があれば、その内容を記録して計画を停止する。
 - [ ] **手順 5: 足場をコミットする。** `git add .` と `git commit -m "chore: scaffold Next.js Vercel runtime"` を実行する。probe の判定を `docs/superpowers/plans/2026-09-05-vercel-long-term-memory.md` に記録してから行う。
+
+#### タスク 0 の検証記録（2026-09-05）
+
+- 足場と最小の準備中ページを作成。依存バージョンの範囲は仕様 §2.2 のまま、lockfile で実際の解決値を固定した。追加 SDK は libSQL 0.17.0、Blob 2.3.0、Redis 1.36.2。
+- Node.js 22.23.2 / pnpm 11.1.3。`allowBuilds` と `onlyBuiltDependencies` の併記は隔離ディレクトリと frozen install で成功した。
+- TDD: 未実装スタブで storage 選択2件と probe 1件のアサーション失敗を確認後に実装した。実 libSQL と native SQLite の FTS5 テスト、および probe 失敗時の後始末テストを実施。
+- `pnpm install --frozen-lockfile`、`pnpm test`、`pnpm lint`、`pnpm exec tsc --noEmit` 成功。
+- `pnpm build` はホストの `NODE_ENV=development` による prerender エラーで失敗。`NODE_ENV=production pnpm build` は成功。
+- **リモートゲートは未合格**。Turso 接続環境変数が未設定のため CLI は終了コード 1。ローカル libSQL の成功は Turso 本番の機能保証ではない。手順 4 は未完了で、タスク 1 以降を停止する。
+- Docker CLI がこの環境にないため Compose 構成検証・コンテナビルド・volume の永続化確認は未実施。JSON/YAML 構文と既存CLIのバージョンを別途確認する。
+- インストール時に eslint 9 系、node-domexception、prebuild-install の非推奨通知がある。仕様の依存範囲を保持した。
 
 ### タスク 1: Markdown データモデルと二重ストア
 

@@ -6,6 +6,7 @@
 - 実装前に `docs/reproduction-spec.md` と、対象タスクに対応する `docs/superpowers/plans/` の計画を確認する。
 - 仕様、構成、開発手順、運用ルールに変更があった場合は、関連するドキュメントとこの `AGENTS.md` を随時更新する。特に、このファイル自体も開発の進行に合わせて随時更新すること。
 - 認証情報、API キー、実在する `.env` ファイルはコミットしない。
+- `.gitignore` で依存関係、生成物、ローカル記憶データ、認証を含むローカル設定を除外する。`.env.example` と `pnpm-lock.yaml` はバージョン管理する。
 
 ## ブランチ運用
 
@@ -30,3 +31,10 @@
 - 開発コンテナをビルドし、`node`、`pnpm`、`codex`、`gh`、`jq` のバージョンと volume の書き込み可否を確認する。
 - 変更前後に `git diff --check` を実行する。
 - 完了を報告する前に、変更内容に応じたテストまたはビルドを実行し、結果を記録する。
+
+## 現在の実装と検証
+
+- タスク 0 の Next.js 足場、storage 契約、FTS5 probe を実装した。Turso リモート互換性ゲートが未合格の間はタスク 1 以降へ進めない。
+- pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
+- ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
+- `pnpm tsx scripts/probe-turso.ts` はリモート Turso URL を必須とする。ローカル libSQL のテスト成功をリモートゲート合格として扱わない。
