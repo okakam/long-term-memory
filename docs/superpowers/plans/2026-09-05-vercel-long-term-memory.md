@@ -171,12 +171,19 @@
 - 実装する: `ToolContext { projectId: string; svc: MemoryService; canWriteShared?: boolean }`、`createMcpServer(ctx)`、`handleMcpRequest(req, opts?)`、`resetSessionState()`。
 - `handleMcpRequest` は `{ mode?: 'local-session' | 'vercel-stateless'; timeoutMs?: number }` を受け取る。`VERCEL=1` なら既定 mode は `vercel-stateless`、それ以外は `local-session` とする。
 
-- [ ] **手順 1: スキーマ／description テストを先に書く。** 16 ツール、必須フィールド、入れ子の `.describe()`、strict な `ReindexInput`、空でない `entities`/`why`/`how_to_apply`、§9.5–§9.7 の description 文言を全て検証する。
-- [ ] **手順 2: schema と tool handler を実装する。** 返却は text content のみにする。`composeWhyHowBody` は冪等に使い、reference URL を追記し、全書き込みを非同期サービスと共有ゲートへ通す。
-- [ ] **手順 3: ローカルセッション mode を実装する。** `${projectId}#${canWriteShared ? 'rw' : 'ro'}` ごとに `Promise<Session>` を cache し、reject された promise を削除する。ID 付き message だけを解決し、30 秒の JSON-RPC timeout は HTTP 200 と error `-32000` で返す。
-- [ ] **手順 4: Vercel stateless mode を実装する。** 各 request で新しい SDK server/transport を作り、内部で合成 `initialize` handshake を行い、受信した JSON-RPC message を dispatch して要求された response ID だけを返す。別の Vercel function instance に `globalThis` が残る前提を置かず、`Mcp-Session-Id` は診断用に受け付けるが永続 server object にはしない。
-- [ ] **手順 5: route guard を実装する。** `runtime='nodejs'`、`dynamic='force-dynamic'`、`maxDuration=60` を export する。POST だけを受け付け、project ID 欠落/不正は 400、maintenance token は header からだけ読み、GET/DELETE は 405 を返す。
-- [ ] **手順 6: MCP テストを実行する。** `pnpm vitest run tests/lib/mcp` を実行し、別々の Vercel invocation として `initialize`、`tools/list`、`tools/call` を送っても正しい応答が返るテストを追加する。`feat: expose stateless Vercel MCP endpoint` でコミットする。
+- [x] **手順 1: スキーマ／description テストを先に書く。** 16 ツール、必須フィールド、入れ子の `.describe()`、strict な `ReindexInput`、空でない `entities`/`why`/`how_to_apply`、§9.5–§9.7 の description 文言を全て検証する。
+- [x] **手順 2: schema と tool handler を実装する。** 返却は text content のみにする。`composeWhyHowBody` は冪等に使い、reference URL を追記し、全書き込みを非同期サービスと共有ゲートへ通す。
+- [x] **手順 3: ローカルセッション mode を実装する。** `${projectId}#${canWriteShared ? 'rw' : 'ro'}` ごとに `Promise<Session>` を cache し、reject された promise を削除する。ID 付き message だけを解決し、30 秒の JSON-RPC timeout は HTTP 200 と error `-32000` で返す。
+- [x] **手順 4: Vercel stateless mode を実装する。** 各 request で新しい SDK server/transport を作り、内部で合成 `initialize` handshake を行い、受信した JSON-RPC message を dispatch して要求された response ID だけを返す。別の Vercel function instance に `globalThis` が残る前提を置かず、`Mcp-Session-Id` は診断用に受け付けるが永続 server object にはしない。
+- [x] **手順 5: route guard を実装する。** `runtime='nodejs'`、`dynamic='force-dynamic'`、`maxDuration=60` を export する。POST だけを受け付け、project ID 欠落/不正は 400、maintenance token は header からだけ読み、GET/DELETE は 405 を返す。
+- [x] **手順 6: MCP テストを実行する。** `pnpm vitest run tests/lib/mcp` を実行し、別々の Vercel invocation として `initialize`、`tools/list`、`tools/call` を送っても正しい応答が返るテストを追加する。`feat: expose stateless Vercel MCP endpoint` でコミットする。
+
+#### タスク 5 の検証記録（2026-09-05）
+
+- MCP SDK の `McpServer` / `InMemoryTransport` を使い、16 ツールの schema・description・text content 応答を実装した。`project_id` は URL query、maintenance token は header からのみ取得する。
+- local-session は project と read/write 権限ごとの Promise cache、rejected promise の除去、ID 付き応答だけの解決を実装した。
+- Vercel stateless mode は request ごとに server/transport を生成し、必要時に合成 initialize handshake を行う。`Mcp-Session-Id` は診断用 header として受け付けるが server object は永続化しない。
+- `pnpm test`（42 suites・109 tests）、`pnpm lint`、`pnpm exec tsc --noEmit`、`NODE_ENV=production pnpm build` が成功した。timeout はテストで短縮して HTTP 200 / JSON-RPC `-32000` を確認した。
 
 ### タスク 5-A: ユーザー認証、PAT、プロジェクト認可
 
