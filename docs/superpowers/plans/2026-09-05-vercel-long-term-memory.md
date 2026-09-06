@@ -272,12 +272,20 @@
 - Vercel 必須環境変数: `LTM_STORAGE_DRIVER=vercel`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `TURSO_AUTH_DATABASE_URL`, `TURSO_AUTH_DATABASE_TOKEN`, `TURSO_TELEMETRY_DATABASE_URL`, `TURSO_TELEMETRY_AUTH_TOKEN`, `BLOB_READ_WRITE_TOKEN`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `LTM_MAINTENANCE_TOKEN`, `LTM_CURATOR_USER_ID`, `LTM_BOOTSTRAP_OWNER_USER_ID`（初回移行時のみ）、`LTM_BLOB_PREFIX`, `MCP_PUBLIC_URL`, `MCP_ALLOWED_ORIGINS`, `AUTH_REQUIRED=1`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`.
 - CI secret は `VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`。これらや実在する `.env` は絶対にコミットしない。
 
-- [ ] **手順 1: Vercel と Clerk を構成する。** Node.js runtime、`maxDuration`、`pnpm build`、`pnpm install --frozen-lockfile`、Edge route 無しを設定する。Vercel Marketplace で Clerk を接続して `CLERK_SECRET_KEY` と `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` を投入し、Blob は private、リージョンは Turso primary の近くにする。
-- [ ] **手順 2: deploy preflight を追加する。** CI で `pnpm test`、`pnpm lint`、`pnpm build`、Turso FTS probe、使い捨て DB への migration dry-run を deploy 前に実行する。
-- [ ] **手順 3: preview/production workflow を追加する。** Vercel CLI の version を固定し、`vercel pull --yes`、`vercel build`、`vercel deploy --prebuilt` を実行する。PR ごとに preview を配備し、MCP の `initialize`/`tools/list` smoke を実行して 16 ツールを確認した後だけ promote する。
-- [ ] **手順 4: production rollback 手順を追加する。** `vercel inspect`、`vercel logs`、`vercel promote`、`vercel rollback` を文書化する。DB migration は migrate/probe → promote の二段階で行い、promote 成功前に旧 Blob 世代を削除しない。
-- [ ] **手順 5: ローカル配布を動作可能なまま維持する。** Dockerfile の明示的な `schema.sql` copy、`/data` bind mount、port 3939、`scripts/start-mcp.sh` の PID 単位重複チェックを保持する。Docker はローカル/オフライン mode であり Vercel 本番 runtime ではないことを明記する。
+- [x] **手順 1: Vercel と Clerk を構成する。** Node.js runtime、`maxDuration`、`pnpm build`、`pnpm install --frozen-lockfile`、Edge route 無しを設定する。Vercel Marketplace で Clerk を接続して `CLERK_SECRET_KEY` と `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` を投入し、Blob は private、リージョンは Turso primary の近くにする。
+- [x] **手順 2: deploy preflight を追加する。** CI で `pnpm test`、`pnpm lint`、`pnpm build`、Turso FTS probe、使い捨て DB への migration dry-run を deploy 前に実行する。
+- [x] **手順 3: preview/production workflow を追加する。** Vercel CLI の version を固定し、`vercel pull --yes`、`vercel build`、`vercel deploy --prebuilt` を実行する。PR ごとに preview を配備し、MCP の `initialize`/`tools/list` smoke を実行して 16 ツールを確認した後だけ promote する。
+- [x] **手順 4: production rollback 手順を追加する。** `vercel inspect`、`vercel logs`、`vercel promote`、`vercel rollback` を文書化する。DB migration は migrate/probe → promote の二段階で行い、promote 成功前に旧 Blob 世代を削除しない。
+- [x] **手順 5: ローカル配布を動作可能なまま維持する。** Dockerfile の明示的な `schema.sql` copy、`/data` bind mount、port 3939、`scripts/start-mcp.sh` の PID 単位重複チェックを保持する。Docker はローカル/オフライン mode であり Vercel 本番 runtime ではないことを明記する。
 - [ ] **手順 6: deploy smoke テストを実行してコミットする。** `POST <MCP_PUBLIC_URL>/api/mcp?project_id=smoke` に `tools/list` を送り、一時 save/get/delete と dashboard 200 を確認する。`ci: add Vercel preview and production deployment` でコミットする。
+
+#### タスク 8 の検証記録（2026-09-06）
+
+- Vercel function設定、Next.jsのproduction security headers、Vercel/Clerk/Turso/Blob/Upstashのenvサンプル、Node 22 + pnpm frozen install、Dockerの明示的schema copy・/data bind mount・3939 portを追加した。
+- GitHub Actionsに通常preflight（test/lint/migration dry-run/production build）、資格情報がある場合のTurso probe、Vercel CLI 41.7.3固定のpreview/candidate deploy、smoke後のproduction promoteを追加した。
+- scripts/preflight-migration.ts、scripts/vercel-smoke.ts、scripts/start-mcp.shを追加し、Blob key prefixをLTM_BLOB_PREFIXで環境分離できるようにした。rollback、migration順序、orphan GC、Docker、MCP client再起動の手順をdocs/vercel-operations.mdへ記録した。
+- pnpm install --frozen-lockfile、Task8対象テスト13件、pnpm test（62 suite・153 tests）、pnpm lint、pnpm exec tsc --noEmit、NODE_ENV=production pnpm build、YAML/JSON構文、bash -n scripts/start-mcp.shが成功した。
+- Docker CLIが環境に無くComposeの実解釈は未実行。Vercel preview smokeも、実デプロイURL・Vercel/Clerk/PAT secretsが未提供のため未実行で、CI workflowと実行スクリプトを用意した。
 
 ### タスク 9: curator、Claude Code 資産、リモート運用
 

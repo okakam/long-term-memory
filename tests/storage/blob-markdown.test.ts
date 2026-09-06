@@ -11,6 +11,7 @@ import { createMarkdownStore } from '@/lib/storage/factory';
 const originalDriver = process.env.LTM_STORAGE_DRIVER;
 const originalHome = process.env.LTM_HOME;
 const originalToken = process.env.BLOB_READ_WRITE_TOKEN;
+const originalBlobPrefix = process.env.LTM_BLOB_PREFIX;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -20,6 +21,8 @@ afterEach(() => {
   else process.env.LTM_HOME = originalHome;
   if (originalToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
   else process.env.BLOB_READ_WRITE_TOKEN = originalToken;
+  if (originalBlobPrefix === undefined) delete process.env.LTM_BLOB_PREFIX;
+  else process.env.LTM_BLOB_PREFIX = originalBlobPrefix;
 });
 
 function stream(text: string): ReadableStream<Uint8Array> {
@@ -61,6 +64,12 @@ function createFakeClient(): BlobClient & { calls: Array<{ method: string; key?:
 }
 
 describe('Blob key helpers', () => {
+  test('LTM_BLOB_PREFIX で環境ごとのBlob key prefixを切り替える', () => {
+    process.env.LTM_BLOB_PREFIX = 'preview';
+    expect(memoryPrefix('my-project')).toBe('preview/my-project/memories/');
+    expect(memoryObjectKey('my-project', 'memory-name', 'a'.repeat(64))).toContain('preview/my-project/memories/');
+  });
+
   test('content hash 付き immutable key と列挙 prefix を決定的に生成する', () => {
     const hash = 'a'.repeat(64);
     expect(memoryObjectKey('my-project', 'memory-name', hash)).toBe(`projects/my-project/memories/memory-name/${hash}.md`);

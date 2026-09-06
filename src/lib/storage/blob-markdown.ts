@@ -59,10 +59,17 @@ function validateBlobPath(value: string, allowEmpty = false): void {
   }
 }
 
+function blobPrefix(): string {
+  const prefix = (process.env.LTM_BLOB_PREFIX ?? 'projects').replace(/^\/+|\/+$/g, '');
+  validateBlobPath(prefix);
+  return prefix;
+}
+
 export function memoryPrefix(projectId: string, name?: string): string {
   const project = assertProjectId(projectId);
-  if (name === undefined) return `projects/${project}/memories/`;
-  return `projects/${project}/memories/${assertMemoryName(name)}/`;
+  const prefix = blobPrefix();
+  if (name === undefined) return `${prefix}/${project}/memories/`;
+  return `${prefix}/${project}/memories/${assertMemoryName(name)}/`;
 }
 
 export function memoryObjectKey(projectId: string, name: string, contentHash: string): string {
