@@ -107,6 +107,7 @@ test('curatorのlocal/remote設定は秘密を露出せず権限を絞る', () =
   expect(workflow).toContain("cron: '0 1 * * *'");
   expect(workflow).toContain('runs-on: [self-hosted, ltm-curator]');
   expect(workflow).toContain('scripts/curator/export-remote-snapshot.ts');
+  expect(workflow.match(/^\s*MCP_PUBLIC_URL:/gm) ?? []).toHaveLength(2);
   expect(workflow).toContain('cat > "$LTM_CURATOR_ENV" <<ENV');
   expect(workflow).not.toContain('cat > "$LTM_CURATOR_ENV" <<' + "'ENV'");
 });

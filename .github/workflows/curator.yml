@@ -42,6 +42,7 @@ jobs:
           pnpm tsx scripts/curator/export-remote-snapshot.ts --output "$RUNNER_TEMP/ltm-curator/snapshot.md"
       - name: Run headless curator
         env:
+          MCP_PUBLIC_URL: ${{ secrets.MCP_PUBLIC_URL }}
           LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
           LTM_MAINTENANCE_TOKEN: ${{ secrets.LTM_MAINTENANCE_TOKEN }}
           LTM_SNAPSHOT: ${{ runner.temp }}/ltm-curator/snapshot.md
