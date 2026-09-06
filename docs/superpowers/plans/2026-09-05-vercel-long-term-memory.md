@@ -298,11 +298,19 @@
 - `docs/mcp-config.vercel.json` は `${MCP_PUBLIC_URL}/api/mcp?project_id=<slug>` を指し、`Authorization: Bearer ${LTM_MCP_TOKEN}` と `X-LTM-Maintenance-Token`（curator のみ）を送る。PAT は UI で発行し、設定ファイルへ平文をコミットしない。
 - `export-remote-snapshot.ts` はデプロイ済み MCP endpoint から `list_projects`、`get_memory_index`、`get_memory` を取得し、headless curator 用の一時的で秘密を含まない Markdown snapshot を書き出す。
 
-- [ ] **手順 1: クライアントの動作契約を保持する。** skill の能動検索ルール、hook の作業ターンごとの一度だけの提醒、初回全索引の提醒を出さない規則、CLAUDE.md の 6 つの MUST ルール、§14 が要求する全 description 文言を保持する。
-- [ ] **手順 2: 埋め込み docs を決定的にする。** `docs/post-mcp-setup.md` の sentinel を置換し、sentinel が 0 個なら拒否する。埋め込み内容に triple backtick が含まれる場合はより長い fence を使い、`--check` は drift 時に exit 1 とする。
-- [ ] **手順 3: リモート curator mode を追加する。** デプロイ済み MCP からサニタイズ済み snapshot を取得し、同じ `claude -p` 権限（`--tools Read Grep Glob`、`--setting-sources user`、strict MCP config）で実行する。PAT は GitHub Actions secret または macOS の chmod 600 env ファイルから Bearer として渡し、MCP config は localhost ではなく Vercel URL を指す。
-- [ ] **手順 4: Vercel 外でスケジュールする。** ローカル store は macOS launchd で維持し、remote mode は 01:00 UTC（10:00 JST）の GitHub Actions cron を追加する。dry-run では全 write tool を省略し、成功 stamp 更新前に厳密な `CURATION SUMMARY` state machine を要求する。
-- [ ] **手順 5: 資産テストを実行してコミットする。** `pnpm vitest run tests/docs tests/curator` を実行し、`feat: add Vercel-aware curator and Claude Code assets` でコミットする。
+- [x] **手順 1: クライアントの動作契約を保持する。** skill の能動検索ルール、hook の作業ターンごとの一度だけの提醒、初回全索引の提醒を出さない規則、CLAUDE.md の 6 つの MUST ルール、§14 が要求する全 description 文言を保持する。
+- [x] **手順 2: 埋め込み docs を決定的にする。** `docs/post-mcp-setup.md` の sentinel を置換し、sentinel が 0 個なら拒否する。埋め込み内容に triple backtick が含まれる場合はより長い fence を使い、`--check` は drift 時に exit 1 とする。
+- [x] **手順 3: リモート curator mode を追加する。** デプロイ済み MCP からサニタイズ済み snapshot を取得し、同じ `claude -p` 権限（`--tools Read Grep Glob`、`--setting-sources user`、strict MCP config）で実行する。PAT は GitHub Actions secret または macOS の chmod 600 env ファイルから Bearer として渡し、MCP config は localhost ではなく Vercel URL を指す。
+- [x] **手順 4: Vercel 外でスケジュールする。** ローカル store は macOS launchd で維持し、remote mode は 01:00 UTC（10:00 JST）の GitHub Actions cron を追加する。dry-run では全 write tool を省略し、成功 stamp 更新前に厳密な `CURATION SUMMARY` state machine を要求する。
+- [x] **手順 5: 資産テストを実行してコミットする。** `pnpm vitest run tests/docs tests/curator` を実行し、`feat: add Vercel-aware curator and Claude Code assets` でコミットする。
+
+#### タスク 9 の検証記録（2026-09-06）
+
+- long-term-memory skill、shared-memory-curator skill、Claude Code hook、CLAUDE.md MUST block、1本化したpost-mcp-setup prompt、決定的embed同期を追加した。get_memory_indexを入口にしない能動検索、subagentへの検索引き渡し、hookの1セッション1回制御を保持している。
+- local/remote curator wrapperにDRY_RUNの外部指定退避、staged配置の絶対パス/TCC検査、Read/Grep/Glob限定、strict MCP config、dry-run時の全write tool禁止、CURATION SUMMARY state machine、last-success保護を実装した。
+- MCPのlist_projects/get_memory_index/get_memoryから秘密をサニタイズした一時Markdown snapshotを作るexport script、Vercel MCP config、local MCP config、self-hosted Claude CLIを使う01:00 UTCのremote curator workflow、install script、launchd template、env exampleを追加した。
+- pnpm test（64 suite・158 tests）、pnpm lint、pnpm exec tsc --noEmit、NODE_ENV=production pnpm build、YAML/JSON構文、sync --check、curator/hook bash -n、hook 3-turn checkが成功した。Task9対象テストは5件。
+- Vercel CLIの認証確認（vercel whoami）は成功したが、preview deployは未コミットのソースを外部へ送るため安全確認で停止した。実remote snapshot/curator実行はデプロイURLと本番secretが必要なため未実行。
 
 ### タスク 10: 完全受け入れ、可観測性、引き渡し
 
