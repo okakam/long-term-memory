@@ -249,11 +249,19 @@
 - API route は `runtime='nodejs'` と `dynamic='force-dynamic'` を export する。`PUT` は description/body/tags/links の strict patch だけを受け付け、`DELETE` は完全な非同期削除を行う。
 - 実装する: `buildKgGraph(data)`、`filterKgGraph(graph, filters)`、`kgNeighbors(graph, nodeId)`。node/edge の種類と重みは §12 に合わせる。
 
-- [ ] **手順 1: API テストを作成する。** project ID の欠落/不正、壊れた JSON、データを失わない strict patch 拒否、404/403/500 の対応、PUT/DELETE 成功、shared read-only を網羅する。
-- [ ] **手順 2: API route を実装する。** query slug を `isValidSlug || isReservedProjectId` で検証し、singleton service だけを呼び出す。正確な content type と status の `jsonResponse`/`errorResponse` を返す。
-- [ ] **手順 3: ページ/graph テストを作成する。** 全 route が Next.js 16 の Promise 型 params/searchParams を await すること、不正 slug の表示文、shared page で edit/delete を隠すこと、非表示 node に接続する edge が graph filter で落ちることを検証する。
-- [ ] **手順 4: server page と client component を実装する。** project/type/tag/search page、Markdown 表示、editor の preview/save/delete、superseded badge、§12.3 の React Flow/d3-force 二段階 layout と styling を追加する。
-- [ ] **手順 5: UI/API テストと build を実行する。** `pnpm test` と `pnpm build` を実行し、`feat: add memory browser and knowledge graph UI` でコミットする。
+- [x] **手順 1: API テストを作成する。** project ID の欠落/不正、壊れた JSON、データを失わない strict patch 拒否、404/403/500 の対応、PUT/DELETE 成功、shared read-only を網羅する。
+- [x] **手順 2: API route を実装する。** query slug を `isValidSlug || isReservedProjectId` で検証し、singleton service だけを呼び出す。正確な content type と status の `jsonResponse`/`errorResponse` を返す。
+- [x] **手順 3: ページ/graph テストを作成する。** 全 route が Next.js 16 の Promise 型 params/searchParams を await すること、不正 slug の表示文、shared page で edit/delete を隠すこと、非表示 node に接続する edge が graph filter で落ちることを検証する。
+- [x] **手順 4: server page と client component を実装する。** project/type/tag/search page、Markdown 表示、editor の preview/save/delete、superseded badge、§12.3 の React Flow/d3-force 二段階 layout と styling を追加する。
+- [x] **手順 5: UI/API テストと build を実行する。** `pnpm test` と `pnpm build` を実行し、`feat: add memory browser and knowledge graph UI` でコミットする。
+
+#### タスク 7 の検証記録（2026-09-06）
+
+- PUT/DELETE /api/memories/[id] に project slug 検証、strict patch、JSON エラー、MemoryNotFound、500、同一オリジン、shared read-only の契約を追加し、厳密な JSON/text の Content-Type を返すようにした。
+- /、/search、project/type/tag/memory detail/edit、/graph を Next.js 16 の Promise params/searchParams と dynamic Node route で実装した。shared scope では編集・削除UIを表示せず、詳細では Markdown、entities/aliases、triples、source refs、supersession を表示する。
+- buildKgGraph と表示フィルタを実装し、React Flow の memory/entity ノード、membership/triple/link 辺、タグ絞り込み、近傍フォーカス、d3-force の形状変更時だけの座標計算、memory-only 表示を追加した。
+- 対象テスト 16 件、pnpm test（60 suite・145 tests）、pnpm lint、pnpm exec tsc --noEmit、NODE_ENV=production pnpm build が成功した。
+
 
 ### タスク 8: Vercel デプロイ、環境変数、CI/CD
 
