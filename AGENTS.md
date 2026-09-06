@@ -40,6 +40,7 @@
 - タスク 3 の MemoryService、KG、reconcile、project lock、atomic failure 復旧を実装し、非同期書き込みを local mutex / Redis lease に接続した。
 - タスク 4 の FTS5/LIKE 検索、PPR 連想検索、RRF、時間減衰、supersession、評価メトリクスを実装し、34 suite・91 tests、lint、型検査、production build を通過した。
 - タスク 5 の MCP 16 ツール、入力 schema/description、local-session、Vercel stateless transport、route guard を実装し、42 suite・109 tests、lint、型検査、production build を通過した。
+- タスク 5-A の分離 auth DB、Clerk middleware、hash-only PAT、membership 認可、CSRF/CORS、MCP auth gate を実装し、関連 auth/MCP/API テスト、lint、型検査、production build を通過した。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
 - `pnpm tsx scripts/probe-turso.ts` はリモート Turso URL を必須とする。ローカル libSQL のテスト成功をリモートゲート合格として扱わない。

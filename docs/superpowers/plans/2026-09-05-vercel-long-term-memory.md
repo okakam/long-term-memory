@@ -198,13 +198,20 @@
 - `assertProjectAccess(principal, projectId, action: 'read' | 'write' | 'maintain'): Promise<void>` — `projects` と `project_members` を認証 DB から確認する。
 - `createPat(userId, label, expiresAt?): Promise<{ token: string; tokenId: string }>`、`revokePat(userId, tokenId): Promise<void>` — 平文 token は返却時だけ保持する。
 
-- [ ] **手順 1: 認証境界の失敗テストを書く。** 未認証は UI/API/MCP 全て 401、membership なしは 403、期限切れ・失効 PAT・不正 scheme・空 Bearer は 401、`__shared__` の通常書き込みは 403、maintenance token と curator principal の両方が一致した場合だけ maintain を許可することを固定する。
-- [ ] **手順 2: 認証 DB を実装する。** memory の再構築対象とは別の local `auth.db` / Vercel の `TURSO_AUTH_DATABASE_URL`・`TURSO_AUTH_DATABASE_TOKEN` に `auth_schema_version`, `projects`, `project_members`, `mcp_tokens` を作り、owner/member role と token hash の一意制約を設ける。`index.db` の `REBUILDABLE_TABLES` に認証テーブルを混ぜない。
-- [ ] **手順 3: Clerk の UI 認証を実装する。** `clerkMiddleware()` を `src/proxy.ts` に置き、`/sign-in` と `/sign-up` 以外の UI/API を保護する。`ClerkProvider`、`auth()` の非同期利用、ログアウト、未認証時のリダイレクトを実装する。
-- [ ] **手順 4: PAT 管理画面を実装する。** ラベル・期限を受け取り、作成直後に一度だけ表示する。一覧には prefix、作成日時、最終利用、期限、失効状態だけを表示し、再表示や平文復元をできなくする。
-- [ ] **手順 5: project membership を実装する。** `POST /api/projects` で slug の所有権を作成し、最初のユーザーを owner にする。owner は member の招待・削除・role 変更ができ、`list_projects` と横断検索は principal が read 権限を持つ project だけを返す。`project_id` は引き続き URL 由来で、認可の対象を選ぶ値として扱う。
-- [ ] **手順 6: CSRF/CORS とレート制限を実装する。** Web の PUT/DELETE/POST は `Origin` と `Host` の同一性を検証し、MCP は allowlist 以外の Origin を拒否する。Upstash Redis で user/token 単位の失敗レートを制限し、401/403 の理由に token の値を含めない。
-- [ ] **手順 7: 認証テストを実行してコミットする。** `pnpm vitest run tests/lib/auth tests/app/auth.routes.test.ts tests/app/project-membership.test.ts` を実行し、`feat: add Clerk authentication and project authorization` でコミットする。
+- [x] **手順 1: 認証境界の失敗テストを書く。** 未認証は UI/API/MCP 全て 401、membership なしは 403、期限切れ・失効 PAT・不正 scheme・空 Bearer は 401、`__shared__` の通常書き込みは 403、maintenance token と curator principal の両方が一致した場合だけ maintain を許可することを固定する。
+- [x] **手順 2: 認証 DB を実装する。** memory の再構築対象とは別の local `auth.db` / Vercel の `TURSO_AUTH_DATABASE_URL`・`TURSO_AUTH_DATABASE_TOKEN` に `auth_schema_version`, `projects`, `project_members`, `mcp_tokens` を作り、owner/member role と token hash の一意制約を設ける。`index.db` の `REBUILDABLE_TABLES` に認証テーブルを混ぜない。
+- [x] **手順 3: Clerk の UI 認証を実装する。** `clerkMiddleware()` を `src/proxy.ts` に置き、`/sign-in` と `/sign-up` 以外の UI/API を保護する。`ClerkProvider`、`auth()` の非同期利用、ログアウト、未認証時のリダイレクトを実装する。
+- [x] **手順 4: PAT 管理画面を実装する。** ラベル・期限を受け取り、作成直後に一度だけ表示する。一覧には prefix、作成日時、最終利用、期限、失効状態だけを表示し、再表示や平文復元をできなくする。
+- [x] **手順 5: project membership を実装する。** `POST /api/projects` で slug の所有権を作成し、最初のユーザーを owner にする。owner は member の招待・削除・role 変更ができ、`list_projects` と横断検索は principal が read 権限を持つ project だけを返す。`project_id` は引き続き URL 由来で、認可の対象を選ぶ値として扱う。
+- [x] **手順 6: CSRF/CORS とレート制限を実装する。** Web の PUT/DELETE/POST は `Origin` と `Host` の同一性を検証し、MCP は allowlist 以外の Origin を拒否する。Upstash Redis で user/token 単位の失敗レートを制限し、401/403 の理由に token の値を含めない。
+- [x] **手順 7: 認証テストを実行してコミットする。** `pnpm vitest run tests/lib/auth tests/app/auth.routes.test.ts tests/app/project-membership.test.ts` を実行し、`feat: add Clerk authentication and project authorization` でコミットする。
+#### タスク 5-A の検証記録（2026-09-06）
+
+- 認証 DB を memory index と分離し、local `auth.db` / Vercel Turso adapter に schema version、projects、members、hash-only PAT を実装した。
+- Clerk `clerkMiddleware`、`ClerkProvider`、sign-in/sign-up、PAT 設定画面、token/membership API を追加した。
+- MCP は `AUTH_REQUIRED=1` または `VERCEL=1` で PAT と project membership を先に検証し、shared write は curator user と maintenance token の二重条件も検証する。mutation API は Origin/Host の same-origin と CORS allowlist を確認する。
+- `pnpm vitest run tests/lib/auth tests/app/auth.routes.test.ts tests/app/project-membership.test.ts tests/lib/mcp`、`pnpm lint`、`pnpm exec tsc --noEmit`、`NODE_ENV=production pnpm build` が成功した。
+
 ### タスク 6: 共有スコープとテレメトリ／ダッシュボード
 
 **対象ファイル:**

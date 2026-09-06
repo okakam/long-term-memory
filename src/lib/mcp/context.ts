@@ -5,6 +5,7 @@ export interface ToolContext {
   projectId: string;
   svc: MemoryService;
   canWriteShared?: boolean;
+  principal?: { userId: string; tokenId?: string };
 }
 
 export function extractProjectId(url: URL): string {

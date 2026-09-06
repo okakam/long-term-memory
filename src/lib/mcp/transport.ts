@@ -1,6 +1,9 @@
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 import { getMemoryService } from '@/lib/memory/singleton';
+import { authRequired } from '@/lib/auth/config';
+import { assertProjectAccess } from '@/lib/auth/access';
+import { requireMcpPrincipal } from '@/lib/auth/pat';
 import { extractMaintenanceToken, extractProjectId } from './context';
 import { grantsSharedWrite } from './auth';
 import { createMcpSession, getOrCreateSession, McpRequestTimeoutError, type McpSession } from './session';
@@ -69,11 +72,37 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
   }
   if (!isJsonRpcRequest(message)) return badRequest('invalid JSON body');
 
-  const canWriteShared = grantsSharedWrite(extractMaintenanceToken(req));
+  const maintenanceToken = extractMaintenanceToken(req);
+  const writeTools = new Set([
+    'remember_user_fact', 'remember_reference', 'remember_session_summary',
+    'remember_feedback', 'remember_project_fact', 'update_memory',
+    'forget_memory', 'link_memories',
+  ]);
+  const toolName = typeof message === 'object' && message !== null && 'params' in message
+    && typeof (message as { params?: unknown }).params === 'object'
+    && (message as { params?: { name?: unknown } }).params?.name;
+  const isWrite = typeof toolName === 'string' && writeTools.has(toolName);
+  let principal: { userId: string; tokenId: string } | undefined;
+  if (authRequired()) {
+    try {
+      principal = await requireMcpPrincipal(req);
+      if (isWrite && projectId === '__shared__'
+        && (!grantsSharedWrite(maintenanceToken) || principal.userId !== process.env.LTM_CURATOR_USER_ID)) {
+        return new Response('project access denied', { status: 403 });
+      }
+      await assertProjectAccess(principal, projectId, isWrite ? (projectId === '__shared__' ? 'maintain' : 'write') : 'read');
+    } catch (error) {
+      const status = error instanceof Error && 'status' in error && typeof error.status === 'number' ? error.status : 401;
+      return new Response(status === 403 ? 'project access denied' : 'authentication required', { status });
+    }
+  }
+  const canWriteShared = grantsSharedWrite(maintenanceToken)
+    && (!authRequired() || principal?.userId === process.env.LTM_CURATOR_USER_ID);
   const ctx: ToolContext = {
     projectId,
     svc: options.service ?? getMemoryService(),
     canWriteShared,
+    principal,
   };
   const mode = options.mode ?? defaultMode();
   const timeoutMs = options.timeoutMs ?? 30_000;
