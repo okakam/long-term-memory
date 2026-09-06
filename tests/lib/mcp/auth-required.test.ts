@@ -19,6 +19,7 @@ async function setup() {
   const store = new AuthStore(index);
   setAuthStoreForTests(store);
   await store.createProject('secure-project', 'user-1');
+  await store.addMember('secure-project', 'member-1', 'member');
   return { db, store };
 }
 
@@ -73,5 +74,22 @@ test('共有書き込みは curator principal と maintenance token の二重条
     expect(valid.status).toBe(200);
     delete process.env.LTM_MAINTENANCE_TOKEN;
     void store;
+  } finally { db.close(); }
+});
+
+test('reindexはproject owner以外のmemberには許可しない', async () => {
+  process.env.AUTH_REQUIRED = '1';
+  const { db } = await setup();
+  try {
+    const pat = await createPat('member-1', 'member');
+    const response = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + pat.token },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 4, method: 'tools/call',
+        params: { name: 'reindex', arguments: {} },
+      }),
+    }), { mode: 'vercel-stateless', service });
+    expect(response.status).toBe(403);
   } finally { db.close(); }
 });

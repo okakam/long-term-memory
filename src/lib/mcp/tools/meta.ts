@@ -19,7 +19,7 @@ export function registerMetaTools(server: McpServer, ctx: ToolContext): void {
     description: 'Rebuild the SQLite index from markdown files. Useful after external edits.',
     inputSchema: ReindexInput,
   }, async () => {
-    await Promise.resolve(ctx.svc.reindex());
+    await Promise.resolve(ctx.svc.reindex(ctx.projectId));
     return text('reindex complete');
   });
 }

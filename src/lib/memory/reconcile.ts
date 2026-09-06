@@ -96,23 +96,27 @@ function readFileMemory(filePath: string): { raw: string; memory: Memory } | nul
   }
 }
 
-export function reconcile(db: Database.Database, storage: Storage): void {
+export function reconcile(db: Database.Database, storage: Storage, projectId?: string): void {
   const seenIds = new Set<string>();
-  const files = projectDirectories(storage).flatMap((projectId) => memoryFiles(storage, projectId).map((filePath) => ({ projectId, filePath })));
+  const projects = projectId === undefined ? projectDirectories(storage) : [projectId];
+  const files = projects.flatMap((currentProject) => memoryFiles(storage, currentProject)
+    .map((filePath) => ({ projectId: currentProject, filePath })));
   db.exec('BEGIN');
   try {
     let savepointId = 0;
-    for (const { projectId, filePath } of files) {
+    for (const { projectId: currentProject, filePath } of files) {
       const parsed = readFileMemory(filePath);
       if (!parsed) continue;
       seenIds.add(parsed.memory.id);
       try {
-        savepoint(db, `reconcile_${savepointId++}`, () => upsertMemory(db, projectId, filePath, parsed.raw, parsed.memory));
+        savepoint(db, 'reconcile_' + savepointId++, () => upsertMemory(db, currentProject, filePath, parsed.raw, parsed.memory));
       } catch {
-        console.warn(`reconcile skipped ${basename(filePath)} in project ${projectId}`);
+        console.warn('reconcile skipped ' + basename(filePath) + ' in project ' + currentProject);
       }
     }
-    const rows = db.prepare('SELECT id, project_id FROM memories').all() as Array<{ id: string; project_id: string }>;
+    const rows = (projectId === undefined
+      ? db.prepare('SELECT id, project_id FROM memories').all()
+      : db.prepare('SELECT id, project_id FROM memories WHERE project_id = ?').all(projectId)) as Array<{ id: string; project_id: string }>;
     for (const row of rows) if (!seenIds.has(row.id)) deleteMemoryIndex(db, row.project_id, row.id);
     db.exec('COMMIT');
   } catch (error) {
@@ -121,26 +125,39 @@ export function reconcile(db: Database.Database, storage: Storage): void {
   }
 }
 
-export function reindex(db: Database.Database, storage: Storage): void {
+export function reindex(db: Database.Database, storage: Storage, projectId?: string): void {
   db.exec('BEGIN');
   try {
-    try {
-      db.prepare("INSERT INTO memories_fts(memories_fts) VALUES('delete-all')").run();
-    } catch {
-      db.prepare('DELETE FROM memories_fts').run();
+    if (projectId === undefined) {
+      try {
+        db.prepare("INSERT INTO memories_fts(memories_fts) VALUES('delete-all')").run();
+      } catch {
+        db.prepare('DELETE FROM memories_fts').run();
+      }
+      db.prepare('DELETE FROM entity_edges').run();
+      db.prepare('DELETE FROM memory_entities').run();
+      db.prepare('DELETE FROM entity_aliases').run();
+      db.prepare('DELETE FROM entities').run();
+      db.prepare('DELETE FROM supersedes').run();
+      db.prepare('DELETE FROM links').run();
+      db.prepare('DELETE FROM tags').run();
+      db.prepare('DELETE FROM memories').run();
+    } else {
+      const rows = db.prepare('SELECT rowid, id FROM memories WHERE project_id = ?').all(projectId) as Array<{ rowid: number; id: string }>;
+      for (const row of rows) db.prepare('DELETE FROM memories_fts WHERE rowid = ?').run(row.rowid);
+      db.prepare('DELETE FROM entity_edges WHERE asserted_by IN (SELECT id FROM memories WHERE project_id = ?)').run(projectId);
+      db.prepare('DELETE FROM memory_entities WHERE memory_id IN (SELECT id FROM memories WHERE project_id = ?)').run(projectId);
+      db.prepare('DELETE FROM entity_aliases WHERE asserted_by IN (SELECT id FROM memories WHERE project_id = ?)').run(projectId);
+      db.prepare('DELETE FROM entities WHERE project_id = ?').run(projectId);
+      db.prepare('DELETE FROM supersedes WHERE src_id IN (SELECT id FROM memories WHERE project_id = ?)').run(projectId);
+      db.prepare('DELETE FROM links WHERE src_id IN (SELECT id FROM memories WHERE project_id = ?)').run(projectId);
+      db.prepare('DELETE FROM tags WHERE memory_id IN (SELECT id FROM memories WHERE project_id = ?)').run(projectId);
+      db.prepare('DELETE FROM memories WHERE project_id = ?').run(projectId);
     }
-    db.prepare('DELETE FROM entity_edges').run();
-    db.prepare('DELETE FROM memory_entities').run();
-    db.prepare('DELETE FROM entity_aliases').run();
-    db.prepare('DELETE FROM entities').run();
-    db.prepare('DELETE FROM supersedes').run();
-    db.prepare('DELETE FROM links').run();
-    db.prepare('DELETE FROM tags').run();
-    db.prepare('DELETE FROM memories').run();
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
   }
-  reconcile(db, storage);
+  reconcile(db, storage, projectId);
 }

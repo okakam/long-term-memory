@@ -329,7 +329,7 @@ long-term-memory/
 | `markdown/frontmatter.ts` | 79 | `serializeMemory` / `parseMemoryString` | §5.2, §5.3 |
 | `markdown/file-io.ts` | 25 | `atomicWriteText` / `readMemoryFile` / `computeHash` | §7.3 |
 | `db/schema.sql` | 95 | スキーマ定義（正本） | §6.1 |
-| `db/migrate.ts` | 91 | 再構築 migration（`CURRENT_VERSION = 5`） | §6.2 |
+| `db/migrate.ts` | 91 | 再構築 migration（`CURRENT_VERSION = 6`） | §6.2 |
 | `db/connection.ts` | 13 | `openDb`（WAL + FK + migrate） | §6.3 |
 | `memory/types.ts` | 88 | `MemorySchema`（`supersedes` 含む） / `bodyChars` / エラー型 | §5.1 |
 | `memory/mutex.ts` | 19 | `KeyedMutex` | §7.4 |
@@ -492,7 +492,7 @@ frontmatter のキー順は**固定**（gray-matter は挿入順で出力する�
 2. `entities` — **非空のときだけ**。`aliases` が空の要素は `{ name }` のみ（`aliases: []` を書かない）
 3. `triples` — 非空のときだけ。`[s, p, o]` の 3 要素配列
 4. `source_refs` — 非空のときだけ。`{ project_id, memory }`
-5. `supersedes` — 非空のときだけ。置き換える同一プロジェクト内の memory name の配列（schema v5）
+5. `supersedes` — 非空のときだけ。置き換える同一プロジェクト内の memory name の配列（schema v6）
 
 本文は末尾改行を保証（`body.endsWith('\n') ? body : body + '\n'`）してから `matter.stringify(body, data)`。
 
@@ -564,6 +564,16 @@ triples:
 ```sql
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER PRIMARY KEY
+);
+
+-- Deletion markers are metadata, not soft-deleted memories. They are kept
+-- across rebuilds so a failed Blob delete cannot resurrect a forgotten memory.
+CREATE TABLE IF NOT EXISTS memory_tombstones (
+  project_id TEXT NOT NULL,
+  memory_id  TEXT NOT NULL,
+  file_path  TEXT NOT NULL,
+  deleted_at TEXT NOT NULL,
+  PRIMARY KEY (project_id, file_path)
 );
 
 CREATE TABLE IF NOT EXISTS memories (
@@ -672,6 +682,7 @@ erDiagram
     entities ||--o{ entity_edges : "src / dst"
     memories ||--o{ entity_edges : asserted_by
     memories ||--|| memories_fts : "rowid で 1:1（contentless）"
+    memory_tombstones }o..o{ memories : "削除済みBlobの再取り込み防止メタデータ"
 ```
 
 設計上の要点:
@@ -685,7 +696,7 @@ erDiagram
 ### 6.2 再構築 migration（`migrate.ts`）
 
 ```ts
-const CURRENT_VERSION = 5;
+const CURRENT_VERSION = 6;
 
 // CRITICAL: every table and virtual table declared in schema.sql must be
 // listed here (FK 安全な DROP 順), otherwise a version bump never drops that
@@ -1112,7 +1123,7 @@ function ftsPhrases(tokens: string[], op: 'AND' | 'OR') {
 
 ### 8.2 連想検索（`searchAssociative`）
 
-**schema v5 で両経路にリランク（§8.6）が配線された。** `limit` の既定は **20**。候補プールは `Math.max(limit * 5, CANDIDATE_POOL_MIN)`（`CANDIDATE_POOL_MIN = 200`）。実データの最大プロジェクトが 190 件なので 200 なら実質全件になり、silent cap にならない。
+**schema v6 で両経路にリランク（§8.6）が配線された。** `limit` の既定は **20**。候補プールは `Math.max(limit * 5, CANDIDATE_POOL_MIN)`（`CANDIDATE_POOL_MIN = 200`）。実データの最大プロジェクトが 190 件なので 200 なら実質全件になり、silent cap にならない。
 
 ```mermaid
 flowchart TD
@@ -1230,7 +1241,7 @@ export function rrfMerge<T>(lists: T[][], keyOf: (item: T) => string, k = 60): T
 - ランクベースなので bm25 と PPR のスコアスケール差に影響されない。
 - **最初に現れたリストのオブジェクトが残る**。呼び出し側はリスト順で優先度を表現する（project → shared）。
 
-### 8.6 時間減衰と supersession によるリランク（`memory/rerank.ts`、schema v5）
+### 8.6 時間減衰と supersession によるリランク（`memory/rerank.ts`、schema v6）
 
 **問題**: `updated_at` が `ORDER BY` に現れるのは `likeFallback` だけで、bm25 経路も PPR 経路も新旧を区別しない。supersede された古い事実が現行の事実と同じ重みで返っていた。設計の経緯・検討した3案（加重 RRF / 正規化+加算 / 乗算）は `docs/superpowers/specs/2026-08-13-memory-time-decay-supersession-design.md` を参照。
 
@@ -1689,8 +1700,8 @@ const PatchSchema = z.object({
 | `/` | プロジェクト一覧テーブル（Project / Memories / Last updated (JST)）。`shared` なプロジェクトにバッジ。空なら案内文 |
 | `/search` | GET フォーム（`?q=`）。全プロジェクトを `searchFulltext` で横断し `projectId / name / description / type` を表示 |
 | `/p/<slug>` | 型別カウント（`listByType(slug, t, 500).length`）と合計、記憶一覧・グラフへのリンク |
-| `/p/<slug>/memories?type=&tag=` | `tag` があれば `searchByTag`（+ 任意で type フィルタ）、`type` のみなら `listByType`、どちらも無ければ全型を連結して `updated_at DESC`。`svc.supersededByMap(slug)` を 1 回呼び、各行の description と tags の間に該当時のみ「置き換え済み」バッジ（`.superseded-badge`、新側 name へのリンク）を挟む（schema v5） |
-| `/p/<slug>/memories/<name>` | 詳細。type バッジ / description / tags / links / entities（別名は tooltip と併記）/ triples / 本文（`react-markdown`）/ ID・日時 / Edit ボタン。`svc.supersededByMap(slug).get(memory.name)` があれば description 直後に「置き換え済み」バッジ（`.superseded-badge`、新側 name へのリンク）、`memory.supersedes` が非空なら Supersedes: 行（旧側 name への相互リンク、schema v5） |
+| `/p/<slug>/memories?type=&tag=` | `tag` があれば `searchByTag`（+ 任意で type フィルタ）、`type` のみなら `listByType`、どちらも無ければ全型を連結して `updated_at DESC`。`svc.supersededByMap(slug)` を 1 回呼び、各行の description と tags の間に該当時のみ「置き換え済み」バッジ（`.superseded-badge`、新側 name へのリンク）を挟む（schema v6） |
+| `/p/<slug>/memories/<name>` | 詳細。type バッジ / description / tags / links / entities（別名は tooltip と併記）/ triples / 本文（`react-markdown`）/ ID・日時 / Edit ボタン。`svc.supersededByMap(slug).get(memory.name)` があれば description 直後に「置き換え済み」バッジ（`.superseded-badge`、新側 name へのリンク）、`memory.supersedes` が非空なら Supersedes: 行（旧側 name への相互リンク、schema v6） |
 | `/p/<slug>/memories/<name>/edit` | `MemoryEditor`。**`__shared__` なら読み取り専用メッセージのみ** |
 | `/p/<slug>/graph` | `buildKgGraph(svc.readKgGraph(slug))` を `KgGraph` に渡す。memories / entities / edges 件数を表示 |
 | `/dashboard?project=<slug>&days=<n>` | 使用状況ダッシュボード（`src/app/dashboard/page.tsx`）。**MCP 経由のツール呼び出しのみ集計**（Web UI 上の編集は含まない）。`days`（既定 30・上限 365）で期間、`project` で絞り込み。期間プリセット `7/30/90` 日へのリンクと「全プロジェクト」リンク（`period-nav`）。詳細は §6.4 参照 |
@@ -2128,7 +2139,7 @@ implement|fix|refactor|investigat|debug|review|design|migrat|add |remove|build|d
 | `markdown/frontmatter.supersedes.test.ts` | `supersedes` のラウンドトリップ / 空なら省略・読み込み時は `[]` / 配列でない・非文字列・空文字要素は捨てる / **空文字要素を schema で拒否（strictness）** |
 | `markdown/file-io.test.ts` | 親ディレクトリ作成 / 成功時に tmp を残さない / 書いたものを読み戻せる / ハッシュ安定 |
 | `db/connection.test.ts` | WAL と foreign_keys が ON / 親ディレクトリ作成 |
-| `db/migrate.test.ts` | 全テーブル作成＆冪等 / **stored version 不一致で DROP + 再作成（§22）** / **`REBUILDABLE_TABLES` が `schema.sql` の全テーブル・仮想テーブルを網羅している（schema v5、§6.2）** |
+| `db/migrate.test.ts` | 全テーブル作成＆冪等 / **stored version 不一致で DROP + 再作成（§22）** / **`REBUILDABLE_TABLES` が `schema.sql` の再構築対象テーブル・仮想テーブルを網羅している（schema v6、§6.2）** |
 | `db/schema.kg.test.ts` | KG 4 テーブル作成 / `schema_version` が現行版 |
 | `datetime.test.ts` | UTC ISO を JST 表示 / `+09:00` 明示オフセット / 深夜の日付繰り上がり / parse 不能なら原文 |
 | `eval/metrics.test.ts` | `recallAtK` の計数 / 空 relevant で 0 / `reciprocalRank` は 1/rank |
@@ -2259,7 +2270,7 @@ flowchart TD
     P7 --> P8["フェーズ 8: 読み取り経路の能動化<br/>body_chars/skill/hook/CLAUDE.md"]
     P8 --> P9["フェーズ 9: 配布<br/>Docker/compose/start-mcp"]
     P9 --> P10["フェーズ 10: curator<br/>SKILL/wrapper/launchd"]
-    P10 --> P11["フェーズ 11: 時間減衰 + supersession<br/>rerank.ts / supersedes テーブル（schema v5）"]
+    P10 --> P11["フェーズ 11: 時間減衰 + supersession<br/>rerank.ts / supersedes テーブル（schema v6）"]
     P2 --> PA["Vercel 公開オーバーレイ<br/>Clerk / PAT / membership / CSRF"]
     PA --> P3
     PA --> P6
@@ -2278,7 +2289,7 @@ flowchart TD
 | 8 | `body_chars`（`CURRENT_VERSION` を上げる）+ §14 | `service.body-chars` / `tools.read`（body_chars 系）/ `docs/post-mcp-setup.test.ts` |
 | 9 | §13.1–13.3 | `docker compose up -d` 後に `curl -X POST 'localhost:3939/api/mcp?project_id=x' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'` が 16 ツールを返す |
 | 10 | §13.4–13.5 | `DRY_RUN=1 scripts/curator/run-curation.sh` が `CURATION SUMMARY (DRY_RUN=1)` を出して成功スタンプを更新**しない**こと、launchd 登録後に手動 `launchctl kickstart` で完走 |
-| 11 | §5.1（`supersedes` フィールド）+ §6（`supersedes` テーブル、`CURRENT_VERSION = 5`）+ §8.2/§8.6（`rerank.ts` を両検索経路に配線） | `rerank.test.ts` / `service.decay.test.ts` / `service.decay.ppr.test.ts` / `service.supersedes.test.ts` / `frontmatter.supersedes.test.ts` / `tools.supersedes.test.ts` / `migrate.test.ts` の `REBUILDABLE_TABLES` 突き合わせ |
+| 11 | §5.1（`supersedes` フィールド）+ §6（`supersedes` テーブル、`CURRENT_VERSION = 6`）+ §8.2/§8.6（`rerank.ts` を両検索経路に配線） | `rerank.test.ts` / `service.decay.test.ts` / `service.decay.ppr.test.ts` / `service.supersedes.test.ts` / `frontmatter.supersedes.test.ts` / `tools.supersedes.test.ts` / `migrate.test.ts` の `REBUILDABLE_TABLES` 突き合わせ |
 | Vercel | §19 の Clerk / PAT / project membership / CSRF / CORS / rate limit | `tests/lib/auth/*` / `tests/app/auth.routes.test.ts` / preview E2E の認証付き MCP smoke |
 
 > フェーズ 7 / 8 / 11 で `CURRENT_VERSION` を上げる理由: trigram 化・`contentless_delete`・`body_chars` 列・`supersedes` テーブルはいずれも `CREATE ... IF NOT EXISTS` では既存 DB に反映されない。**再構築 migration（§6.2）が入っていることが前提**なので、フェーズ 1 の時点で `migrate.ts` はこの形にしておく。
@@ -2320,13 +2331,13 @@ flowchart TD
 
 | かつての architecture.md の記述 | 現行（本書 / 修正後の architecture.md） |
 |---|---|
-| 「`schema_version` は現行 = 2」「`migrate.ts` は `CREATE TABLE IF NOT EXISTS` の前方互換方式」 | **`CURRENT_VERSION = 5`、再構築 migration**（§6.2） |
+| 「`schema_version` は現行 = 2」「`migrate.ts` は `CREATE TABLE IF NOT EXISTS` の前方互換方式」 | **`CURRENT_VERSION = 6`、再構築 migration**（§6.2） |
 | 「contentless FTS5 は DELETE 不可で `INSERT … VALUES('delete', …)` パターン」 | **`contentless_delete=1` により `DELETE ... WHERE rowid = ?`**（§17-2） |
 | 「`toFtsMatchQuery` でクエリを正規化」 | 関数名は現行 `ftsTokens` / `ftsPhrases`。**trigram の 3 文字閾値と LIKE フォールバックが追加**（§8.1） |
 | `memories` テーブルの列挙に `body_chars` が無い | **`body_chars` 列あり**（schema v4、§5.1） |
 | 「16 ツール定義（`tools.ts`）」 | ツールは `tools/{read,write,meta,compose,util}.ts` に分割 |
 | 共有スコープ（`__shared__`）の記述が無い | 読み取りマージ・RRF・cap・書き込みトークンを記載（§10） |
-| 検索ランキングに時間軸が無い（`updated_at` は `likeFallback` にしか現れない） | schema v5 で `rerank.ts` の時間減衰 + supersede 降格が bm25/PPR 両経路に配線済み（§8.2, §8.6） |
+| 検索ランキングに時間軸が無い（`updated_at` は `likeFallback` にしか現れない） | schema v6 で `rerank.ts` の時間減衰 + supersede 降格が bm25/PPR 両経路に配線済み（§8.2, §8.6） |
 
 役割分担は変わらない。**architecture.md は「なぜそうなっているか」の地図、本書は実装契約の正本**で、差異があれば本書を採る。
 

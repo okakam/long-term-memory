@@ -534,8 +534,8 @@ export class MemoryService {
     reconcile(this.db, this.storage);
   }
 
-  reindex(): void {
-    reindex(this.db, this.storage);
+  reindex(projectId?: string): void {
+    reindex(this.db, this.storage, projectId === undefined ? undefined : this.requireProject(projectId));
   }
 
   saveAsync(projectId: string, input: SaveInput): Promise<Memory> {

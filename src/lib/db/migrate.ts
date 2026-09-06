@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { IndexStore } from '@/lib/storage/contracts';
 
-export const CURRENT_VERSION = 5;
+export const CURRENT_VERSION = 6;
 
 export const REBUILDABLE_TABLES = [
   'entity_edges', 'entity_aliases', 'memory_entities', 'entities',

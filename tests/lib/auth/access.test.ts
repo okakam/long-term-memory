@@ -41,3 +41,11 @@ test('__shared__ は認証済み read のみ、curator の maintain だけを許
     await expect(assertProjectAccess({ userId: 'other' }, '__shared__', 'maintain')).rejects.toMatchObject({ status: 403 });
   } finally { db.close(); }
 });
+
+test('projectのmaintainはownerだけに許可する', async () => {
+  const { db } = await setup();
+  try {
+    await expect(assertProjectAccess({ userId: 'owner' }, 'project', 'maintain')).resolves.toBeUndefined();
+    await expect(assertProjectAccess({ userId: 'member' }, 'project', 'maintain')).rejects.toMatchObject({ status: 403 });
+  } finally { db.close(); }
+});

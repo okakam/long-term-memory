@@ -4,11 +4,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { getMemoryService, resetMemoryService } from '@/lib/memory/singleton';
+import { computeHash } from '@/lib/markdown/file-io';
 import { RemoteMemoryService } from '@/lib/memory/remote-service';
 import type { MarkdownStore, StoredObject } from '@/lib/storage/contracts';
 import { openTursoDb } from '@/lib/storage/turso-index';
 
 const roots: string[] = [];
+
+const lockRedis = {
+  async set() { return 'OK' as const; },
+  async eval() { return 1; },
+};
 
 afterEach(() => {
   resetMemoryService();
@@ -57,7 +63,7 @@ test('Vercel service は Blob を正本にして Turso 索引を更新する', a
   roots.push(root);
   const clientUrl = `file:${join(root, 'index.db')}`;
   const markdown = memoryStore();
-  const service = new RemoteMemoryService(openTursoDb({ url: clientUrl, authToken: 'test-token' }), markdown);
+  const service = new RemoteMemoryService(openTursoDb({ url: clientUrl, authToken: 'test-token' }), markdown, lockRedis);
 
   const saved = await service.save('project', {
     name: 'remote-memory', description: 'remote description', type: 'project', body: 'remote body', tags: ['remote'],
@@ -75,5 +81,60 @@ test('Vercel service は Blob を正本にして Turso 索引を更新する', a
   await service.forget('project', saved.id);
   await expect(service.get('project', saved.id)).rejects.toThrow('memory not found');
   expect(markdown.objects).toEqual(new Map());
+  service.close();
+});
+
+test('forgetでBlob削除に失敗してもreindexで削除済み記憶が復活しない', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ltm-vercel-tombstone-'));
+  roots.push(root);
+  const markdown = memoryStore();
+  const clientUrl = `file:${join(root, 'index.db')}`;
+  const service = new RemoteMemoryService(openTursoDb({ url: clientUrl, authToken: 'test-token' }), markdown, lockRedis);
+
+  const saved = await service.save('project', {
+    name: 'deleted-memory', description: 'description', type: 'project', body: 'body',
+  });
+  const originalRemove = markdown.remove;
+  markdown.remove = async () => { throw new Error('blob delete failed'); };
+  await service.forget('project', saved.id);
+  markdown.remove = originalRemove;
+
+  await service.reindex('project');
+  await expect(service.get('project', saved.id)).rejects.toThrow('memory not found');
+  service.close();
+});
+
+test('reindexは設定したBlob prefix外のobjectを取り込まない', async () => {
+  vi.stubEnv('LTM_BLOB_PREFIX', 'preview');
+  const root = mkdtempSync(join(tmpdir(), 'ltm-vercel-prefix-'));
+  roots.push(root);
+  const markdown = memoryStore();
+  const clientUrl = `file:${join(root, 'index.db')}`;
+  const service = new RemoteMemoryService(openTursoDb({ url: clientUrl, authToken: 'test-token' }), markdown, lockRedis);
+  await service.save('project', {
+    name: 'prefix-memory', description: 'description', type: 'project', body: 'body',
+  });
+  const raw = markdown.objects.get([...markdown.objects.keys()][0]);
+  expect(raw).toBeDefined();
+  const foreignRaw = raw!.replace('name: prefix-memory', 'name: foreign-memory');
+  markdown.objects.set('production/project/memories/foreign-memory/' + computeHash(foreignRaw) + '.md', foreignRaw);
+
+  await service.reindex('project');
+  await expect(service.get('project', 'foreign-memory')).rejects.toThrow('memory not found');
+  service.close();
+});
+
+test('remote service は rename でBlobと参照先を更新する', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ltm-vercel-rename-'));
+  roots.push(root);
+  const markdown = memoryStore();
+  const clientUrl = 'file:' + join(root, 'index.db');
+  const service = new RemoteMemoryService(openTursoDb({ url: clientUrl, authToken: 'test-token' }), markdown, lockRedis);
+  const saved = await service.save('project', {
+    name: 'old-name', description: 'description', type: 'project', body: 'body',
+  });
+  await service.rename('project', 'old-name', 'new-name');
+  await expect(service.get('project', 'old-name')).rejects.toThrow('memory not found');
+  await expect(service.get('project', 'new-name')).resolves.toMatchObject({ id: saved.id, name: 'new-name' });
   service.close();
 });

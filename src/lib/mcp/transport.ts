@@ -78,10 +78,12 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
     'remember_feedback', 'remember_project_fact', 'update_memory',
     'forget_memory', 'link_memories',
   ]);
+  const maintenanceTools = new Set(['reindex']);
   const toolName = typeof message === 'object' && message !== null && 'params' in message
     && typeof (message as { params?: unknown }).params === 'object'
     && (message as { params?: { name?: unknown } }).params?.name;
   const isWrite = typeof toolName === 'string' && writeTools.has(toolName);
+  const isMaintenance = typeof toolName === 'string' && maintenanceTools.has(toolName);
   let principal: { userId: string; tokenId: string } | undefined;
   if (authRequired()) {
     try {
@@ -90,7 +92,7 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
         && (!grantsSharedWrite(maintenanceToken) || principal.userId !== process.env.LTM_CURATOR_USER_ID)) {
         return new Response('project access denied', { status: 403 });
       }
-      await assertProjectAccess(principal, projectId, isWrite ? (projectId === '__shared__' ? 'maintain' : 'write') : 'read');
+      await assertProjectAccess(principal, projectId, isMaintenance ? 'maintain' : (isWrite ? (projectId === '__shared__' ? 'maintain' : 'write') : 'read'));
     } catch (error) {
       const status = error instanceof Error && 'status' in error && typeof error.status === 'number' ? error.status : 401;
       return new Response(status === 403 ? 'project access denied' : 'authentication required', { status });

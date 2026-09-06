@@ -87,3 +87,9 @@ test('get_memory は full body と project scope を text JSON で返す', async
   expect(value.body).toContain('**Why:** reason');
   expect(value.scope).toBe('project');
 });
+
+test('reindex は現在の project scope をサービスへ渡す', async () => {
+  const service = makeService();
+  await call(service, 'reindex', {});
+  expect(service.reindex).toHaveBeenCalledWith('project');
+});

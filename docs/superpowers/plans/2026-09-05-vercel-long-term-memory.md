@@ -160,7 +160,7 @@
 - `MemoryService` の非同期書き込みを local `KeyedMutex` または Vercel の Redis lease lock へ接続し、Markdown を正本として DB/KG/FTS を再構築可能にした。
 - `pnpm vitest run tests/lib/memory tests/lib/lock tests/storage/atomic-failure.test.ts`、`pnpm exec tsc --noEmit`、`pnpm lint`、`pnpm test`、`NODE_ENV=production pnpm build` が成功した。
 - 検証時点の全体結果は 34 test suites・91 tests。リモート Turso の FTS5 互換性はタスク 0 の合格記録を使用した。
-- 2026-09-06 に `RemoteMemoryService`、remote PPR、MCP/UI の非同期 read path を追加した。Vercel ではローカル filesystem を開かず、Blob を先に確保して Turso の index/KG/FTS transaction を更新する。save/get/search/update/reindex/forget の adapter 契約テストを含め、全 65 suite・162 tests、lint、型検査、production build が成功した。
+- 2026-09-06 に `RemoteMemoryService`、remote PPR、MCP/UI の非同期 read path を追加した。Vercel ではローカル filesystem を開かず、Blob を先に確保して Turso の index/KG/FTS transaction を更新する。レビュー対応として削除 tombstone、Blob prefix/hash検証、project scoped reindex、remote rename、Vercel Redis lock固定、owner/curator maintenance認可、reindexのobject単位savepointを追加した。save/get/search/update/reindex/forget/rename の adapter 契約テストを含め、全 65 suite・168 tests、lint、型検査、production build が成功した。
 
 ### タスク 5: MCP スキーマ、ツール、ステートレス Vercel トランスポート
 

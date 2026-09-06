@@ -65,6 +65,10 @@ function blobPrefix(): string {
   return prefix;
 }
 
+export function blobStoragePrefix(): string {
+  return blobPrefix();
+}
+
 export function memoryPrefix(projectId: string, name?: string): string {
   const project = assertProjectId(projectId);
   const prefix = blobPrefix();

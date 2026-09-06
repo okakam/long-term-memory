@@ -48,9 +48,9 @@ export async function assertProjectAccess(
     if (action === 'maintain' && principal.userId === process.env.LTM_CURATOR_USER_ID) return;
     throw new AuthorizationError('shared scope is read-only');
   }
-  if (action === 'maintain') throw new AuthorizationError();
   const membership = await (store ?? await getAuthStore()).getMembership(projectId, principal.userId);
   if (!membership || (membership.role !== 'owner' && membership.role !== 'member')) {
     throw new AuthorizationError();
   }
+  if (action === 'maintain' && membership.role !== 'owner') throw new AuthorizationError();
 }

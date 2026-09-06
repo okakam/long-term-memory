@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 
-import { withProjectLock } from '@/lib/lock/project-lock';
+import { withProjectLock, type LockRedis } from '@/lib/lock/project-lock';
 import { computeHash } from '@/lib/markdown/file-io';
 import { parseMemoryString, serializeMemory } from '@/lib/markdown/frontmatter';
 import { rankMemoriesByRemotePpr } from '@/lib/graph/remote-assoc';
@@ -16,7 +16,7 @@ import {
   type UpdateInput,
 } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId, isReservedProjectId, isValidSlug, SHARED_PROJECT_ID } from '@/lib/slug';
-import { memoryObjectKey } from '@/lib/storage/blob-markdown';
+import { blobStoragePrefix, memoryObjectKey } from '@/lib/storage/blob-markdown';
 import { createMarkdownStore } from '@/lib/storage/factory';
 import type { IndexStore, MarkdownStore, StoredObject } from '@/lib/storage/contracts';
 import { openTursoDb } from '@/lib/storage/turso-index';
@@ -156,6 +156,7 @@ export class RemoteMemoryService {
   constructor(
     private readonly indexPromise: Promise<IndexStore>,
     private readonly markdown: MarkdownStore = createMarkdownStore({ mode: 'vercel' }),
+    private readonly lockRedis?: LockRedis,
   ) {}
 
   static openDefault(): RemoteMemoryService {
@@ -368,8 +369,17 @@ export class RemoteMemoryService {
     const store = await this.index();
     const row = await selectRow(store, project, idOrName);
     if (!row) throw new MemoryNotFoundError(idOrName);
-    await store.transaction((tx) => deleteIndex(tx, project, row.id));
-    await this.markdown.remove(row.file_path).catch(() => undefined);
+    await store.transaction(async (tx) => {
+      await deleteIndex(tx, project, row.id);
+      await tx.exec('INSERT OR REPLACE INTO memory_tombstones (project_id, memory_id, file_path, deleted_at) VALUES (?, ?, ?, ?)',
+        [project, row.id, row.file_path, nowIso()]);
+    });
+    try {
+      await this.markdown.remove(row.file_path);
+    } catch {
+      return;
+    }
+    await store.transaction((tx) => tx.exec('DELETE FROM memory_tombstones WHERE project_id = ? AND file_path = ?', [project, row.file_path]));
   }
 
   async linkMemories(projectId: string, src: string, dstName: string): Promise<Memory> {
@@ -378,6 +388,44 @@ export class RemoteMemoryService {
     const current = await this.get(project, src);
     if (current.links.includes(destination)) return current;
     return this.update(project, current.name, { links: [...current.links, destination] });
+  }
+
+  async rename(projectId: string, oldName: string, newName: string): Promise<Memory> {
+    const project = this.requireProject(projectId);
+    const old = this.requireName(oldName);
+    const next = this.requireName(newName);
+    const store = await this.index();
+    const row = await selectRow(store, project, old);
+    if (!row) throw new MemoryNotFoundError(oldName);
+    if (old === next) return this.hydrate(row);
+    if (await selectRow(store, project, next)) throw new MemoryConflictError(next);
+    const current = await this.hydrate(row);
+    const updated = MemorySchema.parse({ ...current, name: next, updated_at: nowIso() });
+    const raw = serializeMemory(updated);
+    const contentHash = computeHash(raw);
+    const key = memoryObjectKey(project, next, contentHash);
+    await this.markdown.write(key, raw);
+    try {
+      await store.transaction(async (tx) => {
+        const currentRow = await selectRow(tx, project, old);
+        if (!currentRow) throw new MemoryNotFoundError(oldName);
+        if (await selectRow(tx, project, next)) throw new MemoryConflictError(next);
+        const fts = await tx.query<{ rowid: number }>('SELECT rowid FROM memories WHERE id = ?', [row.id]);
+        await tx.exec('UPDATE memories SET name = ?, file_path = ?, content_hash = ?, updated_at = ? WHERE id = ?',
+          [next, key, contentHash, updated.updated_at, row.id]);
+        await tx.exec('UPDATE links SET dst_name = ? WHERE dst_name = ? AND src_id IN (SELECT id FROM memories WHERE project_id = ?)',
+          [next, old, project]);
+        await tx.exec('UPDATE supersedes SET dst_name = ? WHERE dst_name = ? AND src_id IN (SELECT id FROM memories WHERE project_id = ?)',
+          [next, old, project]);
+        if (fts[0]) await tx.exec('DELETE FROM memories_fts WHERE rowid = ?', [fts[0].rowid]);
+        await insertFts(tx, updated);
+      });
+    } catch (error) {
+      await this.markdown.remove(key).catch(() => undefined);
+      throw error;
+    }
+    if (key !== row.file_path) await this.markdown.remove(row.file_path).catch(() => undefined);
+    return updated;
   }
 
   async listProjects(): Promise<Array<{ id: string; count: number; updated_at: string | null; shared: boolean }>> {
@@ -512,58 +560,99 @@ export class RemoteMemoryService {
     return { entities: Number(entities[0]?.count ?? 0), edges: Number(edges[0]?.count ?? 0), memberships: Number(memberships[0]?.count ?? 0) };
   }
 
-  async reconcile(): Promise<void> {
-    await this.index();
+  async reconcile(projectId?: string): Promise<void> {
+    await this.reindex(projectId);
   }
 
-  async reindex(): Promise<void> {
+  private async reindexUnlocked(projectId?: string): Promise<void> {
     const store = await this.index();
-    const objects = await this.markdown.list('');
+    const rootPrefix = blobStoragePrefix();
+    const objects = await this.markdown.list(rootPrefix + '/');
+    const tombstones = new Set((await store.query<{ file_path: string }>(
+      'SELECT file_path FROM memory_tombstones',
+    )).map((row) => row.file_path));
     const snapshots = new Map<string, { projectId: string; object: StoredObject; raw: string; memory: Memory }>();
     for (const object of objects) {
-      const marker = '/memories/';
-      const markerIndex = object.key.lastIndexOf(marker);
-      if (markerIndex < 1) continue;
-      const prefix = object.key.slice(0, markerIndex);
-      const projectId = prefix.slice(prefix.lastIndexOf('/') + 1);
-      if (!isValidSlug(projectId) && !isReservedProjectId(projectId)) continue;
+      if (tombstones.has(object.key) || !object.key.startsWith(rootPrefix + '/')) continue;
+      const relative = object.key.slice(rootPrefix.length + 1).split('/');
+      if (relative.length !== 4 || relative[1] !== 'memories' || !relative[3].endsWith('.md')) continue;
+      const [objectProject, , objectName, hashFile] = relative;
+      if ((!isValidSlug(objectProject) && !isReservedProjectId(objectProject))
+        || (projectId !== undefined && objectProject !== projectId)
+        || !isValidSlug(objectName)) continue;
+      const contentHash = hashFile.slice(0, -3);
+      if (!/^[a-f0-9]{64}$/.test(contentHash)) continue;
       try {
         const raw = await this.markdown.read(object.key);
+        if (computeHash(raw) !== contentHash) continue;
         const memory = parseMemoryString(raw);
-        const key = `${projectId}:${memory.name}`;
+        if (memoryObjectKey(objectProject, memory.name, contentHash) !== object.key) continue;
+        const key = objectProject + ':' + memory.name;
         const previous = snapshots.get(key);
         if (!previous || previous.object.updatedAt.getTime() <= object.updatedAt.getTime()) {
-          snapshots.set(key, { projectId, object, raw, memory });
+          snapshots.set(key, { projectId: objectProject, object, raw, memory });
         }
       } catch {
         // Reindex follows local reconcile semantics: malformed objects are skipped.
       }
     }
     await store.transaction(async (tx) => {
-      try { await tx.exec("INSERT INTO memories_fts(memories_fts) VALUES('delete-all')"); } catch { await tx.exec('DELETE FROM memories_fts'); }
-      for (const table of ['entity_edges', 'entity_aliases', 'memory_entities', 'entities', 'supersedes', 'links', 'tags', 'memories']) {
-        await tx.exec(`DELETE FROM ${table}`);
+      if (projectId === undefined) {
+        try { await tx.exec("INSERT INTO memories_fts(memories_fts) VALUES('delete-all')"); } catch { await tx.exec('DELETE FROM memories_fts'); }
+        for (const table of ['entity_edges', 'entity_aliases', 'memory_entities', 'entities', 'supersedes', 'links', 'tags', 'memories']) {
+          await tx.exec('DELETE FROM ' + table);
+        }
+      } else {
+        const rows = await tx.query<{ rowid: number; id: string }>('SELECT rowid, id FROM memories WHERE project_id = ?', [projectId]);
+        for (const row of rows) await tx.exec('DELETE FROM memories_fts WHERE rowid = ?', [row.rowid]);
+        await tx.exec('DELETE FROM entity_edges WHERE asserted_by IN (SELECT id FROM memories WHERE project_id = ?)', [projectId]);
+        await tx.exec('DELETE FROM memory_entities WHERE memory_id IN (SELECT id FROM memories WHERE project_id = ?)', [projectId]);
+        await tx.exec('DELETE FROM entity_aliases WHERE asserted_by IN (SELECT id FROM memories WHERE project_id = ?)', [projectId]);
+        await tx.exec('DELETE FROM entities WHERE project_id = ?', [projectId]);
+        await tx.exec('DELETE FROM supersedes WHERE src_id IN (SELECT id FROM memories WHERE project_id = ?)', [projectId]);
+        await tx.exec('DELETE FROM links WHERE src_id IN (SELECT id FROM memories WHERE project_id = ?)', [projectId]);
+        await tx.exec('DELETE FROM tags WHERE memory_id IN (SELECT id FROM memories WHERE project_id = ?)', [projectId]);
+        await tx.exec('DELETE FROM memories WHERE project_id = ?', [projectId]);
       }
+      let savepointId = 0;
       for (const snapshot of snapshots.values()) {
-        await insertMemoryIndex(tx, snapshot.projectId, snapshot.object.key, snapshot.raw, snapshot.memory);
+        const savepoint = 'remote_reindex_' + savepointId++;
+        try {
+          await tx.exec('SAVEPOINT ' + savepoint);
+          await insertMemoryIndex(tx, snapshot.projectId, snapshot.object.key, snapshot.raw, snapshot.memory);
+          await tx.exec('RELEASE SAVEPOINT ' + savepoint);
+        } catch {
+          await tx.exec('ROLLBACK TO SAVEPOINT ' + savepoint);
+          await tx.exec('RELEASE SAVEPOINT ' + savepoint);
+          console.warn('reindex skipped ' + snapshot.memory.name + ' in project ' + snapshot.projectId);
+        }
       }
     });
   }
 
+  async reindex(projectId?: string): Promise<void> {
+    const target = projectId === undefined ? undefined : this.requireProject(projectId);
+    return withProjectLock(target ?? SHARED_PROJECT_ID, () => this.reindexUnlocked(target), { mode: 'vercel', redis: this.lockRedis });
+  }
+
   saveAsync(projectId: string, input: SaveInput): Promise<Memory> {
-    return withProjectLock(projectId, () => this.save(projectId, input));
+    return withProjectLock(projectId, () => this.save(projectId, input), { mode: 'vercel', redis: this.lockRedis });
   }
 
   updateAsync(projectId: string, idOrName: string, patch: UpdateInput): Promise<Memory> {
-    return withProjectLock(projectId, () => this.update(projectId, idOrName, patch));
+    return withProjectLock(projectId, () => this.update(projectId, idOrName, patch), { mode: 'vercel', redis: this.lockRedis });
   }
 
   forgetAsync(projectId: string, idOrName: string, reason?: string): Promise<void> {
-    return withProjectLock(projectId, () => this.forget(projectId, idOrName, reason));
+    return withProjectLock(projectId, () => this.forget(projectId, idOrName, reason), { mode: 'vercel', redis: this.lockRedis });
   }
 
   linkMemoriesAsync(projectId: string, src: string, dstName: string): Promise<Memory> {
-    return withProjectLock(projectId, () => this.linkMemories(projectId, src, dstName));
+    return withProjectLock(projectId, () => this.linkMemories(projectId, src, dstName), { mode: 'vercel', redis: this.lockRedis });
+  }
+
+  renameAsync(projectId: string, oldName: string, newName: string): Promise<Memory> {
+    return withProjectLock(projectId, () => this.rename(projectId, oldName, newName), { mode: 'vercel', redis: this.lockRedis });
   }
 
   close(): void {
