@@ -36,7 +36,7 @@
 
 - タスク 0 の Next.js 足場、storage 契約、FTS5 probe を実装した。
 - タスク 8 の Vercel/Clerk env、security headers、固定CLI CI、migration preflight、Vercel smoke、Docker配布、start-mcp安全起動、Blob prefix分離を実装し、Vercel Upstash連携の `KV_REST_API_*` env 名にも対応した。62 suite・153 tests、lint・型検査・production build を通過した。Docker CLIとMCP認証付き実Vercel preview smokeは未実行。2026-09-06 に Vercel CLI preview deploy/inspect が Ready まで成功した。
-- タスク 9 の Claude Code skill/hook/CLAUDE.md、curator local/remote wrapper、remote snapshot、Vercel外部スケジュール、launchd、埋め込み同期を実装し、64 suite・158 tests、lint・型検査・production build、hook 3-turn check を通過した。2026-09-06 に Vercel preview deploy/inspect が Ready まで成功した。MCP認証付きremote curator実行はsecret未提供のため未実行。2026-09-05 に Turso リモート互換性ゲート（FTS5 trigram、weighted bm25、contentless delete）へ合格した。
+- タスク 9 の Claude Code skill/hook/CLAUDE.md、curator local/remote wrapper、remote snapshot、Vercel外部スケジュール、launchd、埋め込み同期を実装し、64 suite・160 tests、lint・型検査・production build、hook 3-turn check を通過した。2026-09-06 に Vercel preview deploy/inspect が Ready まで成功した。MCP認証付きremote curator実行はsecret未提供のため未実行。2026-09-05 に Turso リモート互換性ゲート（FTS5 trigram、weighted bm25、contentless delete）へ合格した。
 - タスク 1 の Markdown 正本データモデル、frontmatter の serialize/parse、ローカル filesystem / Vercel Blob adapter を実装し、対象 45 テストを通過した。
 - タスク 2 の schema v5、再構築 migration、WAL/FK 付きローカル SQLite adapter、遅延初期化 Turso/libSQL adapter を実装し、全 57 テスト・lint・型検査・production build を通過した。リモート probe の合格記録はタスク 0 に基づく。
 - タスク 3 の MemoryService、KG、reconcile、project lock、atomic failure 復旧を実装し、非同期書き込みを local mutex / Redis lease に接続した。

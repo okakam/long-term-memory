@@ -309,7 +309,7 @@
 - long-term-memory skill、shared-memory-curator skill、Claude Code hook、CLAUDE.md MUST block、1本化したpost-mcp-setup prompt、決定的embed同期を追加した。get_memory_indexを入口にしない能動検索、subagentへの検索引き渡し、hookの1セッション1回制御を保持している。
 - local/remote curator wrapperにDRY_RUNの外部指定退避、staged配置の絶対パス/TCC検査、Read/Grep/Glob限定、strict MCP config、dry-run時の全write tool禁止、CURATION SUMMARY state machine、last-success保護を実装した。
 - MCPのlist_projects/get_memory_index/get_memoryから秘密をサニタイズした一時Markdown snapshotを作るexport script、Vercel MCP config、local MCP config、self-hosted Claude CLIを使う01:00 UTCのremote curator workflow、install script、launchd template、env exampleを追加した。
-- pnpm test（64 suite・158 tests）、pnpm lint、pnpm exec tsc --noEmit、NODE_ENV=production pnpm build、YAML/JSON構文、sync --check、curator/hook bash -n、hook 3-turn checkが成功した。Task9対象テストは5件。
+- pnpm test（64 suite・160 tests）、pnpm lint、pnpm exec tsc --noEmit、NODE_ENV=production pnpm build、YAML/JSON構文、sync --check、curator/hook bash -n、hook 3-turn checkが成功した。Task9対象テストは5件。
 - Vercel CLIの認証確認（vercel whoami）、preview deploy、vercel inspect による Ready 確認が成功した。実remote snapshot/curator実行は PAT と maintenance token 等の secret が必要なため未実行。
 
 ### タスク 10: 完全受け入れ、可観測性、引き渡し
