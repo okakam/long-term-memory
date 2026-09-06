@@ -1,6 +1,30 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
-import { withProjectLock, type LockRedis } from '@/lib/lock/project-lock';
+import { resolveRedisConfig, withProjectLock, type LockRedis } from '@/lib/lock/project-lock';
+
+test('Vercel Upstash 連携の KV REST env 名を優先して解決する', () => {
+  vi.stubEnv('UPSTASH_REDIS_REST_KV_REST_API_URL', 'https://current.example.com');
+  vi.stubEnv('UPSTASH_REDIS_REST_KV_REST_API_TOKEN', 'current-token');
+  vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://fallback.example.com');
+  vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'fallback-token');
+
+  expect(resolveRedisConfig()).toEqual({
+    url: 'https://current.example.com',
+    token: 'current-token',
+  });
+});
+
+test('標準 Upstash env 名を fallback として解決する', () => {
+  vi.stubEnv('UPSTASH_REDIS_REST_KV_REST_API_URL', '');
+  vi.stubEnv('UPSTASH_REDIS_REST_KV_REST_API_TOKEN', '');
+  vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://fallback.example.com');
+  vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'fallback-token');
+
+  expect(resolveRedisConfig()).toEqual({
+    url: 'https://fallback.example.com',
+    token: 'fallback-token',
+  });
+});
 
 test('local project lock は同一 project の処理を直列化する', async () => {
   const events: string[] = [];

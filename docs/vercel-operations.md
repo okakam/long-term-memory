@@ -14,7 +14,8 @@ Vercelの実行リージョンはTursoのprimaryリージョンに近い値を�
 - <code>TURSO_AUTH_DATABASE_URL</code> / <code>TURSO_AUTH_DATABASE_TOKEN</code>
 - <code>TURSO_TELEMETRY_DATABASE_URL</code> / <code>TURSO_TELEMETRY_AUTH_TOKEN</code>
 - <code>BLOB_READ_WRITE_TOKEN</code>
-- <code>UPSTASH_REDIS_REST_URL</code> / <code>UPSTASH_REDIS_REST_TOKEN</code>
+- <code>UPSTASH_REDIS_REST_KV_REST_API_URL</code> / <code>UPSTASH_REDIS_REST_KV_REST_API_TOKEN</code>（Vercel Upstash連携の現行名）
+- <code>UPSTASH_REDIS_REST_URL</code> / <code>UPSTASH_REDIS_REST_TOKEN</code>（手動構成時の互換名）
 - <code>CLERK_SECRET_KEY</code> / <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code>
 - <code>NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in</code> / <code>NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up</code>
 - <code>LTM_MAINTENANCE_TOKEN</code> / <code>LTM_CURATOR_USER_ID</code>

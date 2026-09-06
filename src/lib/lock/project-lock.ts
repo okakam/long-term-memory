@@ -23,11 +23,29 @@ export interface ProjectLockOptions {
   retryMs?: number;
 }
 
+export interface RedisConfig {
+  url: string;
+  token: string;
+}
+
+export function resolveRedisConfig(): RedisConfig {
+  const currentUrl = process.env.UPSTASH_REDIS_REST_KV_REST_API_URL;
+  const currentToken = process.env.UPSTASH_REDIS_REST_KV_REST_API_TOKEN;
+  if (currentUrl && currentToken) return { url: currentUrl, token: currentToken };
+
+  const standardUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const standardToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (standardUrl && standardToken) return { url: standardUrl, token: standardToken };
+
+  throw new Error(
+    'UPSTASH_REDIS_REST_KV_REST_API_URL and UPSTASH_REDIS_REST_KV_REST_API_TOKEN '
+    + '(or UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN) are required for vercel locks',
+  );
+}
+
 function getRedis(): LockRedis {
   if (redisClient) return redisClient;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) throw new Error('UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required for vercel locks');
+  const { url, token } = resolveRedisConfig();
   redisClient = new Redis({ url, token });
   return redisClient;
 }
