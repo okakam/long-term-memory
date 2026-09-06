@@ -1,7 +1,9 @@
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { randomUUID } from 'node:crypto';
 import { LATEST_PROTOCOL_VERSION, type JSONRPCMessage, type RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { resetMemoryService } from '@/lib/memory/singleton';
+import { recordConnect } from '@/lib/telemetry/recorder';
 
 import { createMcpServer } from './server';
 import type { ToolContext } from './context';
@@ -37,7 +39,9 @@ let syntheticId = 0;
 
 export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = createMcpServer(ctx);
+  const sessionId = randomUUID();
+  const sessionContext = { ...ctx, sessionId };
+  const server = createMcpServer(sessionContext);
   const pending = new Map<string, Resolver>();
   let initialization: Promise<void> | null = null;
   let closed = false;
@@ -94,7 +98,10 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
     },
     acceptInitialize: async (message, timeoutMs = 30_000) => {
       if (initialization) return session.send(message, timeoutMs);
-      const responsePromise = session.send(message, timeoutMs);
+      const responsePromise = session.send(message, timeoutMs).then(async (response) => {
+        await recordConnect({ projectId: sessionContext.projectId, sessionId });
+        return response;
+      });
       initialization = responsePromise.then(() => undefined).catch((error) => {
         initialization = null;
         throw error;
@@ -116,6 +123,7 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
           },
         }, timeoutMs);
         await session.send({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
+        await recordConnect({ projectId: sessionContext.projectId, sessionId });
       })().catch((error) => {
         initialization = null;
         throw error;

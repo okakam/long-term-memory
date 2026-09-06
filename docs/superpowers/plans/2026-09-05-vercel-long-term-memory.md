@@ -223,12 +223,20 @@
 - 実装する: `getTelemetryStore()`、`recordToolCall()`、`recordConnect()`、`telemetryEnabled()`、`summarize()`、`dailySeries()`、`perTool()`、`perProject()`、`errorBreakdown()`、`curatorStatus()`。
 - ローカルの telemetry は `<LTM_HOME>/telemetry.db`、Vercel は別 Turso URL 組（`TURSO_TELEMETRY_DATABASE_URL` / `TURSO_TELEMETRY_AUTH_TOKEN`）を使い、memory index の再構築でイベント履歴を失わないようにする。
 
-- [ ] **手順 1: 共有スコープのテストを作成する。** 既定マージ、`include_shared:false`、project 優先の同名衝突、10/50 の上限、get/find fallback、source refs、token 安全な書き込み、Web API の read-only 動作を網羅する。
-- [ ] **手順 2: 読み取りマージと書き込みゲートを実装する。** `scope`、`superseded_by`、project-first 連結、RRF `k=60`、`SHARED_INDEX_CAP`/`SHARED_SEARCH_CAP` を追加する。現在の project が `__shared__` の場合はマージしない。
-- [ ] **手順 3: テレメトリテストを作成する。** opt-out、エラー正規化、引数/本文の生データを保存しないこと、session 帰属バイアス、JST 窓、R1 抑制、R4、R6、呼び出しゼロの tool catalog を網羅する。
-- [ ] **手順 4: テレメトリ adapter と計測を実装する。** initialize で connect を記録し、registrar wrapper 経由で tool call を記録する。障害後は一度だけ警告して無効化し、MCP 応答を壊さない。
-- [ ] **手順 5: `/dashboard` を実装する。** `days` は既定 30・上限 365、`project` は任意とし、§6.4 の指標を正確に計算する。7/30/90 のリンクを表示し、全日付を `formatJst` で整形する。
-- [ ] **手順 6: テストを実行してコミットする。** `pnpm vitest run tests/lib/telemetry tests/lib/mcp/tools.*.shared.test.ts tests/app/dashboard.test.ts` を実行し、`feat: add shared scope and usage telemetry` でコミットする。
+- [x] **手順 1: 共有スコープのテストを作成する。** 既定マージ、`include_shared:false`、project 優先の同名衝突、10/50 の上限、get/find fallback、source refs、token 安全な書き込み、Web API の read-only 動作を網羅する。
+- [x] **手順 2: 読み取りマージと書き込みゲートを実装する。** `scope`、`superseded_by`、project-first 連結、RRF `k=60`、`SHARED_INDEX_CAP`/`SHARED_SEARCH_CAP` を追加する。現在の project が `__shared__` の場合はマージしない。
+- [x] **手順 3: テレメトリテストを作成する。** opt-out、エラー正規化、引数/本文の生データを保存しないこと、session 帰属バイアス、JST 窓、R1 抑制、R4、R6、呼び出しゼロの tool catalog を網羅する。
+- [x] **手順 4: テレメトリ adapter と計測を実装する。** initialize で connect を記録し、registrar wrapper 経由で tool call を記録する。障害後は一度だけ警告して無効化し、MCP 応答を壊さない。
+- [x] **手順 5: `/dashboard` を実装する。** `days` は既定 30・上限 365、`project` は任意とし、`6.4` の指標を正確に計算する。7/30/90 のリンクを表示し、全日付を `formatJst` で整形する。
+- [x] **手順 6: テストを実行してコミットする。** `pnpm vitest run tests/lib/telemetry tests/lib/mcp/tools.*.shared.test.ts tests/app/dashboard.test.ts` を実行し、`feat: add shared scope and usage telemetry` でコミットする。
+
+#### タスク 6 の検証記録（2026-09-06）
+
+- 共有読み取りの project-first dedup、`include_shared:false`、get/find fallback、source refs、RRF の search、10/50 cap、`__shared__` の非マージ、および shared write の無効 token/read-only/完全一致 gate を追加テストで固定した。
+- `telemetry.db` を memory index と分離し、local は `<LTM_HOME>/telemetry.db`、Vercel は `TURSO_TELEMETRY_DATABASE_URL` / `TURSO_TELEMETRY_AUTH_TOKEN` の別 Turso DB を使う遅延 adapter とした。13 列 schema、stepwise migration、`LTM_TELEMETRY=0` opt-out、障害時の一度だけの警告を実装した。
+- MCP の `initialize` ごとに UUID session を発行して connect を記録し、`registerTool` wrapper で kind・成功/失敗・所要時間・result count/chars・maintenance だけを保存する。引数、本文、エラー原文、token はイベントへ保存しない。
+- JST 日境界、前期間比較、全 16 tool catalog、project/tool/error 集計、R1/R4/R6 を含む `/dashboard`（7/30/90 preset、`days` 上限 365、project filter）を実装した。
+- `pnpm test`（56 suites・133 tests）、`pnpm lint`、`pnpm exec tsc --noEmit`、`NODE_ENV=production pnpm build` が成功した。
 
 ### タスク 7: REST API、UI ページ、KG グラフ
 
