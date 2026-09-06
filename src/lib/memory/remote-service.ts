@@ -168,6 +168,13 @@ export class RemoteMemoryService {
     return this.indexPromise;
   }
 
+  private withRemoteLock<T>(projectId: string, fn: () => Promise<T> | T): Promise<T> {
+    const options = { mode: 'vercel' as const, redis: this.lockRedis };
+    return withProjectLock(SHARED_PROJECT_ID, () => (
+      projectId === SHARED_PROJECT_ID ? fn() : withProjectLock(projectId, fn, options)
+    ), options);
+  }
+
   private requireProject(projectId: string): string {
     return assertProjectId(projectId);
   }
@@ -399,32 +406,107 @@ export class RemoteMemoryService {
     if (!row) throw new MemoryNotFoundError(oldName);
     if (old === next) return this.hydrate(row);
     if (await selectRow(store, project, next)) throw new MemoryConflictError(next);
+
     const current = await this.hydrate(row);
-    const updated = MemorySchema.parse({ ...current, name: next, updated_at: nowIso() });
+    const updated = MemorySchema.parse({
+      ...current,
+      name: next,
+      links: current.links.map((name) => name === old ? next : name),
+      supersedes: current.supersedes.map((name) => name === old ? next : name),
+      updated_at: nowIso(),
+    });
     const raw = serializeMemory(updated);
     const contentHash = computeHash(raw);
     const key = memoryObjectKey(project, next, contentHash);
-    await this.markdown.write(key, raw);
+
+    const referenceRows = await store.query<MemoryRow>(`SELECT DISTINCT m.id, m.project_id, m.name, m.type, m.description,
+      m.body_chars, m.file_path, m.content_hash, m.created_at, m.updated_at
+      FROM memories m
+      LEFT JOIN links l ON l.src_id = m.id AND l.dst_name = ?
+      LEFT JOIN supersedes s ON s.src_id = m.id AND s.dst_name = ?
+      WHERE m.project_id = ? AND (l.src_id IS NOT NULL OR s.src_id IS NOT NULL)`, [old, old, project]);
+    const references: Array<{ row: MemoryRow; memory: Memory; raw: string; key: string; hash: string }> = [];
+    for (const referenceRow of referenceRows) {
+      if (referenceRow.id === row.id) continue;
+      const reference = await this.hydrate(referenceRow);
+      const referenceMemory = MemorySchema.parse({
+        ...reference,
+        links: reference.links.map((name) => name === old ? next : name),
+        supersedes: reference.supersedes.map((name) => name === old ? next : name),
+      });
+      const referenceRaw = serializeMemory(referenceMemory);
+      const referenceHash = computeHash(referenceRaw);
+      references.push({
+        row: referenceRow,
+        memory: referenceMemory,
+        raw: referenceRaw,
+        hash: referenceHash,
+        key: memoryObjectKey(project, referenceMemory.name, referenceHash),
+      });
+    }
+
+    const writtenKeys = [key];
+    try {
+      await this.markdown.write(key, raw);
+      for (const reference of references) {
+        await this.markdown.write(reference.key, reference.raw);
+        writtenKeys.push(reference.key);
+      }
+    } catch (error) {
+      await Promise.all(writtenKeys.map((writtenKey) => this.markdown.remove(writtenKey).catch(() => undefined)));
+      throw error;
+    }
+
+    const oldObjects = [{ id: row.id, key: row.file_path }, ...references.map((reference) => ({
+      id: reference.row.id,
+      key: reference.row.file_path,
+    }))];
     try {
       await store.transaction(async (tx) => {
         const currentRow = await selectRow(tx, project, old);
         if (!currentRow) throw new MemoryNotFoundError(oldName);
         if (await selectRow(tx, project, next)) throw new MemoryConflictError(next);
-        const fts = await tx.query<{ rowid: number }>('SELECT rowid FROM memories WHERE id = ?', [row.id]);
         await tx.exec('UPDATE memories SET name = ?, file_path = ?, content_hash = ?, updated_at = ? WHERE id = ?',
           [next, key, contentHash, updated.updated_at, row.id]);
-        await tx.exec('UPDATE links SET dst_name = ? WHERE dst_name = ? AND src_id IN (SELECT id FROM memories WHERE project_id = ?)',
-          [next, old, project]);
-        await tx.exec('UPDATE supersedes SET dst_name = ? WHERE dst_name = ? AND src_id IN (SELECT id FROM memories WHERE project_id = ?)',
-          [next, old, project]);
-        if (fts[0]) await tx.exec('DELETE FROM memories_fts WHERE rowid = ?', [fts[0].rowid]);
+        await tx.exec('DELETE FROM links WHERE src_id = ?', [row.id]);
+        await tx.exec('DELETE FROM supersedes WHERE src_id = ?', [row.id]);
+        for (const link of updated.links) await tx.exec('INSERT INTO links (src_id, dst_name) VALUES (?, ?)', [row.id, link]);
+        for (const superseded of updated.supersedes) await tx.exec('INSERT INTO supersedes (src_id, dst_name) VALUES (?, ?)', [row.id, superseded]);
+
+        const targetFts = await tx.query<{ rowid: number }>('SELECT rowid FROM memories WHERE id = ?', [row.id]);
+        if (targetFts[0]) await tx.exec('DELETE FROM memories_fts WHERE rowid = ?', [targetFts[0].rowid]);
         await insertFts(tx, updated);
+
+        for (const reference of references) {
+          await tx.exec('UPDATE memories SET file_path = ?, content_hash = ? WHERE id = ?',
+            [reference.key, reference.hash, reference.row.id]);
+          await tx.exec('DELETE FROM links WHERE src_id = ?', [reference.row.id]);
+          await tx.exec('DELETE FROM supersedes WHERE src_id = ?', [reference.row.id]);
+          for (const link of reference.memory.links) await tx.exec('INSERT INTO links (src_id, dst_name) VALUES (?, ?)', [reference.row.id, link]);
+          for (const superseded of reference.memory.supersedes) await tx.exec('INSERT INTO supersedes (src_id, dst_name) VALUES (?, ?)', [reference.row.id, superseded]);
+          const referenceFts = await tx.query<{ rowid: number }>('SELECT rowid FROM memories WHERE id = ?', [reference.row.id]);
+          if (referenceFts[0]) await tx.exec('DELETE FROM memories_fts WHERE rowid = ?', [referenceFts[0].rowid]);
+          await insertFts(tx, reference.memory);
+        }
+
+        for (const oldObject of oldObjects) {
+          await tx.exec('INSERT OR REPLACE INTO memory_tombstones (project_id, memory_id, file_path, deleted_at) VALUES (?, ?, ?, ?)',
+            [project, oldObject.id, oldObject.key, nowIso()]);
+        }
       });
     } catch (error) {
-      await this.markdown.remove(key).catch(() => undefined);
+      await Promise.all(writtenKeys.map((writtenKey) => this.markdown.remove(writtenKey).catch(() => undefined)));
       throw error;
     }
-    if (key !== row.file_path) await this.markdown.remove(row.file_path).catch(() => undefined);
+
+    for (const oldObject of oldObjects) {
+      try {
+        await this.markdown.remove(oldObject.key);
+        await store.transaction((tx) => tx.exec('DELETE FROM memory_tombstones WHERE project_id = ? AND file_path = ?', [project, oldObject.key]));
+      } catch {
+        // Tombstone remains until a later cleanup removes the old Blob.
+      }
+    }
     return updated;
   }
 
@@ -636,23 +718,23 @@ export class RemoteMemoryService {
   }
 
   saveAsync(projectId: string, input: SaveInput): Promise<Memory> {
-    return withProjectLock(projectId, () => this.save(projectId, input), { mode: 'vercel', redis: this.lockRedis });
+    return this.withRemoteLock(projectId, () => this.save(projectId, input));
   }
 
   updateAsync(projectId: string, idOrName: string, patch: UpdateInput): Promise<Memory> {
-    return withProjectLock(projectId, () => this.update(projectId, idOrName, patch), { mode: 'vercel', redis: this.lockRedis });
+    return this.withRemoteLock(projectId, () => this.update(projectId, idOrName, patch));
   }
 
   forgetAsync(projectId: string, idOrName: string, reason?: string): Promise<void> {
-    return withProjectLock(projectId, () => this.forget(projectId, idOrName, reason), { mode: 'vercel', redis: this.lockRedis });
+    return this.withRemoteLock(projectId, () => this.forget(projectId, idOrName, reason));
   }
 
   linkMemoriesAsync(projectId: string, src: string, dstName: string): Promise<Memory> {
-    return withProjectLock(projectId, () => this.linkMemories(projectId, src, dstName), { mode: 'vercel', redis: this.lockRedis });
+    return this.withRemoteLock(projectId, () => this.linkMemories(projectId, src, dstName));
   }
 
   renameAsync(projectId: string, oldName: string, newName: string): Promise<Memory> {
-    return withProjectLock(projectId, () => this.rename(projectId, oldName, newName), { mode: 'vercel', redis: this.lockRedis });
+    return this.withRemoteLock(projectId, () => this.rename(projectId, oldName, newName));
   }
 
   close(): void {

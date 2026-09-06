@@ -11,8 +11,9 @@ import { openTursoDb } from '@/lib/storage/turso-index';
 
 const roots: string[] = [];
 
+const lockKeys: string[] = [];
 const lockRedis = {
-  async set() { return 'OK' as const; },
+  async set(key: string) { lockKeys.push(key); return 'OK' as const; },
   async eval() { return 1; },
 };
 
@@ -20,6 +21,7 @@ afterEach(() => {
   resetMemoryService();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
   vi.unstubAllEnvs();
+  lockKeys.length = 0;
 });
 
 function memoryStore(): MarkdownStore & { objects: Map<string, string> } {
@@ -133,8 +135,49 @@ test('remote service は rename でBlobと参照先を更新する', async () =>
   const saved = await service.save('project', {
     name: 'old-name', description: 'description', type: 'project', body: 'body',
   });
+  await service.save('project', {
+    name: 'source-memory', description: 'description', type: 'project', body: 'body', links: ['old-name'],
+  });
   await service.rename('project', 'old-name', 'new-name');
   await expect(service.get('project', 'old-name')).rejects.toThrow('memory not found');
   await expect(service.get('project', 'new-name')).resolves.toMatchObject({ id: saved.id, name: 'new-name' });
+  await service.reindex('project');
+  await expect(service.get('project', 'source-memory')).resolves.toMatchObject({ links: ['new-name'] });
+  service.close();
+});
+
+test('renameで旧Blob削除に失敗してもreindexで旧memoryが復活しない', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ltm-vercel-rename-tombstone-'));
+  roots.push(root);
+  const markdown = memoryStore();
+  const clientUrl = 'file:' + join(root, 'index.db');
+  const service = new RemoteMemoryService(openTursoDb({ url: clientUrl, authToken: 'test-token' }), markdown, lockRedis);
+  const saved = await service.save('project', {
+    name: 'old-name', description: 'description', type: 'project', body: 'body',
+  });
+  const originalRemove = markdown.remove;
+  markdown.remove = async () => { throw new Error('blob delete failed'); };
+  await service.rename('project', 'old-name', 'new-name');
+  markdown.remove = originalRemove;
+
+  await service.reindex('project');
+  await expect(service.get('project', saved.id)).resolves.toMatchObject({ name: 'new-name' });
+  await expect(service.get('project', 'old-name')).rejects.toThrow('memory not found');
+  service.close();
+});
+
+test('remote writeと全体reindexは共通のRedis global lockを使う', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ltm-vercel-global-lock-'));
+  roots.push(root);
+  const markdown = memoryStore();
+  const clientUrl = 'file:' + join(root, 'index.db');
+  const service = new RemoteMemoryService(openTursoDb({ url: clientUrl, authToken: 'test-token' }), markdown, lockRedis);
+  await service.saveAsync('project', {
+    name: 'global-lock-memory', description: 'description', type: 'project', body: 'body',
+  });
+  expect(lockKeys).toContain('ltm:lock:__shared__');
+  lockKeys.length = 0;
+  await service.reindex();
+  expect(lockKeys).toContain('ltm:lock:__shared__');
   service.close();
 });
