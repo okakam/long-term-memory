@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   const allowed = await visibleWebProjects();
-  const projects = getMemoryService().listProjects().filter((project) => !allowed || allowed.has(project.id));
+  const projects = (await getMemoryService().listProjects()).filter((project) => !allowed || allowed.has(project.id));
   return (
     <main>
       <h1>Projects</h1>

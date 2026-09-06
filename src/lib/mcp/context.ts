@@ -1,9 +1,9 @@
 import { assertProjectId } from '@/lib/slug';
-import type { MemoryService } from '@/lib/memory/service';
+import type { MemoryServiceLike } from '@/lib/memory/singleton';
 
 export interface ToolContext {
   projectId: string;
-  svc: MemoryService;
+  svc: MemoryServiceLike;
   canWriteShared?: boolean;
   principal?: { userId: string; tokenId?: string };
   sessionId?: string;

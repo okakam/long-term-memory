@@ -17,6 +17,6 @@ export default async function EditMemoryPage({ params }: { params: Params }) {
   }
   await authorizeWebProject(slug);
   if (slug === '__shared__') return <main><p>shared scope is read-only</p></main>;
-  const memory = getMemoryService().get(slug, name);
+  const memory = await getMemoryService().get(slug, name);
   return <main><p><Link href={'/p/' + encodeURIComponent(slug) + '/memories/' + encodeURIComponent(name)}>{name}</Link> / edit</p><h1>Edit memory</h1><MemoryEditor memory={memory} projectId={slug} /></main>;
 }

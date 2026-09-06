@@ -10,7 +10,7 @@ export function registerMetaTools(server: McpServer, ctx: ToolContext): void {
   server.registerTool('list_projects', {
     description: 'List all projects that have memories, with counts and last-update.',
   }, async () => {
-    const projects = ctx.svc.listProjects();
+    const projects = await ctx.svc.listProjects();
     if (!ctx.principal) return json(projects);
     const allowed = new Set((await (await getAuthStore()).listAccessibleProjects(ctx.principal.userId)).map((project) => project.project_id));
     return json(projects.filter((project) => project.id === '__shared__' || allowed.has(project.id)));

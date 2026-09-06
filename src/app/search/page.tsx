@@ -17,8 +17,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
   const query = first(params.q);
   const allowed = await visibleWebProjects();
   const service = getMemoryService();
-  const projects = service.listProjects().filter((project) => !allowed || allowed.has(project.id));
-  const results = query ? projects.flatMap((project) => service.searchFulltext(project.id, query, { limit: 50 }).map((memory) => ({ project, memory }))) : [];
+  const projects = (await service.listProjects()).filter((project) => !allowed || allowed.has(project.id));
+  const results = query
+    ? (await Promise.all(projects.map(async (project) => (await service.searchFulltext(project.id, query, { limit: 50 }))
+      .map((memory) => ({ project, memory }))))) .flat()
+    : [];
 
   return (
     <main>

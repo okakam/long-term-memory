@@ -19,6 +19,7 @@ next-env.d.ts
 # ローカル記憶データ・アーカイブ
 /.long-term-memory
 /.long-term-memory.*
+/index.db
 
 # 作業用ディレクトリ・ログ・バックアップ
 /.superpowers/

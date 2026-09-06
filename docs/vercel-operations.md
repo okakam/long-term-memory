@@ -44,6 +44,13 @@ migrationをproductionへ直接適用せず、先にprobeとdry-runを通す。�
 
 <code>pnpm tsx scripts/vercel-smoke.ts</code>はinitialize、tools/list（16 tool）、KG付きproject memoryのsave、3文字以上の日本語検索、entity付き検索、get、dashboard到達性、deleteを確認する。PATやmemory本文をログへ出さない。
 
+
+## filesystem エラーの切り分け
+
+Vercel Function の `/home/.../.long-term-memory` を参照する `ENOENT` は、Vercel 用の remote service が使われず local `better-sqlite3` 経路に入っている状態を示す。`LTM_HOME=/tmp` へ逃がす方法は永続化されないため使わない。`LTM_STORAGE_DRIVER=vercel`、Turso 3組の URL/token、`BLOB_READ_WRITE_TOKEN` を確認して新しい Preview deployment を作成する。
+
+Clerk の認証なしで固定 URL を curl した場合、保護された `/` は 401/404 になることがある。これはデータ層の例外ではない。`/sign-in` が表示され、Clerk セッションで `/` を開けることを確認する。MCP の未認証リクエストは 401 が正常で、PAT 付きの `scripts/vercel-smoke.ts` でのみ memory の E2E を実行する。
+
 ## rollback
 
 デプロイ履歴とaliasを確認する。

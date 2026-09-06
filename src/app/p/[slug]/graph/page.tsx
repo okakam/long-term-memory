@@ -14,7 +14,7 @@ export default async function GraphPage({ params }: { params: Params }) {
   const { slug } = await params;
   if (!isValidSlug(slug) && !isReservedProjectId(slug)) return <main><p>Invalid project slug.</p></main>;
   await authorizeWebProject(slug);
-  const data = getMemoryService().readKgGraph(slug);
+  const data = await getMemoryService().readKgGraph(slug);
   return (
     <main>
       <p><Link href={'/p/' + encodeURIComponent(slug)}>{slug}</Link> / graph</p>

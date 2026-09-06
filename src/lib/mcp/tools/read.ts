@@ -73,7 +73,7 @@ function isMemoryNotFound(error: unknown): boolean {
     || (error instanceof Error && error.name === 'MemoryNotFoundError');
 }
 
-function scopedMap(ctx: ToolContext, projectId: string): SupersededMap {
+async function scopedMap(ctx: ToolContext, projectId: string): Promise<SupersededMap> {
   return ctx.svc.supersededByMap(projectId);
 }
 
@@ -89,13 +89,13 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     description: LIST_DESCRIPTION,
     inputSchema: ListByTypeInput,
   }, async ({ type, limit, include_shared }) => {
-    const projectItems = ctx.svc.listSummaries(ctx.projectId, { type, limit: limit ?? 100 });
-    const projectMap = scopedMap(ctx, ctx.projectId);
+    const projectItems = await ctx.svc.listSummaries(ctx.projectId, { type, limit: limit ?? 100 });
+    const projectMap = await scopedMap(ctx, ctx.projectId);
     const project = projectItems.map((item) => tagSummary(item, scopeFor(ctx.projectId), projectMap));
     if (!includeShared(ctx, include_shared)) return json(project);
-    const sharedMap = scopedMap(ctx, SHARED_PROJECT_ID);
-    const shared = ctx.svc.listSummaries(SHARED_PROJECT_ID, { type, limit: SHARED_INDEX_CAP })
-      .map((item) => tagSummary(item, 'shared', sharedMap));
+    const sharedMap = await scopedMap(ctx, SHARED_PROJECT_ID);
+    const sharedItems = await ctx.svc.listSummaries(SHARED_PROJECT_ID, { type, limit: SHARED_INDEX_CAP });
+    const shared = sharedItems.map((item) => tagSummary(item, 'shared', sharedMap));
     return json(concatByName(project, shared));
   });
 
@@ -103,14 +103,13 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     description: TAG_DESCRIPTION,
     inputSchema: SearchByTagInput,
   }, async ({ tags, match, include_shared }) => {
-    const projectMap = scopedMap(ctx, ctx.projectId);
-    const project = ctx.svc.searchByTagSummaries(ctx.projectId, tags, match ?? 'any')
-      .map((item) => tagSummary(item, scopeFor(ctx.projectId), projectMap));
+    const projectMap = await scopedMap(ctx, ctx.projectId);
+    const projectItems = await ctx.svc.searchByTagSummaries(ctx.projectId, tags, match ?? 'any');
+    const project = projectItems.map((item) => tagSummary(item, scopeFor(ctx.projectId), projectMap));
     if (!includeShared(ctx, include_shared)) return json(project);
-    const sharedMap = scopedMap(ctx, SHARED_PROJECT_ID);
-    const shared = ctx.svc.searchByTagSummaries(SHARED_PROJECT_ID, tags, match ?? 'any')
-      .slice(0, SHARED_INDEX_CAP)
-      .map((item) => tagSummary(item, 'shared', sharedMap));
+    const sharedMap = await scopedMap(ctx, SHARED_PROJECT_ID);
+    const sharedItems = await ctx.svc.searchByTagSummaries(SHARED_PROJECT_ID, tags, match ?? 'any');
+    const shared = sharedItems.slice(0, SHARED_INDEX_CAP).map((item) => tagSummary(item, 'shared', sharedMap));
     return json(concatByName(project, shared));
   });
 
@@ -119,16 +118,16 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     inputSchema: FindRelatedInput,
   }, async ({ id_or_name, depth, include_shared }) => {
     try {
-      const result = ctx.svc.findRelated(ctx.projectId, id_or_name, depth ?? 1);
-      const projectMap = scopedMap(ctx, ctx.projectId);
+      const result = await ctx.svc.findRelated(ctx.projectId, id_or_name, depth ?? 1);
+      const projectMap = await scopedMap(ctx, ctx.projectId);
       return json({
         nodes: result.nodes.map((item) => summarize(item, scopeFor(ctx.projectId), projectMap)),
         truncated: result.truncated,
       });
     } catch (error) {
       if (!includeShared(ctx, include_shared) || !isMemoryNotFound(error)) throw error;
-      const result = ctx.svc.findRelated(SHARED_PROJECT_ID, id_or_name, depth ?? 1);
-      const sharedMap = scopedMap(ctx, SHARED_PROJECT_ID);
+      const result = await ctx.svc.findRelated(SHARED_PROJECT_ID, id_or_name, depth ?? 1);
+      const sharedMap = await scopedMap(ctx, SHARED_PROJECT_ID);
       return json({
         nodes: result.nodes.map((item) => summarize(item, 'shared', sharedMap)),
         truncated: result.truncated,
@@ -141,14 +140,13 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     inputSchema: SearchMemoriesInput,
   }, async ({ query, type, tags, query_entities, include_shared }) => {
     const options = { type, tags, queryEntities: query_entities };
-    const projectMap = scopedMap(ctx, ctx.projectId);
-    const project = ctx.svc.searchAssociative(ctx.projectId, query, options)
-      .map((item) => summarize(item, scopeFor(ctx.projectId), projectMap));
+    const projectMap = await scopedMap(ctx, ctx.projectId);
+    const projectItems = await ctx.svc.searchAssociative(ctx.projectId, query, options);
+    const project = projectItems.map((item) => summarize(item, scopeFor(ctx.projectId), projectMap));
     if (!includeShared(ctx, include_shared)) return json(project);
-    const sharedMap = scopedMap(ctx, SHARED_PROJECT_ID);
-    const shared = ctx.svc.searchAssociative(SHARED_PROJECT_ID, query, { ...options, limit: SHARED_SEARCH_CAP })
-      .slice(0, SHARED_SEARCH_CAP)
-      .map((item) => summarize(item, 'shared', sharedMap));
+    const sharedMap = await scopedMap(ctx, SHARED_PROJECT_ID);
+    const sharedItems = await ctx.svc.searchAssociative(SHARED_PROJECT_ID, query, { ...options, limit: SHARED_SEARCH_CAP });
+    const shared = sharedItems.slice(0, SHARED_SEARCH_CAP).map((item) => summarize(item, 'shared', sharedMap));
     return json(rrfMerge([project, shared], (item) => item.name));
   });
 
@@ -157,12 +155,12 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     inputSchema: GetMemoryInput,
   }, async ({ id_or_name, include_shared }) => {
     try {
-      const memory = ctx.svc.get(ctx.projectId, id_or_name);
-      return json({ ...memory, ...summarize(memory, scopeFor(ctx.projectId), scopedMap(ctx, ctx.projectId)) });
+      const memory = await ctx.svc.get(ctx.projectId, id_or_name);
+      return json({ ...memory, ...summarize(memory, scopeFor(ctx.projectId), await scopedMap(ctx, ctx.projectId)) });
     } catch (error) {
       if (!includeShared(ctx, include_shared) || !isMemoryNotFound(error)) throw error;
-      const memory = ctx.svc.get(SHARED_PROJECT_ID, id_or_name);
-      return json({ ...memory, ...summarize(memory, 'shared', scopedMap(ctx, SHARED_PROJECT_ID)) });
+      const memory = await ctx.svc.get(SHARED_PROJECT_ID, id_or_name);
+      return json({ ...memory, ...summarize(memory, 'shared', await scopedMap(ctx, SHARED_PROJECT_ID)) });
     }
   });
 
@@ -170,12 +168,12 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     description: INDEX_DESCRIPTION,
     inputSchema: GetMemoryIndexInput,
   }, async ({ include_shared }) => {
-    const projectMap = scopedMap(ctx, ctx.projectId);
-    const project = MEMORY_TYPES.flatMap((type) => ctx.svc.listSummaries(ctx.projectId, { type, limit: 500 }))
+    const projectMap = await scopedMap(ctx, ctx.projectId);
+    const project = (await Promise.all(MEMORY_TYPES.map((type) => ctx.svc.listSummaries(ctx.projectId, { type, limit: 500 })))).flat()
       .map((item) => tagSummary(item, scopeFor(ctx.projectId), projectMap));
     if (!includeShared(ctx, include_shared)) return json(project);
-    const sharedMap = scopedMap(ctx, SHARED_PROJECT_ID);
-    const shared = MEMORY_TYPES.flatMap((type) => ctx.svc.listSummaries(SHARED_PROJECT_ID, { type, limit: 500 }))
+    const sharedMap = await scopedMap(ctx, SHARED_PROJECT_ID);
+    const shared = (await Promise.all(MEMORY_TYPES.map((type) => ctx.svc.listSummaries(SHARED_PROJECT_ID, { type, limit: 500 })))).flat()
       .slice(0, SHARED_INDEX_CAP)
       .map((item) => tagSummary(item, 'shared', sharedMap));
     return json(concatByName(project, shared));

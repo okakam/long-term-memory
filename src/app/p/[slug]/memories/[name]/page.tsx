@@ -27,8 +27,8 @@ export default async function MemoryDetailPage({ params }: { params: Params }) {
   }
   await authorizeWebProject(slug);
   const service = getMemoryService();
-  const memory = service.get(slug, name);
-  const replacement = service.supersededByMap(slug).get(memory.name);
+  const memory = await service.get(slug, name);
+  const replacement = (await service.supersededByMap(slug)).get(memory.name);
   const shared = slug === '__shared__';
 
   return (

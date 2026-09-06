@@ -15,7 +15,7 @@ export default async function ProjectPage({ params }: { params: Params }) {
   if (!isValidSlug(slug) && !isReservedProjectId(slug)) return <main><p>Invalid project slug.</p></main>;
   await authorizeWebProject(slug);
   const service = getMemoryService();
-  const counts = MEMORY_TYPES.map((type) => ({ type, count: service.listByType(slug, type, 500).length }));
+  const counts = await Promise.all(MEMORY_TYPES.map(async (type) => ({ type, count: (await service.listByType(slug, type, 500)).length })));
   const total = counts.reduce((sum, item) => sum + item.count, 0);
   return (
     <main>

@@ -53,14 +53,14 @@ export default async function MemoriesPage({ params, searchParams }: { params: P
   const service = getMemoryService();
   let memories: MemorySummary[];
   if (tag) {
-    memories = service.searchByTag(slug, [tag], 'any').map(toSummary);
+    memories = (await service.searchByTag(slug, [tag], 'any')).map(toSummary);
     if (type) memories = memories.filter((memory) => memory.type === type);
   } else if (type) {
-    memories = service.listByType(slug, type, 500).map(toSummary);
+    memories = (await service.listByType(slug, type, 500)).map(toSummary);
   } else {
-    memories = MEMORY_TYPES.flatMap((memoryType) => service.listByType(slug, memoryType, 500).map(toSummary));
+    memories = (await Promise.all(MEMORY_TYPES.map(async (memoryType) => (await service.listByType(slug, memoryType, 500)).map(toSummary)))).flat();
   }
-  const supersededBy = service.supersededByMap(slug);
+  const supersededBy = await service.supersededByMap(slug);
   const shared = slug === '__shared__';
 
   return (
