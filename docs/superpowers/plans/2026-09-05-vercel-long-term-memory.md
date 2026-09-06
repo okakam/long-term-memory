@@ -285,7 +285,7 @@
 - GitHub Actionsに通常preflight（test/lint/migration dry-run/production build）、資格情報がある場合のTurso probe、Vercel CLI 41.7.3固定のpreview/candidate deploy、smoke後のproduction promoteを追加した。
 - scripts/preflight-migration.ts、scripts/vercel-smoke.ts、scripts/start-mcp.shを追加し、Blob key prefixをLTM_BLOB_PREFIXで環境分離できるようにした。rollback、migration順序、orphan GC、Docker、MCP client再起動の手順をdocs/vercel-operations.mdへ記録した。
 - pnpm install --frozen-lockfile、Task8対象テスト13件、pnpm test（62 suite・153 tests）、pnpm lint、pnpm exec tsc --noEmit、NODE_ENV=production pnpm build、YAML/JSON構文、bash -n scripts/start-mcp.shが成功した。
-- Docker CLIが環境に無くComposeの実解釈は未実行。Vercel preview smokeも、実デプロイURL・Vercel/Clerk/PAT secretsが未提供のため未実行で、CI workflowと実行スクリプトを用意した。
+- Docker CLIが環境に無くComposeの実解釈は未実行。2026-09-06 に Vercel CLI で preview deployment（dpl_3SjkG9qMUuFzqaJu4UmJurvcymuB）を作成し、vercel inspect で Ready を確認した。MCP認証付き preview smoke は PAT 等の secret 未提供のため未実行で、CI workflowと実行スクリプトは用意済み。
 
 ### タスク 9: curator、Claude Code 資産、リモート運用
 
@@ -310,7 +310,7 @@
 - local/remote curator wrapperにDRY_RUNの外部指定退避、staged配置の絶対パス/TCC検査、Read/Grep/Glob限定、strict MCP config、dry-run時の全write tool禁止、CURATION SUMMARY state machine、last-success保護を実装した。
 - MCPのlist_projects/get_memory_index/get_memoryから秘密をサニタイズした一時Markdown snapshotを作るexport script、Vercel MCP config、local MCP config、self-hosted Claude CLIを使う01:00 UTCのremote curator workflow、install script、launchd template、env exampleを追加した。
 - pnpm test（64 suite・158 tests）、pnpm lint、pnpm exec tsc --noEmit、NODE_ENV=production pnpm build、YAML/JSON構文、sync --check、curator/hook bash -n、hook 3-turn checkが成功した。Task9対象テストは5件。
-- Vercel CLIの認証確認（vercel whoami）は成功したが、preview deployは未コミットのソースを外部へ送るため安全確認で停止した。実remote snapshot/curator実行はデプロイURLと本番secretが必要なため未実行。
+- Vercel CLIの認証確認（vercel whoami）、preview deploy、vercel inspect による Ready 確認が成功した。実remote snapshot/curator実行は PAT と maintenance token 等の secret が必要なため未実行。
 
 ### タスク 10: 完全受け入れ、可観測性、引き渡し
 
