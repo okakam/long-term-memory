@@ -1,0 +1,21 @@
+services:
+  long-term-memory:
+    build: { context: ., dockerfile: Dockerfile }
+    image: long-term-memory:latest
+    container_name: long-term-memory
+    ports: ["3939:3939"]
+    environment:
+      AUTH_REQUIRED: "0"
+      LTM_MAINTENANCE_TOKEN: ${LTM_MAINTENANCE_TOKEN:-}
+    volumes:
+      - type: bind
+        source: ${LTM_STORE_HOST:-./.long-term-memory}
+        target: /data
+        bind:
+          create_host_path: false
+    networks: [local_dev_network]
+    restart: unless-stopped
+
+networks:
+  local_dev_network:
+    external: true

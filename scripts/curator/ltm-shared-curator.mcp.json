@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ltm-shared": {
+      "type": "http",
+      "url": "http://localhost:3939/api/mcp?project_id=__shared__",
+      "headers": {
+        "X-LTM-Maintenance-Token": "${LTM_MAINTENANCE_TOKEN}"
+      }
+    }
+  }
+}

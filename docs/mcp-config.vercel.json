@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ltm-shared": {
+      "type": "http",
+      "url": "${MCP_PUBLIC_URL}/api/mcp?project_id=__shared__",
+      "headers": {
+        "Authorization": "Bearer ${LTM_MCP_TOKEN}",
+        "X-LTM-Maintenance-Token": "${LTM_MAINTENANCE_TOKEN}"
+      }
+    }
+  }
+}

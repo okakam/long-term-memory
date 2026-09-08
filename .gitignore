@@ -1,0 +1,36 @@
+# 依存関係・パッケージマネージャのキャッシュ
+/node_modules/
+/.pnpm-store/
+
+# Next.js・TypeScript・テストの生成物
+/.next/
+/out/
+/build/
+/coverage/
+next-env.d.ts
+*.tsbuildinfo
+
+# 認証情報・ローカル環境設定（サンプルは管理する）
+.env*
+!.env.example
+/.vercel/
+/.mcp.json
+
+# ローカル記憶データ・アーカイブ
+/.long-term-memory
+/.long-term-memory.*
+/index.db
+
+# 作業用ディレクトリ・ログ・バックアップ
+/.superpowers/
+/.worktrees/
+*.log
+*.backup
+*.bak
+*.orig
+.DS_Store
+Thumbs.db
+.vercel
+
+# etc
+tmp/

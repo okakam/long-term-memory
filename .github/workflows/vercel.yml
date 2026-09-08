@@ -1,0 +1,132 @@
+name: vercel
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERCEL_CLI_VERSION: 41.7.3
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm tsx scripts/preflight-migration.ts
+      - run: NODE_ENV=production pnpm build
+
+  preview:
+    if: github.event_name == 'pull_request'
+    needs: preflight
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Check deployment credentials
+        id: credentials
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Vercel preview skipped: repository secrets are not available."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.credentials.outputs.skip != 'true'
+      - uses: pnpm/action-setup@v3
+        if: steps.credentials.outputs.skip != 'true'
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        if: steps.credentials.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.credentials.outputs.skip != 'true'
+      - run: pnpm dlx vercel@41.7.3 pull --yes --environment=preview --token="$VERCEL_TOKEN"
+        if: steps.credentials.outputs.skip != 'true'
+      - run: pnpm dlx vercel@41.7.3 build --token="$VERCEL_TOKEN"
+        if: steps.credentials.outputs.skip != 'true'
+      - name: Deploy preview
+        id: deploy
+        if: steps.credentials.outputs.skip != 'true'
+        run: |
+          url="$(pnpm dlx vercel@41.7.3 deploy --prebuilt --token="$VERCEL_TOKEN" | tail -n 1)"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Run preview smoke
+        if: steps.credentials.outputs.skip != 'true'
+        env:
+          VERCEL_SMOKE_URL: ${{ steps.deploy.outputs.url }}
+          LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
+          LTM_SMOKE_PROJECT_ID: smoke
+        run: pnpm tsx scripts/vercel-smoke.ts
+
+  production:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: preflight
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Check deployment credentials
+        id: credentials
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Vercel production skipped: repository secrets are not available."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.credentials.outputs.skip != 'true'
+      - uses: pnpm/action-setup@v3
+        if: steps.credentials.outputs.skip != 'true'
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        if: steps.credentials.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.credentials.outputs.skip != 'true'
+      - run: pnpm dlx vercel@41.7.3 pull --yes --environment=production --token="$VERCEL_TOKEN"
+        if: steps.credentials.outputs.skip != 'true'
+      - run: pnpm dlx vercel@41.7.3 build --prod --token="$VERCEL_TOKEN"
+        if: steps.credentials.outputs.skip != 'true'
+      - name: Deploy candidate
+        id: deploy
+        if: steps.credentials.outputs.skip != 'true'
+        run: |
+          url="$(pnpm dlx vercel@41.7.3 deploy --prebuilt --token="$VERCEL_TOKEN" | tail -n 1)"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Run production candidate smoke
+        if: steps.credentials.outputs.skip != 'true'
+        env:
+          VERCEL_SMOKE_URL: ${{ steps.deploy.outputs.url }}
+          LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
+          LTM_SMOKE_PROJECT_ID: smoke
+        run: pnpm tsx scripts/vercel-smoke.ts
+      - name: Promote candidate
+        if: steps.credentials.outputs.skip != 'true'
+        run: pnpm dlx vercel@41.7.3 promote "${{ steps.deploy.outputs.url }}" --token="$VERCEL_TOKEN"
