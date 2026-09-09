@@ -31,15 +31,20 @@ function required(name: string): string {
   return value;
 }
 
+function protectionHeaders(bypassSecret?: string): Record<string, string> {
+  return bypassSecret ? { 'x-vercel-protection-bypass': bypassSecret } : {};
+}
+
+function requestHeaders(token: string, bypassSecret?: string): Record<string, string> {
+  return { authorization: 'Bearer ' + token, 'content-type': 'application/json', ...protectionHeaders(bypassSecret) };
+}
+
 async function call(baseUrl: string, projectId: string, token: string, message: object): Promise<JsonRpcResult> {
   const response = await fetch(
     baseUrl + '/api/mcp?project_id=' + encodeURIComponent(projectId),
     {
       method: 'POST',
-      headers: {
-        authorization: 'Bearer ' + token,
-        'content-type': 'application/json',
-      },
+      headers: requestHeaders(token, process.env.VERCEL_AUTOMATION_BYPASS_SECRET),
       body: JSON.stringify(message),
     },
   );
@@ -132,11 +137,11 @@ async function smoke(): Promise<void> {
 
     const ui = await fetch(
       baseUrl + '/p/' + encodeURIComponent(projectId) + '/memories/' + encodeURIComponent(name),
-      { redirect: 'manual' },
+      { redirect: 'manual', headers: protectionHeaders(process.env.VERCEL_AUTOMATION_BYPASS_SECRET) },
     );
     if (ui.status >= 500) throw new Error('memory UI unavailable');
 
-    const dashboard = await fetch(baseUrl + '/dashboard', { redirect: 'manual' });
+    const dashboard = await fetch(baseUrl + '/dashboard', { redirect: 'manual', headers: protectionHeaders(process.env.VERCEL_AUTOMATION_BYPASS_SECRET) });
     if (dashboard.status >= 500) throw new Error('dashboard unavailable');
   } finally {
     if (saved) {
@@ -159,4 +164,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     });
 }
 
-export { assertTools, smoke };
+export { assertTools, requestHeaders, smoke };
