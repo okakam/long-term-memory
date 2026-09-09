@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { expect, test } from 'vitest';
 
 import nextConfig from '../../next.config';
+import { requestHeaders } from '../../scripts/vercel-smoke';
 
 const root = resolve(import.meta.dirname, '../..');
 
@@ -91,4 +92,22 @@ test('deploy smokeと運用手順をリポジトリ内に用意する', () => {
   expect(existsSync(resolve(root, 'docs/vercel-operations.md'))).toBe(true);
   expect(read('scripts/vercel-smoke.ts')).toContain('tools/list');
   expect(read('docs/vercel-operations.md')).toContain('vercel@41.7.3 rollback');
+  expect(read('docs/vercel-operations.md')).toContain('pull_request');
+});
+
+test('deploy smokeはVercel Protection Bypassを任意のヘッダーで送る', () => {
+  expect(requestHeaders('ltm_token', 'vercel_bypass')).toMatchObject({
+    authorization: 'Bearer ltm_token',
+    'x-vercel-protection-bypass': 'vercel_bypass',
+  });
+  expect(requestHeaders('ltm_token')).not.toHaveProperty('x-vercel-protection-bypass');
+
+  const vercelWorkflow = read('.github/workflows/vercel.yml');
+  expect(vercelWorkflow).toContain('VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}');
+  const previewStart = vercelWorkflow.indexOf('      - name: Run preview smoke');
+  const productionStart = vercelWorkflow.indexOf('  production:');
+  const previewSmoke = vercelWorkflow.slice(previewStart, productionStart);
+  expect(previewSmoke).not.toContain('VERCEL_AUTOMATION_BYPASS_SECRET:');
+  const productionSmoke = vercelWorkflow.slice(productionStart);
+  expect(productionSmoke).toContain('VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}');
 });

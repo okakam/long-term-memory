@@ -21,6 +21,10 @@ Vercelの実行リージョンはTursoのprimaryリージョンに近い値を�
 - <code>LTM_MAINTENANCE_TOKEN</code> / <code>LTM_CURATOR_USER_ID</code>
 - <code>LTM_BLOB_PREFIX</code> / <code>MCP_PUBLIC_URL</code> / <code>MCP_ALLOWED_ORIGINS</code>
 
+GitHub Actions の deploy smoke には、リポジトリ secret として <code>LTM_MCP_TOKEN</code> と <code>VERCEL_AUTOMATION_BYPASS_SECRET</code> を登録する。後者は Vercel Project Settings の Deployment Protection → Protection Bypass for Automation で発行する。secret は workflow の環境変数としてだけ渡し、ログや Vercel のアプリ環境変数へ保存しない。
+
+<code>pull_request</code> のPreview smokeにはbypass secretを渡さない。PR由来コードからsecretを読み取れないようにするためで、Deployment Protectionを有効にしたPreviewの認証付きsmokeはtrustedなworkflow（<code>workflow_dispatch</code>など）で実行する。
+
 <code>LTM_BOOTSTRAP_OWNER_USER_ID</code>は既存projectの初回移行時だけ設定し、owner割り当て後に削除する。<code>LTM_MCP_TOKEN</code>はVercelへ設定せず、PAT発行レスポンスまたはGitHub Actions secretでのみ扱う。
 
 ## migrationとdeploy
@@ -40,6 +44,7 @@ migrationをproductionへ直接適用せず、先にprobeとdry-runを通す。�
 
 - <code>VERCEL_SMOKE_URL</code>: preview URL
 - <code>LTM_MCP_TOKEN</code>: smoke projectへread/writeできるPAT
+- <code>VERCEL_AUTOMATION_BYPASS_SECRET</code>: Deployment Protectionを有効にしている場合の自動化用bypass secret（任意）
 - <code>LTM_SMOKE_PROJECT_ID</code>: 既存の専用smoke project（既定 <code>smoke</code>）
 
 <code>pnpm tsx scripts/vercel-smoke.ts</code>はinitialize、tools/list（16 tool）、KG付きproject memoryのsave、3文字以上の日本語検索、entity付き検索、get、dashboard到達性、deleteを確認する。PATやmemory本文をログへ出さない。

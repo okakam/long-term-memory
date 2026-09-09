@@ -125,6 +125,7 @@ jobs:
         env:
           VERCEL_SMOKE_URL: ${{ steps.deploy.outputs.url }}
           LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           LTM_SMOKE_PROJECT_ID: smoke
         run: pnpm tsx scripts/vercel-smoke.ts
       - name: Promote candidate
