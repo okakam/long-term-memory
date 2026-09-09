@@ -23,6 +23,8 @@ Vercelの実行リージョンはTursoのprimaryリージョンに近い値を�
 
 GitHub Actions の deploy smoke には、リポジトリ secret として <code>LTM_MCP_TOKEN</code> と <code>VERCEL_AUTOMATION_BYPASS_SECRET</code> を登録する。後者は Vercel Project Settings の Deployment Protection → Protection Bypass for Automation で発行する。secret は workflow の環境変数としてだけ渡し、ログや Vercel のアプリ環境変数へ保存しない。
 
+<code>pull_request</code> のPreview smokeにはbypass secretを渡さない。PR由来コードからsecretを読み取れないようにするためで、Deployment Protectionを有効にしたPreviewの認証付きsmokeはtrustedなworkflow（<code>workflow_dispatch</code>など）で実行する。
+
 <code>LTM_BOOTSTRAP_OWNER_USER_ID</code>は既存projectの初回移行時だけ設定し、owner割り当て後に削除する。<code>LTM_MCP_TOKEN</code>はVercelへ設定せず、PAT発行レスポンスまたはGitHub Actions secretでのみ扱う。
 
 ## migrationとdeploy
