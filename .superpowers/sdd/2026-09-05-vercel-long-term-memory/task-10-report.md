@@ -50,4 +50,4 @@ Task 10 のローカル検証、clean reindex 訓練、運用資料、評価証�
 
 ## Commit IDs
 
-この Task 10 作業ではコミットしていない。
+Task 10 の変更は `bf2d6b6d94212b282679a032799780a54c40cddc`（`docs: Task 10 運用検証を記録`）にコミットした。
