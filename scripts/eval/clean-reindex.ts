@@ -83,10 +83,13 @@ export function runCleanReindex(): { memories: number; fields: readonly string[]
     }
     return { memories: 3, fields: [...FIELDS] };
   } finally {
-    rmSync(sourceRoot, { recursive: true, force: true });
-    rmSync(targetRoot, { recursive: true, force: true });
     if (originalHome === undefined) delete process.env.LTM_HOME;
     else process.env.LTM_HOME = originalHome;
+    try {
+      rmSync(sourceRoot, { recursive: true, force: true });
+    } finally {
+      rmSync(targetRoot, { recursive: true, force: true });
+    }
   }
 }
 
