@@ -320,7 +320,7 @@
 - 作成: `docs/vercel-operations.md`, `docs/eval/vercel-smoke.json`。
 
 - [ ] **手順 1: unit/integration テスト一式を実行する。** `pnpm test`、`pnpm lint`、`pnpm build` を実行し、仕様書の 69 テストファイルに加えて provider/lock/stateless テストも通ることを確認する。
-- [x] **手順 2: クリーン reindex 訓練を実行する。** 使い捨て store へ Markdown object だけをコピーし、索引を削除して `reindex` を実行する。全 memory、tag、link、entity、triple、`body_chars`、supersession marker が正本と一致することを比較する。
+- [x] **手順 2: クリーン reindex 訓練を実行する。** `scripts/eval/clean-reindex.ts` が使い捨て store へ Markdown object だけをコピーし、空の索引へ `reindex` を実行する。全 memory、tag、link、entity、triple、`body_chars`、supersession marker が正本と一致することを比較する。
 - [ ] **手順 3: Vercel end-to-end smoke を実行する。** preview URL に対して MCP initialize、16 ツール列挙、KG 付き project memory の save、日本語部分文字列と entity による search、UI/API からの read、telemetry/dashboard 件数、shared read-only/write-token 動作を確認し、最後に削除する。
 - [ ] **手順 4: 耐障害性チェックを実行する。** Blob 障害、Turso 一時エラー、Redis lock 競合、function instance 変更を強制し、retry/reconcile で最後の可視状態が保たれること、raw token/body が log/telemetry に入らないことを確認する。
 - [x] **手順 5: 運用手順を文書化する。** Marketplace provisioning（Turso、Blob、Upstash）、env 名、migration 順序、preview promote、rollback、orphan GC、curator scheduling、tool description 変更後に Claude Code を再起動する要件を記録する。
@@ -328,9 +328,9 @@
 
 #### タスク 10 の検証記録（2026-09-13）
 
-- clean reindex は、Markdown object のみを別の使い捨て store へコピーし、3 memory の tag、link、entity、triple、`body_chars`、supersession が一致することを確認した。
+- clean reindex は、追跡対象の `scripts/eval/clean-reindex.ts` と `tests/scripts/clean-reindex.test.ts` で、Markdown object のみを別の使い捨て store へコピーし、空の索引から 3 memory の tag、link、entity、triple、`body_chars`、supersession が一致することを確認した。
 - local resilience contract（atomic recovery、Blob tombstone、Redis lock、stateless MCP、telemetry redaction）は 5 suite・21 tests が成功した。実プロバイダの Blob/Turso/Redis/instance fault injection は隔離された資格情報付き環境がないため未実行である。
-- `pnpm test` は 65 suite・171 tests、lint、型検査、production build が成功した。ただし再現仕様書の 69 テストファイルという記述と実際の 65 suite は一致しないため、手順 1 は未完了のまま残す。
+- Task 10 着手時の test tree は 65 files で、clean reindex の genuine test 追加後は 66 files である。再現仕様書の 69 test files との差分と 34 documented basename / 30 unlisted basename のドリフトは `docs/eval/test-spec-ledger.json` に記録した。規範ケースの意味的な未充足を隠さないため、手順 1 は未完了のまま残す。
 - 認証付き Preview smoke は URL、owner/member PAT、curator PAT、maintenance token、Clerk test session、membership が未提供のため未実行である。結果は `docs/eval/vercel-smoke.json` に記録する。
 - §1–§19 と Task 0–10 の対応、Task 10 の placeholder、interface 名の後続参照を確認した。規範要件は変更していない。
 

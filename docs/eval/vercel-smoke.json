@@ -18,8 +18,14 @@
     {
       "name": "clean_reindex",
       "status": "passed",
-      "command": "pnpm tsx /tmp/task-10-clean-reindex.ts",
-      "evidence": "3 memories reconstructed from copied Markdown objects; tags, links, entities, triples, body_chars, and supersession matched."
+      "command": "pnpm tsx scripts/eval/clean-reindex.ts",
+      "evidence": "3 memories reconstructed from copied Markdown objects into an empty index; tags, links, entities, triples, body_chars, and supersession matched.",
+      "automated_test": "pnpm vitest run tests/scripts/clean-reindex.test.ts"
+    },
+    {
+      "name": "test_spec_ledger",
+      "status": "incomplete",
+      "evidence": "docs/eval/test-spec-ledger.json records the normative 69 versus 65 pre-existing / 66 current test-file mismatch and exact basename drift; no placeholder tests were added."
     },
     {
       "name": "local_resilience_contracts",
