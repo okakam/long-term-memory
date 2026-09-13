@@ -7,7 +7,7 @@
       "name": "unit_integration",
       "status": "passed_with_spec_count_concern",
       "command": "pnpm test",
-      "evidence": "65 test files and 171 tests passed. The reproduction specification currently states 69 test files, so that count could not be confirmed."
+      "evidence": "round 4 最終検証: 66 test files / 185 tests passed（sandbox の既存プロセス起動制限による失敗後、昇格環境で再実行）。規範仕様書の 69 files との差分は未解決で、Task 10 手順 1 は未完了。"
     },
     {
       "name": "lint_typecheck_production_build",
@@ -19,7 +19,7 @@
       "name": "clean_reindex",
       "status": "passed",
       "command": "pnpm tsx scripts/eval/clean-reindex.ts",
-      "evidence": "3 memories reconstructed from copied Markdown objects into an empty index; description, tags, links, entities, triples, source_refs, body_chars, supersession, created_at, and updated_at matched.",
+      "evidence": "round 4: コピー元 Markdown から期待値を作り、空 index への reindex 後に memories の全 SQL metadata（body_chars、content_hash、target file_path、timestamps を含む）、tags、links、supersedes、entities、entity_aliases、memory_entities、entity_edges の行内容と関連付けを直接照合した。contentless FTS は行 ID と全 token の文書・列・位置を独立に tokenize した Markdown と比較した。本文と source_refs は Markdown の完全一致でも確認した。8 collection の削除、SQL description/hash 改変、FTS の各列欠落の 13 負例が RED から GREEN となり、正常系を含む 14 tests と CLI が成功した。従来の Markdown hydrate 比較だけでは SQL 復元の証拠が不足していたため、本検証で置き換える。",
       "automated_test": "pnpm vitest run tests/scripts/clean-reindex.test.ts"
     },
     {

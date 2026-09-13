@@ -328,7 +328,7 @@
 
 #### タスク 10 の検証記録（2026-09-13）
 
-- clean reindex は、追跡対象の `scripts/eval/clean-reindex.ts` と `tests/scripts/clean-reindex.test.ts` で、Markdown object のみを別の使い捨て store へコピーし、空の索引から 3 memory の description、tag、link、entity、triple、`source_refs`、`body_chars`、supersession、`created_at`、`updated_at` が一致することを確認した。呼び出し後の `LTM_HOME` も元の値へ戻す。
+- clean reindex は round 4 で検証を修正した。従来の `MemoryService.get()` の Markdown hydrate 比較だけでは SQLite 復元の証拠が不足していた。`scripts/eval/clean-reindex.ts` は Markdown object のみを別の使い捨て store へコピーし、空索引から reindex した 3 memory について、正本から作った期待値と `memories` の全 SQL metadata（`body_chars`、content hash、target path、timestamps を含む）、tags、links、supersedes、entities、aliases、memory_entities、triples の全行を直接照合する。FTS は行 ID と token の文書・列・位置も比較し、本文と `source_refs` は Markdown の完全一致で検証する。`tests/scripts/clean-reindex.test.ts` の各 collection 削除・SQL 改変・FTS 各列欠落の 13 負例は実装前に RED、修正後に正常系を含む 14 tests が GREEN、CLI も成功した。`LTM_HOME` 復元と一時 store の cleanup を保持した。
 - local resilience contract（atomic recovery、Blob tombstone、Redis lock、stateless MCP、telemetry redaction）は 5 suite・21 tests が成功した。実プロバイダの Blob/Turso/Redis/instance fault injection は隔離された資格情報付き環境がないため未実行である。
 - Task 10 着手時の test tree は 65 files で、clean reindex の genuine test 追加後は 66 files である。再現仕様書の 69 test files との差分と 34 documented basename / 30 unlisted basename のドリフトは `docs/eval/test-spec-ledger.json` に記録した。規範ケースの意味的な未充足を隠さないため、手順 1 は未完了のまま残す。
 - 認証付き Preview smoke は URL、owner/member PAT、curator PAT、maintenance token、Clerk test session、membership が未提供のため未実行である。結果は `docs/eval/vercel-smoke.json` に記録する。

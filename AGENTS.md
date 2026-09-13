@@ -35,6 +35,7 @@
 
 ## 現在の実装と検証
 
+- タスク 10 round 4 では clean reindex の検証を Markdown hydrate 比較から正本対 SQLite 全行比較へ修正した。metadata・collection・KG・FTS token を直接照合し、13 破損注入ケースの RED と正常系を含む 14 tests の GREEN、CLI 成功を確認した。69 test files との差分と外部 Vercel/provider ゲートは未完了のままである。
 - タスク 0 の Next.js 足場、storage 契約、FTS5 probe を実装した。
 - タスク 8 の Vercel/Clerk env、security headers、固定CLI CI、migration preflight、Vercel smoke、Docker配布、start-mcp安全起動、Blob prefix分離を実装し、Vercel Upstash連携の `KV_REST_API_*` env 名にも対応した。Protection Bypass secret を任意で付けられる自動 Preview/Production smoke workflow も追加した。65 suite・171 tests、lint・型検査・production build を通過した。GitHub Secrets 未設定のため認証付き実 Vercel smoke は未実行。2026-09-06 に Vercel CLI preview deploy/inspect が Ready まで成功した。
 - Vercel 実行時の memory service 配線を追加し、`LTM_STORAGE_DRIVER=vercel` では Turso/libSQL index と private Blob Markdown を使うようにした。MCP/UI の読み取りを非同期経路へ切り替え、Blob→Turso transaction の save/update/delete、Blob からの project scoped remote reindex、remote PPR、削除 tombstone、prefix/hash検証、remote rename、Vercel Redis lock、owner/curator maintenance認可を実装した。65 suite・171 tests、lint・型検査・production build・`git diff --check` を通過。2026-09-06 の Preview deployment `dpl_BGxZ5tEeoqG7rV1jG6rAfGcbCtoT` は Ready、固定 alias を更新し、公開 sign-in は 200、未認証 MCP は想定どおり 401。PAT 付き E2E smoke と Clerk セッション付き UI smoke は未実行。
