@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-13",
+  "scope": "Task 10 local acceptance evidence",
+  "checks": [
+    {
+      "name": "unit_integration",
+      "status": "passed_with_spec_count_concern",
+      "command": "pnpm test",
+      "evidence": "65 test files and 171 tests passed. The reproduction specification currently states 69 test files, so that count could not be confirmed."
+    },
+    {
+      "name": "lint_typecheck_production_build",
+      "status": "passed",
+      "command": "pnpm lint && pnpm exec tsc --noEmit && NODE_ENV=production pnpm build",
+      "evidence": "ESLint, TypeScript noEmit, and the optimized Next.js production build completed with exit code 0."
+    },
+    {
+      "name": "clean_reindex",
+      "status": "passed",
+      "command": "pnpm tsx /tmp/task-10-clean-reindex.ts",
+      "evidence": "3 memories reconstructed from copied Markdown objects; tags, links, entities, triples, body_chars, and supersession matched."
+    },
+    {
+      "name": "local_resilience_contracts",
+      "status": "passed",
+      "command": "pnpm vitest run tests/storage/atomic-failure.test.ts tests/lib/lock/project-lock.test.ts tests/lib/memory/vercel-service.test.ts tests/lib/mcp/vercel-stateless.test.ts tests/lib/telemetry/recorder.test.ts",
+      "evidence": "5 test files and 21 tests passed for atomic recovery, Blob tombstones, Redis locking, stateless MCP handling, and telemetry redaction."
+    },
+    {
+      "name": "authenticated_vercel_e2e_smoke",
+      "status": "unexecuted",
+      "reason": "No Preview URL, owner/member PAT, curator PAT, maintenance token, Clerk test session, or project memberships were provided.",
+      "required_checks": ["initialize", "tools/list (16)", "save/search/get/delete", "UI and REST read", "telemetry/dashboard counts", "shared read-only and curator write gate"]
+    },
+    {
+      "name": "provider_fault_injection",
+      "status": "unexecuted",
+      "reason": "No isolated Vercel/Turso/Blob/Upstash environment or credentials were provided to force real provider faults.",
+      "required_checks": ["Blob failure", "Turso transient error", "Redis lock contention", "function instance change", "log and telemetry secret inspection"]
+    }
+  ]
+}
