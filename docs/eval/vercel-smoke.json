@@ -19,7 +19,7 @@
       "name": "clean_reindex",
       "status": "passed",
       "command": "pnpm tsx scripts/eval/clean-reindex.ts",
-      "evidence": "3 memories reconstructed from copied Markdown objects into an empty index; tags, links, entities, triples, body_chars, and supersession matched.",
+      "evidence": "3 memories reconstructed from copied Markdown objects into an empty index; description, tags, links, entities, triples, source_refs, body_chars, supersession, created_at, and updated_at matched.",
       "automated_test": "pnpm vitest run tests/scripts/clean-reindex.test.ts"
     },
     {

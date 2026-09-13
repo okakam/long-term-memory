@@ -8,7 +8,7 @@ import { MemoryService } from '@/lib/memory/service';
 import { resolveStorage } from '@/lib/paths';
 
 const PROJECT_ID = 'acceptance';
-const FIELDS = ['tags', 'links', 'entities', 'triples', 'body_chars', 'supersedes'] as const;
+const FIELDS = ['description', 'tags', 'links', 'entities', 'triples', 'source_refs', 'body_chars', 'supersedes', 'created_at', 'updated_at'] as const;
 
 function snapshot(service: MemoryService) {
   const summaries = new Map(service.listSummaries(PROJECT_ID).map((item) => [item.name, item]));
@@ -18,6 +18,7 @@ function snapshot(service: MemoryService) {
       id: memory.id,
       name: memory.name,
       type: memory.type,
+      description: memory.description,
       body: memory.body,
       tags: [...memory.tags].sort(),
       links: [...memory.links].sort(),
@@ -25,13 +26,19 @@ function snapshot(service: MemoryService) {
         .map((entity) => ({ name: entity.name, aliases: [...entity.aliases].sort() }))
         .sort((left, right) => left.name.localeCompare(right.name)),
       triples: memory.triples.map((triple) => [...triple]).sort(),
+      source_refs: (memory.source_refs ?? [])
+        .map((reference) => ({ project_id: reference.project_id, memory: reference.memory }))
+        .sort((left, right) => `${left.project_id}/${left.memory}`.localeCompare(`${right.project_id}/${right.memory}`)),
       supersedes: [...memory.supersedes].sort(),
       body_chars: summaries.get(name)?.body_chars,
+      created_at: memory.created_at,
+      updated_at: memory.updated_at,
     };
   });
 }
 
 export function runCleanReindex(): { memories: number; fields: readonly string[] } {
+  const originalHome = process.env.LTM_HOME;
   const sourceRoot = mkdtempSync(join(tmpdir(), 'ltm-clean-reindex-source-'));
   const targetRoot = mkdtempSync(join(tmpdir(), 'ltm-clean-reindex-target-'));
   try {
@@ -49,6 +56,7 @@ export function runCleanReindex(): { memories: number; fields: readonly string[]
         tags: ['current', 'verification'], links: ['legacy'], supersedes: ['legacy'],
         entities: [{ name: 'SQLite', aliases: ['sqlite3'] }, { name: 'Turso', aliases: [] }],
         triples: [['SQLite', 'indexes', 'Turso']],
+        source_refs: [{ project_id: 'source-project', memory: 'source-memory' }],
       });
       source.save(PROJECT_ID, {
         name: 'reference', description: 'reference record', type: 'reference', body: 'reference body',
@@ -77,6 +85,8 @@ export function runCleanReindex(): { memories: number; fields: readonly string[]
   } finally {
     rmSync(sourceRoot, { recursive: true, force: true });
     rmSync(targetRoot, { recursive: true, force: true });
+    if (originalHome === undefined) delete process.env.LTM_HOME;
+    else process.env.LTM_HOME = originalHome;
   }
 }
 
