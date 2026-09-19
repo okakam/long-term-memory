@@ -31,7 +31,7 @@ pnpm exec tsc --noEmit
 NODE_ENV=production pnpm build
 ```
 
-Cloud Runの実環境smoke、S3/Firestoreへの実データ移行、Vercel Project削除は外部資格情報が必要です。未実行の外部ゲートをローカルテスト成功だけで完了扱いにしません。
+Cloud Runの実環境smoke、S3/Firestoreへの実データ移行、Vercel Project削除は外部資格情報が必要です。未実行の外部ゲートをローカルテスト成功だけで完了扱いにしません。ローカルではsmoke scriptの主要MCP経路を回帰検証し、renameはMCP公開toolではないため`CloudMemoryService`のテストで検証します。
 
 ## 移行
 
