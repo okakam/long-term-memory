@@ -50,8 +50,8 @@ export class FirestoreAuthStore implements AuthStoreLike {
     return this.metadata.findTokenByHash(hash);
   }
 
-  touchToken(id: string, timestamp?: string): Promise<void> {
-    return this.metadata.touchToken(id, timestamp);
+  touchToken(id: string, timestamp?: string, tokenHash?: string): Promise<void> {
+    return this.metadata.touchToken(id, timestamp, tokenHash);
   }
 
   revokeToken(userId: string, id: string, timestamp?: string): Promise<boolean> {

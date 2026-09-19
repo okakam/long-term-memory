@@ -687,7 +687,12 @@ export class FirestoreMetadataStore {
     return document.exists ? tokenRecord(document) : null;
   }
 
-  async touchToken(id: string, timestamp = new Date().toISOString()): Promise<void> {
+  async touchToken(id: string, timestamp = new Date().toISOString(), tokenHash?: string): Promise<void> {
+    if (tokenHash) {
+      const target = await this.gateway.get(documentPath('mcpTokens', tokenHash));
+      if (target.exists && target.data()?.id === id) await this.gateway.update(target.path, { last_used_at: timestamp });
+      return;
+    }
     const documents = await this.gateway.list('mcpTokens');
     const target = documents.find((document) => document.exists && document.data()?.id === id);
     if (target) await this.gateway.update(target.path, { last_used_at: timestamp });

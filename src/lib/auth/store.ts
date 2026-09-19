@@ -41,7 +41,7 @@ export interface AuthStoreLike {
   listMembers(projectId: string): Promise<MemberRecord[]>;
   insertToken(record: TokenRecord): Promise<void>;
   findTokenByHash(hash: string): Promise<TokenRecord | null>;
-  touchToken(id: string, timestamp?: string): Promise<void>;
+  touchToken(id: string, timestamp?: string, tokenHash?: string): Promise<void>;
   revokeToken(userId: string, id: string, timestamp?: string): Promise<boolean>;
   listTokens(userId: string): Promise<Array<Omit<TokenRecord, 'token_hash'>>>;
   close?(): void | Promise<void>;

@@ -80,7 +80,7 @@ export async function requireMcpPrincipal(
   const authStore = store ?? await getAuthStore();
   const record = await authStore.findTokenByHash(hashPat(token));
   if (!usable(record)) throw new UnauthorizedMcpError();
-  await authStore.touchToken(record.id);
+  await authStore.touchToken(record.id, undefined, record.token_hash);
   return { userId: record.user_id, tokenId: record.id };
 }
 

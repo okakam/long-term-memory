@@ -5,12 +5,14 @@ import { FirestoreMetadataStore, type FirestoreGateway, type FirestoreDocument, 
 
 class FakeFirestore implements FirestoreGateway {
   readonly documents = new Map<string, Record<string, unknown>>();
+  listCalls = 0;
 
   async get(path: string): Promise<FirestoreDocument> {
     return this.snapshot(path);
   }
 
   async list(collectionPath: string): Promise<FirestoreDocument[]> {
+    this.listCalls += 1;
     const prefix = `${collectionPath}/`;
     return [...this.documents.keys()]
       .filter((path) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
@@ -49,7 +51,8 @@ class FakeFirestore implements FirestoreGateway {
 }
 
 test('FirestoreAuthStoreはproject membershipとPAT hash-only操作を提供する', async () => {
-  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  const gateway = new FakeFirestore();
+  const metadata = new FirestoreMetadataStore(gateway);
   const store = new FirestoreAuthStore(metadata);
   await store.createProject('demo', 'owner');
   await store.addMember('demo', 'member');
@@ -70,4 +73,8 @@ test('FirestoreAuthStoreはproject membershipとPAT hash-only操作を提供す�
   await expect(store.listAccessibleProjects('member')).resolves.toHaveLength(1);
   await expect(store.findTokenByHash('hash-only')).resolves.toMatchObject({ token_hash: 'hash-only' });
   await expect(store.listTokens('owner')).resolves.toEqual([expect.objectContaining({ id: 'token-id' })]);
+  gateway.listCalls = 0;
+  await store.touchToken('token-id', '2026-09-19T00:00:01.000Z', 'hash-only');
+  expect(gateway.listCalls).toBe(0);
+  expect(gateway.documents.get('mcpTokens/hash-only')?.last_used_at).toBe('2026-09-19T00:00:01.000Z');
 });
