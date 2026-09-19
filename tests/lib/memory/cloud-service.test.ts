@@ -4,7 +4,7 @@ import { openLocalDb } from '@/lib/storage/local-index';
 import { KeyedMutex } from '@/lib/memory/mutex';
 import { FirestoreMetadataStore, type FirestoreDocument, type FirestoreGateway, type FirestoreTransaction } from '@/lib/storage/firestore-metadata';
 import { CloudMemoryService } from '@/lib/memory/cloud-service';
-import type { IndexStore, MarkdownStore, StoredObject } from '@/lib/storage/contracts';
+import type { IndexStore, MarkdownStore, SqlValue, StoredObject } from '@/lib/storage/contracts';
 
 class FakeFirestore implements FirestoreGateway {
   readonly documents = new Map<string, Record<string, unknown>>();
@@ -47,6 +47,26 @@ class FakeMarkdownStore implements MarkdownStore {
     return [...this.objects.entries()]
       .filter(([key]) => key.startsWith(prefix))
       .map(([key, object]) => ({ key, size: Buffer.byteLength(object.text), updatedAt: object.updatedAt }));
+  }
+}
+
+class FailingTransactionIndex implements IndexStore {
+  constructor(private readonly delegate: IndexStore) {}
+
+  exec(sql: string, args?: readonly SqlValue[]): Promise<void> {
+    return this.delegate.exec(sql, args);
+  }
+
+  query<T extends object>(sql: string, args?: readonly SqlValue[]): Promise<T[]> {
+    return this.delegate.query<T>(sql, args);
+  }
+
+  async transaction<T>(): Promise<T> {
+    throw new Error('cache transaction failed');
+  }
+
+  close(): void | Promise<void> {
+    return this.delegate.close?.();
   }
 }
 
@@ -103,6 +123,47 @@ test('設定したS3 prefixを本文キーに使う', async () => {
 
   expect([...markdown.objects.keys()]).toHaveLength(1);
   expect([...markdown.objects.keys()][0]).toMatch(/^custom-prefix\/demo\/memories\/prefixed-note\/[a-f0-9]{64}\.md$/);
+});
+
+test('SQLite cache更新に失敗したsaveはFirestore metadataを残さない', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(new FailingTransactionIndex(index)), markdown, metadata, new KeyedMutex(), 'projects');
+
+  await expect(service.save('demo', {
+    name: 'cache-failure',
+    description: 'rollback',
+    type: 'reference',
+    body: '保存失敗',
+  })).rejects.toThrow('cache transaction failed');
+
+  await expect(metadata.listMemoryIndexes('demo')).resolves.toHaveLength(0);
+  expect(markdown.objects.size).toBe(0);
+});
+
+test('SQLite cache更新に失敗したupdateはFirestore metadataを旧本文へ戻す', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const firstService = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+  const saved = await firstService.save('demo', {
+    name: 'update-rollback',
+    description: 'before',
+    type: 'reference',
+    body: '旧本文',
+  });
+  const oldKey = [...markdown.objects.keys()][0];
+
+  const failingService = new CloudMemoryService(Promise.resolve(new FailingTransactionIndex(index)), markdown, metadata, new KeyedMutex(), 'projects');
+  await expect(failingService.update('demo', saved.id, { body: '新本文' })).rejects.toThrow('cache transaction failed');
+
+  await expect(metadata.getMemoryIndex('demo', saved.id)).resolves.toMatchObject({ content_key: oldKey, content_hash: expect.any(String) });
+  expect([...markdown.objects.keys()]).toEqual([oldKey]);
 });
 
 test('新しいCloud Run instanceは最初のread前にS3からSQLite cacheを再構築する', async () => {

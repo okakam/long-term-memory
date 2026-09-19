@@ -280,15 +280,33 @@ export class CloudMemoryService {
     const contentHash = computeHash(text);
     const key = this.objectKey(project, name, contentHash);
     await this.markdown.write(key, text);
+    let metadataCommitted = false;
     try {
       await this.metadata.putMemoryIndex(project, toMemoryIndexRecord(project, key, contentHash, memory));
+      metadataCommitted = true;
       await store.transaction(async (tx) => {
         if (await selectRow(tx, project, name)) throw new MemoryConflictError(name);
         await insertMemoryIndex(tx, project, key, text, memory);
       });
       return memory;
     } catch (error) {
-      await this.markdown.remove(key).catch(() => undefined);
+      if (metadataCommitted) {
+        try {
+          await this.metadata.removeMemoryIndex(project, memory.id, { content_key: key, content_hash: contentHash });
+        } catch (rollbackError) {
+          throw new AggregateError([error, rollbackError], 'save compensation failed');
+        }
+      }
+      try {
+        await this.markdown.remove(key);
+      } catch {
+        await this.metadata.putTombstone({
+          project_id: project,
+          memory_id: memory.id,
+          content_key: key,
+          deleted_at: nowIso(),
+        }).catch(() => undefined);
+      }
       throw error;
     }
   }
@@ -393,9 +411,12 @@ export class CloudMemoryService {
     const text = serializeMemory(updated);
     const contentHash = computeHash(text);
     const key = this.objectKey(project, updated.name, contentHash);
+    const previousRecord = toMemoryIndexRecord(project, row.file_path, row.content_hash, current);
     await this.markdown.write(key, text);
+    let metadataCommitted = false;
     try {
       await this.metadata.putMemoryIndex(project, toMemoryIndexRecord(project, key, contentHash, updated));
+      metadataCommitted = true;
       await store.transaction(async (tx) => {
         const currentRow = await selectRow(tx, project, idOrName);
         if (!currentRow) throw new MemoryNotFoundError(idOrName);
@@ -412,7 +433,23 @@ export class CloudMemoryService {
         await insertFts(tx, updated);
       });
     } catch (error) {
-      await this.markdown.remove(key).catch(() => undefined);
+      if (metadataCommitted) {
+        try {
+          await this.metadata.restoreMemoryIndex(project, previousRecord, { content_key: key, content_hash: contentHash });
+        } catch (rollbackError) {
+          throw new AggregateError([error, rollbackError], 'update compensation failed');
+        }
+      }
+      try {
+        await this.markdown.remove(key);
+      } catch {
+        await this.metadata.putTombstone({
+          project_id: project,
+          memory_id: updated.id,
+          content_key: key,
+          deleted_at: nowIso(),
+        }).catch(() => undefined);
+      }
       throw error;
     }
     if (key !== row.file_path) await this.markdown.remove(row.file_path).catch(() => undefined);

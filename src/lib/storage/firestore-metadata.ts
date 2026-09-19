@@ -417,6 +417,87 @@ export class FirestoreMetadataStore {
     });
   }
 
+  async removeMemoryIndex(
+    projectId: string,
+    memoryId: string,
+    expected: Pick<MemoryIndexRecord, 'content_key' | 'content_hash'>,
+  ): Promise<void> {
+    const project = projectPath(projectId);
+    const memory = documentPath(memoriesPath(projectId), memoryId);
+    await this.gateway.runTransaction(async (transaction) => {
+      const projectDocument = await transaction.get(project);
+      const memoryDocument = await transaction.get(memory);
+      if (!memoryDocument.exists) return;
+      const current = memoryRecord(memoryDocument);
+      if (current.content_key !== expected.content_key || current.content_hash !== expected.content_hash) return;
+      const name = documentPath(namesPath(projectId), nameDocumentId(current.name));
+      const nameDocument = await transaction.get(name);
+      if (nameDocument.exists) {
+        const currentName = nameRecord(nameDocument);
+        if (currentName.memory_id === memoryId
+          && currentName.content_key === expected.content_key
+          && currentName.content_hash === expected.content_hash) {
+          await transaction.delete(name);
+        }
+      }
+      await transaction.delete(memory);
+      if (projectDocument.exists) {
+        const currentProject = projectRecord(projectDocument);
+        await transaction.set(project, { revision: currentProject.revision + 1 }, true);
+      }
+    });
+  }
+
+  async restoreMemoryIndex(
+    projectId: string,
+    record: MemoryIndexRecord,
+    expected: Pick<MemoryIndexRecord, 'content_key' | 'content_hash'>,
+  ): Promise<void> {
+    const project = projectPath(projectId);
+    const memory = documentPath(memoriesPath(projectId), record.id);
+    const previousName = documentPath(namesPath(projectId), nameDocumentId(record.name));
+    await this.gateway.runTransaction(async (transaction) => {
+      const projectDocument = await transaction.get(project);
+      const memoryDocument = await transaction.get(memory);
+      if (!memoryDocument.exists) return;
+      const current = memoryRecord(memoryDocument);
+      if (current.content_key !== expected.content_key || current.content_hash !== expected.content_hash) return;
+      const currentName = documentPath(namesPath(projectId), nameDocumentId(current.name));
+      const currentNameDocument = await transaction.get(currentName);
+      const previousNameDocument = currentName === previousName ? currentNameDocument : await transaction.get(previousName);
+      if (previousNameDocument.exists) {
+        const existing = nameRecord(previousNameDocument);
+        if (existing.memory_id !== record.id) throw new MemoryConflictError('memory name already exists');
+      }
+      if (currentName !== previousName && currentNameDocument.exists) {
+        const existing = nameRecord(currentNameDocument);
+        if (existing.memory_id === record.id
+          && existing.content_key === expected.content_key
+          && existing.content_hash === expected.content_hash) {
+          await transaction.delete(currentName);
+        }
+      }
+      await transaction.set(memory, memoryData(record));
+      await transaction.set(previousName, {
+        memory_id: record.id,
+        name: record.name,
+        content_key: record.content_key,
+        content_hash: record.content_hash,
+      });
+      if (projectDocument.exists) {
+        const currentProject = projectRecord(projectDocument);
+        await transaction.set(project, { revision: currentProject.revision + 1 }, true);
+      }
+    });
+  }
+
+  async putTombstone(tombstone: TombstoneRecord): Promise<void> {
+    await this.gateway.set(
+      documentPath(tombstonesPath(tombstone.project_id), tombstoneDocumentId(tombstone.content_key)),
+      { ...tombstone },
+    );
+  }
+
   async replaceMemoryIndexes(
     projectId: string,
     oldName: string,
