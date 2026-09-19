@@ -43,7 +43,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 - 変更: `src/lib/storage/contracts.ts` — `StorageMode` とobject version/conditional write contract
 - 変更: `src/lib/storage/factory.ts` — `local` / `cloud` selector
 - 変更: `src/lib/storage/sqlite-index.ts`、`src/lib/db/connection.ts` — `/tmp` SQLite cache
-- 実データ移行verify後に削除: `src/lib/storage/turso-index.ts` と移行専用Blob adapter。local filesystem adapterは残す。
+- 実データ移行verify後に削除: `scripts/migration/legacy-turso-index.ts` と移行専用Blob adapter。local filesystem adapterは残す。
 - 変更: `src/lib/memory/remote-service.ts`、または`src/lib/memory/cloud-service.ts`へ置換 — S3/Firestore/SQLite service
 
 ### 認証・アプリ
@@ -75,7 +75,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 - 作成: `tests/deploy/cloud-run.test.ts`
 - 作成: `tests/migration/migration.test.ts`
 - 変更: `tests/smoke.test.ts`、`tests/deps.test.ts`、既存のauth/storage/memory/MCP/APIテスト
-- 置換後に削除: Blob/Turso/Vercel固有テスト
+- 置換後に削除: Blob/Turso/Vercel固有テスト。旧Turso adapterの回帰テストは実データ移行verifyまで`tests/migration/`に残す。
 
 ## 実装タスク
 
@@ -378,7 +378,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 **対象ファイル:**
 
 - 変更: `package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.env.example`、`next.config.ts`、`docker-compose.yml`、`Dockerfile`
-- 削除: `src/lib/storage/blob-markdown.ts`、`src/lib/auth/clerk.ts`、旧Vercel runtime。`src/lib/auth/connection.ts`、`src/lib/auth/schema.sql`、`src/lib/auth/migrate.ts`はlocal modeの認証DBに必要なため残す。`src/lib/storage/turso-index.ts`は実データmigration verify後に削除する。
+- 削除: `src/lib/storage/blob-markdown.ts`、`src/lib/auth/clerk.ts`、旧Vercel runtime。`src/lib/auth/connection.ts`、`src/lib/auth/schema.sql`、`src/lib/auth/migrate.ts`はlocal modeの認証DBに必要なため残す。`scripts/migration/legacy-turso-index.ts`と旧Blob adapterは実データmigration verify後に削除する。
 - 削除: Redis部分のproject lock、永続Telemetry DBとdashboard data access
 - テスト: `tests/deps.test.ts`、storage/auth/lock/telemetry test
 
