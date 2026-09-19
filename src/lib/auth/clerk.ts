@@ -1,6 +1,5 @@
-import { auth } from '@clerk/nextjs/server';
-
 import { authRequired } from './config';
+import { getCurrentFirebasePrincipal, requireCurrentFirebasePrincipal } from './session';
 
 export interface WebPrincipal {
   userId: string;
@@ -16,17 +15,10 @@ export class UnauthorizedWebError extends Error {
 
 export async function getWebPrincipal(): Promise<WebPrincipal | null> {
   if (!authRequired()) return null;
-  if (!process.env.CLERK_SECRET_KEY) return null;
-  try {
-    const session = await auth();
-    return session.userId ? { userId: session.userId } : null;
-  } catch {
-    return null;
-  }
+  return getCurrentFirebasePrincipal();
 }
 
 export async function requireWebPrincipal(): Promise<WebPrincipal> {
-  const principal = await getWebPrincipal();
-  if (!principal) throw new UnauthorizedWebError();
-  return principal;
+  if (!authRequired()) throw new UnauthorizedWebError();
+  try { return await requireCurrentFirebasePrincipal(); } catch { throw new UnauthorizedWebError(); }
 }

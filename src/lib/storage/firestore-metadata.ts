@@ -2,6 +2,7 @@ import { getFirestore, type Firestore, type Transaction } from 'firebase-admin/f
 import { createHash } from 'node:crypto';
 
 import type { MemberRecord, ProjectRecord, TokenRecord } from '@/lib/auth/store';
+import { getFirebaseAdminApp } from '@/lib/auth/firebase';
 import { MemoryConflictError } from '@/lib/memory/types';
 import type { Entity, MemoryType, Triple } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId } from '@/lib/slug';
@@ -505,6 +506,6 @@ export class FirestoreMetadataStore {
   }
 }
 
-export function createFirestoreMetadataStore(firestore: Firestore = getFirestore()): FirestoreMetadataStore {
+export function createFirestoreMetadataStore(firestore: Firestore = getFirestore(getFirebaseAdminApp())): FirestoreMetadataStore {
   return new FirestoreMetadataStore(new AdminFirestoreGateway(firestore));
 }

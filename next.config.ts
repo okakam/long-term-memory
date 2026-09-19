@@ -8,9 +8,9 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com",
-      "connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com",
-      "img-src 'self' data: blob: https://img.clerk.com",
+      "script-src 'self' 'unsafe-inline' https://*.firebaseapp.com https://apis.google.com",
+      "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com",
+      "img-src 'self' data: blob: https://*.googleusercontent.com",
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
       "base-uri 'self'",

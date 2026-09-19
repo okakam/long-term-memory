@@ -4,5 +4,5 @@ export function authRequired(): boolean {
 
 export function authConfigurationReady(): boolean {
   if (!authRequired()) return true;
-  return Boolean(process.env.CLERK_SECRET_KEY);
+  return Boolean(process.env.FIREBASE_PROJECT_ID);
 }
