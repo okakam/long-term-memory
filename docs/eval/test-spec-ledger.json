@@ -1,35 +1,20 @@
 {
-  "recorded_at": "2026-09-13",
-  "source": "docs/reproduction-spec.md section 15 compared with tests/**/*.test.ts",
-  "ruling": "pre_existing_spec_implementation_mismatch",
-  "normative_declared_test_files": 69,
-  "spec_table_entries_excluding_glob": 69,
-  "tree_test_files_before_task10_clean_reindex_test": 65,
-  "tree_test_files_after_task10_clean_reindex_test": 66,
-  "remaining_count_gap": 3,
-  "documented_basenames_absent_from_tree": [
-    "api.memories.shared.test.ts", "api.projects.test.ts", "context.maintenance-token.test.ts",
-    "file-io.test.ts", "frontmatter.kg.test.ts", "frontmatter.source-refs.test.ts",
-    "reconcile.kg.test.ts", "schema.kg.test.ts", "schemas.kg.test.ts", "sdk-import.test.ts",
-    "service.body-chars.test.ts", "service.decay.ppr.test.ts", "service.forget.test.ts",
-    "service.kg-forget.test.ts", "service.kg-save.test.ts", "service.kg-update.test.ts",
-    "service.mutex.test.ts", "service.projects.test.ts", "service.read.test.ts",
-    "service.rename.test.ts", "service.source-refs.test.ts", "service.summaries.test.ts",
-    "service.update.test.ts", "session.test.ts", "singleton.test.ts", "tools.descriptions.test.ts",
-    "tools.meta.test.ts", "tools.read.kg.test.ts", "tools.read.test.ts",
-    "tools.supersedes.test.ts", "tools.write.kg.test.ts", "tools.write.test.ts",
-    "transport.test.ts", "types.kg.test.ts"
-  ],
-  "tree_basenames_absent_from_spec_table": [
-    "access.test.ts", "atomic-failure.test.ts", "auth-required.test.ts", "auth.routes.test.ts",
-    "blob-markdown.test.ts", "clean-reindex.test.ts", "csrf.test.ts", "dashboard.test.ts",
-    "descriptions.test.ts", "fs-markdown.test.ts", "instrument.test.ts", "local-index.test.ts",
-    "mutex.test.ts", "pages.test.ts", "pat.test.ts", "project-lock.test.ts",
-    "project-membership.test.ts", "provider-compat.test.ts", "query.test.ts", "recorder.test.ts",
-    "remote-snapshot.test.ts", "schema.test.ts", "smoke.test.ts", "start-mcp.test.ts",
-    "task8.test.ts", "tools.test.ts", "turso-index.test.ts", "vercel-service.test.ts",
-    "vercel-stateless.test.ts", "window.test.ts"
-  ],
-  "acceptance_status": "incomplete",
-  "cost_if_misclassified": "Treating consolidated names as equivalent without a case-by-case semantic audit could hide an untested normative behavior; adding placeholder tests solely to reach 69 would create false acceptance evidence."
+  "recorded_at": "2026-09-19",
+  "source": "tests/**/*.test.ts",
+  "runtime": {
+    "test_files": 68,
+    "tests": 185,
+    "acceptance_status": "local-green"
+  },
+  "migration_gates": {
+    "cloud_run_smoke": "未実行: GCP資格情報とURLが必要",
+    "s3_firestore_import": "未実行: 実データとAWS/Firebase資格情報が必要",
+    "migration_verify": "fake target test済み、実target未実行",
+    "vercel_project_deletion": "未実行: 移行検証とCloud Run smoke後に実行"
+  },
+  "notes": [
+    "SQLiteは検索cacheであり、S3 MarkdownとFirestore metadataが永続正本である",
+    "旧Vercel Blob/Tursoはscripts/migrationの一回限りexport専用devDependenciesに限定している",
+    "ローカルテストの成功を外部provider接続済みとは扱わない"
+  ]
 }

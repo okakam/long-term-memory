@@ -544,7 +544,7 @@ export class CloudMemoryService {
         await this.markdown.remove(oldObject.key);
         await store.transaction((tx) => tx.exec('DELETE FROM memory_tombstones WHERE project_id = ? AND file_path = ?', [project, oldObject.key]));
       } catch {
-        // Tombstone remains until a later cleanup removes the old Blob.
+        // Tombstone remains until a later cleanup removes the old S3 object.
       }
     }
     return updated;

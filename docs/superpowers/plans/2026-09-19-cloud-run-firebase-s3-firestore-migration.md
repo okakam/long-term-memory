@@ -10,6 +10,10 @@
 
 **Spec / 仕様書:** `docs/superpowers/specs/2026-09-19-cloud-run-firebase-s3-firestore-design.md`
 
+## 実装進捗（2026-09-19）
+
+Task 1〜8の主要実装、Task 9のfake targetによる冪等import/verify、Task 7の旧runtime整理まで完了している。ローカルでは全テスト・lint・型検査・production buildが通過している。実AWS/Firebase/GCP接続、実データ移行verify、Cloud Run smoke、旧Vercel Project削除は外部資格情報が必要な未完了ゲートであり、これらを確認するまで旧移行用credentialとdevDependenciesは削除しない。
+
 ## 全体制約
 
 - Node.jsは22.x、pnpmは11.1.3、Next.jsは16.2.6を維持する。
