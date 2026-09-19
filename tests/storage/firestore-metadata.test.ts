@@ -146,4 +146,17 @@ describe('FirestoreMetadataStore', () => {
     });
     await expect(store.getProject('demo')).rejects.toBeInstanceOf(FirestoreDataError);
   });
+
+  test('Firebase UIDをFirestore member document IDとして安全にencodeする', async () => {
+    const gateway = new FakeFirestore();
+    const store = new FirestoreMetadataStore(gateway);
+    await store.createProject('demo', 'uid/with/slash');
+
+    expect([...gateway.documents.keys()]).toContain('projects/demo/members/uid%2Fwith%2Fslash');
+    await expect(store.getMembership('demo', 'uid/with/slash')).resolves.toMatchObject({
+      project_id: 'demo',
+      user_id: 'uid/with/slash',
+      role: 'owner',
+    });
+  });
 });

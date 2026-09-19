@@ -3,7 +3,7 @@
   "source": "tests/**/*.test.ts",
   "runtime": {
     "test_files": 68,
-    "tests": 189,
+    "tests": 190,
     "acceptance_status": "local-green"
   },
   "migration_gates": {

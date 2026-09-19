@@ -149,6 +149,11 @@ function membersPath(projectId: string): string {
   return documentPath(projectPath(projectId), 'members');
 }
 
+function memberDocumentPath(projectId: string, userId: string): string {
+  if (userId.length === 0) throw new FirestoreDataError('userId must be a non-empty string');
+  return documentPath(membersPath(projectId), encodeURIComponent(userId));
+}
+
 function memoriesPath(projectId: string): string {
   return documentPath(projectPath(projectId), 'memories');
 }
@@ -322,7 +327,7 @@ export class FirestoreMetadataStore {
 
   async createProject(projectId: string, ownerUserId: string, now = new Date().toISOString()): Promise<void> {
     const project = projectPath(projectId);
-    const member = documentPath(membersPath(projectId), ownerUserId);
+    const member = memberDocumentPath(projectId, ownerUserId);
     await this.gateway.runTransaction(async (transaction) => {
       if ((await transaction.get(project)).exists) throw new MemoryConflictError(projectId);
       await transaction.set(project, {
@@ -337,7 +342,7 @@ export class FirestoreMetadataStore {
   }
 
   async getMembership(projectId: string, userId: string): Promise<MemberRecord | null> {
-    const document = await this.gateway.get(documentPath(membersPath(projectId), userId));
+    const document = await this.gateway.get(memberDocumentPath(projectId, userId));
     return document.exists ? memberRecord(document) : null;
   }
 
@@ -354,15 +359,15 @@ export class FirestoreMetadataStore {
   }
 
   async addMember(projectId: string, userId: string, role: 'owner' | 'member' = 'member'): Promise<void> {
-    await this.gateway.set(documentPath(membersPath(projectId), userId), { project_id: projectId, user_id: userId, role });
+    await this.gateway.set(memberDocumentPath(projectId, userId), { project_id: projectId, user_id: userId, role });
   }
 
   async removeMember(projectId: string, userId: string): Promise<void> {
-    await this.gateway.delete(documentPath(membersPath(projectId), userId));
+    await this.gateway.delete(memberDocumentPath(projectId, userId));
   }
 
   async setMemberRole(projectId: string, userId: string, role: 'owner' | 'member'): Promise<void> {
-    await this.gateway.update(documentPath(membersPath(projectId), userId), { role });
+    await this.gateway.update(memberDocumentPath(projectId, userId), { role });
   }
 
   async listMembers(projectId: string): Promise<MemberRecord[]> {
