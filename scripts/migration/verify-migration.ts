@@ -17,6 +17,7 @@ export interface VerificationReport {
   hash_mismatches: string[];
   parse_failures: string[];
   membership_mismatches: string[];
+  memory_mismatches: string[];
   pat_mismatches: string[];
   tombstone_mismatches: string[];
   ok: boolean;
@@ -68,6 +69,29 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
   }
   for (const key of targetKeys) if (!expected.has(key)) extraKeys.push(key);
 
+  const memoryMismatches: string[] = [];
+  for (const project of manifest.projects) {
+    const targetRecords = await input.firestore.metadata.listMemoryIndexes(project.project_id);
+    const targetById = new Map(targetRecords.map((record) => [record.id, record]));
+    const expectedIds = new Set<string>();
+    for (const memory of project.memories) {
+      expectedIds.add(memory.id);
+      const expectedKey = memoryObjectKey(prefix, project.project_id, memory.name, memory.content_hash);
+      const target = targetById.get(memory.id);
+      if (!target) {
+        memoryMismatches.push(`${project.project_id}/${memory.name}:missing`);
+        continue;
+      }
+      if (target.project_id !== project.project_id || target.name !== memory.name
+        || target.content_key !== expectedKey || target.content_hash !== memory.content_hash) {
+        memoryMismatches.push(`${project.project_id}/${memory.name}:metadata`);
+      }
+    }
+    for (const target of targetRecords) {
+      if (!expectedIds.has(target.id)) memoryMismatches.push(`${project.project_id}/${target.name}:extra`);
+    }
+  }
+
   const membershipMismatches: string[] = [];
   const mapUid = (uid: string) => input.firebaseUidMap?.[uid] ?? uid;
   for (const project of manifest.auth.projects) {
@@ -112,11 +136,12 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
     hash_mismatches: hashMismatches.sort(),
     parse_failures: parseFailures.sort(),
     membership_mismatches: membershipMismatches.sort(),
+    memory_mismatches: memoryMismatches.sort(),
     pat_mismatches: patMismatches.sort(),
     tombstone_mismatches: tombstoneMismatches.sort(),
     ok: missingKeys.length === 0 && extraKeys.length === 0 && hashMismatches.length === 0
       && parseFailures.length === 0 && membershipMismatches.length === 0 && patMismatches.length === 0
-      && tombstoneMismatches.length === 0,
+      && memoryMismatches.length === 0 && tombstoneMismatches.length === 0,
   };
 }
 

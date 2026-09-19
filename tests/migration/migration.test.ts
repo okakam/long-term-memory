@@ -204,7 +204,8 @@ describe('importMigration / verifyMigration', () => {
     }), { mode: 0o600 });
     const objects = new Map<string, string>();
     const markdown = createMarkdownStore(objects);
-    const metadata = new FirestoreMetadataStore(new FakeFirestore());
+    const firestore = new FakeFirestore();
+    const metadata = new FirestoreMetadataStore(firestore);
     const input = {
       manifestPath,
       s3: { markdown, prefix: 'target' },
@@ -226,6 +227,13 @@ describe('importMigration / verifyMigration', () => {
     expect(await metadata.listMembers('demo')).toEqual([{ project_id: 'demo', user_id: 'firebase-owner', role: 'owner' }]);
     expect((await metadata.listTokens('firebase-owner'))).toHaveLength(1);
     await expect(verifyMigration(input)).resolves.toMatchObject({ source_count: 1, target_count: 1, ok: true });
+
+    firestore.documents.delete(`projects/demo/memories/${memory().id}`);
+    firestore.documents.delete('projects/demo/names/migration-note');
+    await expect(verifyMigration(input)).resolves.toMatchObject({
+      ok: false,
+      memory_mismatches: expect.arrayContaining(['demo/migration-note:missing']),
+    });
   });
 
   test('UID mappingがないownerのimportを中断する', async () => {
