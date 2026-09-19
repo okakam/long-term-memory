@@ -15,7 +15,7 @@
 
 | 層 | 正本・役割 |
 |---|---|
-| Cloud Run | Next.js単一コンテナ。Node.js 22、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
+| Cloud Run | Next.js単一コンテナ。Invokerは公開、アプリ層で`AUTH_REQUIRED=1`を強制する。Node.js 22、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
 | Firebase Authentication | Webのemail/password・Google認証。サーバはFirebase Admin SDKでID token/session cookieを検証 |
 | Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hashの永続保存 |
 | S3 | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
@@ -28,6 +28,7 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 
 - ローカルは `AUTH_REQUIRED=0` で匿名開発を許可する。
 - 本番は `AUTH_REQUIRED=1` とし、Firebase session cookieをHttpOnly・SameSite=Lax・Path=/で発行する。
+- Cloud RunのInvoker IAMは公開にし、Firebase session、Firebase ID token、MCP PATによるアプリ層認証を必須にする。Cloud Run IAM認証を重ねるとブラウザのFirebase認証フローを遮断するため採用しない。
 - API routeへ直接ID tokenを送る場合だけ `Authorization: Bearer <Firebase ID token>` を許可する。MCPはFirebase ID tokenではなくMCP PATを使う。
 - PAT本文は発行レスポンスで一度だけ返し、FirestoreにはSHA-256 hash、prefix、所有UID、期限、失効日時だけを保存する。
 - project accessはFirestore membershipで判定する。`__shared__` はread-onlyで、writeはFirebase UIDと `LTM_MAINTENANCE_TOKEN` の二重条件を満たすcuratorだけに限定する。

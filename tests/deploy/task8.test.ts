@@ -55,6 +55,7 @@ test('Cloud Run workflowはPRでruntime secretを使わず低コスト設定でd
   expect(workflow).toContain('docker build');
   expect(workflow).toContain('id-token: write');
   expect(workflow).toContain('--min 0 --max 1 --concurrency 1');
+  expect(workflow).toContain('--allow-unauthenticated');
   expect(workflow).toContain('--cpu 1 --memory 512Mi');
   expect(workflow).toContain('--service-account');
   expect(workflow).toContain('--set-env-vars');

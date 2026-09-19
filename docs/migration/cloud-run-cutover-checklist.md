@@ -19,6 +19,7 @@
 - [ ] Cloud Run用サービスアカウントを作成し、S3アクセスとFirestoreアクセスを最小権限で付与した。
 - [ ] GitHub ActionsはWorkload Identity Federationを使い、長期秘密鍵を登録していない。
 - [ ] Cloud Runは `min=0`、`max=1`、`concurrency=1`、1 vCPU、512 MiBで設定した。
+- [ ] Cloud Run Invokerは公開にし、`AUTH_REQUIRED=1`とFirebase/MCPのアプリ層認証を有効にした。
 - [ ] Firebase AuthenticationでEmail/Passwordと必要なGoogle providerだけを有効化した。
 - [ ] Firebaseのauthorized domainsへ本番ドメインを追加した。
 - [ ] FirestoreをNative modeで作成し、`firestore.rules`をdeployした。

@@ -227,6 +227,8 @@ Firestore transactionは競合時に再試行されるため、Redis lockは不�
     request timeout: 300s
     region: asia-northeast1
 
+Cloud RunのInvoker IAMは公開にし、WebのFirebase認証とMCP PAT認証はアプリ層で実施する。`AUTH_REQUIRED=1`を本番既定値とし、Cloud Run IAM認証を重ねない。
+
 max instancesは費用上限であり、revision切り替え中の一時的な旧revision共存を完全に否定しない。データ整合性はFirestore transactionとS3 immutable objectで守る。
 
 ### 5.3 SecretとIAM
