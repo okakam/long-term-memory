@@ -93,3 +93,33 @@ test('reindexはproject owner以外のmemberには許可しない', async () => 
     expect(response.status).toBe(403);
   } finally { db.close(); }
 });
+
+test('MCPの既定セッションはユーザー間で認証コンテキストを共有しない', async () => {
+  process.env.AUTH_REQUIRED = '1';
+  const { db, store } = await setup();
+  const projectListingService = {
+    listProjects: () => [
+      { id: 'secure-project', count: 1, updated_at: '2026-09-19T00:00:00.000Z', shared: false },
+      { id: 'owner-only-project', count: 1, updated_at: '2026-09-19T00:00:00.000Z', shared: false },
+    ],
+  } as unknown as MemoryService;
+  try {
+    await store.createProject('owner-only-project', 'user-1');
+    await store.addMember('secure-project', 'user-2', 'member');
+    const ownerPat = await createPat('user-1', 'owner');
+    const memberPat = await createPat('user-2', 'member');
+    const request = (token: string, id: number) => handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token },
+      body: JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'list_projects', arguments: {} } }),
+    }), { service: projectListingService });
+
+    const ownerResponse = await request(ownerPat.token, 10);
+    expect(ownerResponse.status).toBe(200);
+    expect((await ownerResponse.json()).result.content[0].text).toContain('owner-only-project');
+
+    const memberResponse = await request(memberPat.token, 11);
+    expect(memberResponse.status).toBe(200);
+    expect((await memberResponse.json()).result.content[0].text).not.toContain('owner-only-project');
+  } finally { db.close(); }
+});

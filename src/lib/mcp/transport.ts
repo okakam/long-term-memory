@@ -18,7 +18,7 @@ export interface McpRequestOptions {
 }
 
 function defaultMode(): McpTransportMode {
-  return 'local-session';
+  return 'stateless';
 }
 
 function jsonResponse(value: unknown, status = 200, request: Request | null = null): Response {
