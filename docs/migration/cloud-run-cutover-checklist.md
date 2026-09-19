@@ -41,6 +41,7 @@
 
 - [ ] 旧UIDからFirebase UIDへの対応表をrepository外で作成し、全owner/memberを網羅した。
 - [ ] `scripts/migration/import-s3-firestore.ts`を実行した。
+- [ ] import前のFirestore document/request/write数preflightが成功した。
 - [ ] import reportのS3 object数、Firestore memory数、membership数、PAT数、tombstone数を記録した。
 - [ ] 同じmanifestを再度importし、重複やhash変更が発生しないことを確認した。
 - [ ] `scripts/migration/verify-migration.ts`を実行した。

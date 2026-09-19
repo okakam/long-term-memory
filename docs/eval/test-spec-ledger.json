@@ -3,7 +3,7 @@
   "source": "tests/**/*.test.ts",
   "runtime": {
     "test_files": 69,
-    "tests": 197,
+    "tests": 198,
     "acceptance_status": "local-green"
   },
   "migration_gates": {
@@ -17,6 +17,6 @@
     "旧Vercel Blob/Tursoはscripts/migrationの一回限りexport専用devDependenciesに限定している",
     "ローカルテストの成功を外部provider接続済みとは扱わない",
     "Cloud Run smoke scriptは主要MCP経路を実行し、renameは公開tool対象外のためCloudMemoryService回帰テストで検証する",
-    "migration verifyはS3本文、Firestore memory metadata、name index、membership、PAT、tombstoneを比較する"
+    "migration verifyはS3本文、Firestore memory metadata、name index、membership、PAT、tombstoneを比較し、importはFirestore上限を事前検査する"
   ]
 }
