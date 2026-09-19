@@ -101,6 +101,27 @@ test('設定したS3 prefixを本文キーに使う', async () => {
   expect([...markdown.objects.keys()][0]).toMatch(/^custom-prefix\/demo\/memories\/prefixed-note\/[a-f0-9]{64}\.md$/);
 });
 
+test('新しいCloud Run instanceは最初のread前にS3からSQLite cacheを再構築する', async () => {
+  const firstIndex = openLocalDb(':memory:');
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const firstService = new CloudMemoryService(Promise.resolve(firstIndex), markdown, metadata, new KeyedMutex(), 'projects');
+  const saved = await firstService.save('demo', {
+    name: 'restart-note',
+    description: 'restart',
+    type: 'reference',
+    body: '再起動後も取得',
+  });
+  firstIndex.close();
+
+  const secondIndex = openLocalDb(':memory:');
+  resources.push(secondIndex);
+  const secondService = new CloudMemoryService(Promise.resolve(secondIndex), markdown, metadata, new KeyedMutex(), 'projects', true);
+  await expect(secondService.get('demo', saved.id)).resolves.toMatchObject({ name: 'restart-note', body: '再起動後も取得' });
+  await expect(secondService.searchFulltext('demo', '再起動後')).resolves.toHaveLength(1);
+});
+
 test('renameはFirestore name indexと参照先を更新する', async () => {
   const index = openLocalDb(':memory:');
   resources.push(index);

@@ -177,6 +177,7 @@ async function deleteIndex(store: IndexStore, projectId: string, memoryId: strin
 
 export class CloudMemoryService {
   private closed = false;
+  private readonly readyPromise: Promise<void>;
 
   constructor(
     private readonly indexPromise: Promise<IndexStore>,
@@ -184,7 +185,12 @@ export class CloudMemoryService {
     private readonly metadata: FirestoreMetadataStore,
     private readonly mutex: KeyedMutex,
     private readonly s3Prefix: string = s3StoragePrefix(),
-  ) {}
+    autoReindex = false,
+  ) {
+    this.readyPromise = autoReindex
+      ? this.indexPromise.then((store) => this.mutex.run(SHARED_PROJECT_ID, () => this.reindexUnlocked(undefined, store)))
+      : Promise.resolve();
+  }
 
   static openDefault(): CloudMemoryService {
     return new CloudMemoryService(
@@ -192,11 +198,14 @@ export class CloudMemoryService {
       createMarkdownStore({ mode: 'cloud' }),
       createFirestoreMetadataStore(),
       new KeyedMutex(),
+      s3StoragePrefix(),
+      true,
     );
   }
 
   private async index(): Promise<IndexStore> {
     if (this.closed) throw new Error('memory service is closed');
+    await this.readyPromise;
     return this.indexPromise;
   }
 
@@ -686,8 +695,8 @@ export class CloudMemoryService {
     await this.reindex(projectId);
   }
 
-  private async reindexUnlocked(projectId?: string): Promise<void> {
-    const store = await this.index();
+  private async reindexUnlocked(projectId?: string, readyStore?: IndexStore): Promise<void> {
+    const store = readyStore ?? await this.index();
     const rootPrefix = this.s3Prefix;
     const objects = await this.markdown.list(rootPrefix + '/');
     const snapshots = new Map<string, { projectId: string; object: StoredObject; raw: string; memory: Memory }>();
