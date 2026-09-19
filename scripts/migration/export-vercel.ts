@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { computeHash } from '@/lib/markdown/file-io';
 import { assertMemoryName, assertProjectId } from '@/lib/slug';
 import type { IndexStore, MarkdownStore } from '@/lib/storage/contracts';
-import { TursoIndexStore } from '@/lib/storage/turso-index';
+import { TursoIndexStore } from './legacy-turso-index';
 import type { MemberRecord, ProjectRecord, TokenRecord } from '@/lib/auth/store';
 import type { TombstoneRecord } from '@/lib/storage/firestore-metadata';
 import { createLegacyVercelBlobStore } from './legacy-vercel-blob';

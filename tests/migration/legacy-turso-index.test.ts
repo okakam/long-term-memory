@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 
-import { openTursoDb } from '@/lib/storage/turso-index';
+import { openTursoDb } from '../../scripts/migration/legacy-turso-index';
 
 const originalUrl = process.env.TURSO_DATABASE_URL;
 const originalToken = process.env.TURSO_AUTH_TOKEN;
