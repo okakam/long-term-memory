@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from 'vitest';
 
+import { computeHash } from '@/lib/markdown/file-io';
+import { serializeMemory, type Memory } from '@/lib/markdown/frontmatter';
 import { openLocalDb } from '@/lib/storage/local-index';
 import { KeyedMutex } from '@/lib/memory/mutex';
 import { FirestoreMetadataStore, type FirestoreDocument, type FirestoreGateway, type FirestoreTransaction } from '@/lib/storage/firestore-metadata';
@@ -149,6 +151,37 @@ test('SQLite cache更新に失敗したsaveはFirestore metadataを残さない'
 
   await expect(metadata.listMemoryIndexes('demo')).resolves.toHaveLength(0);
   expect(markdown.objects.size).toBe(0);
+});
+
+test('reindexはSQLite登録に失敗したmemoryのFirestore metadataを作成しない', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const invalidMemory: Memory = {
+    id: '01J00000000000000000000001',
+    name: 'invalid-reindex',
+    description: '不正なKGを含むmemory',
+    type: 'reference',
+    tags: [],
+    links: [],
+    entities: [],
+    triples: [['missing-subject', 'relates-to', 'missing-object']],
+    supersedes: [],
+    body: '本文',
+    created_at: '2026-09-19T00:00:00.000Z',
+    updated_at: '2026-09-19T00:00:00.000Z',
+  };
+  const raw = serializeMemory(invalidMemory);
+  const key = `projects/demo/memories/${invalidMemory.name}/${computeHash(raw)}.md`;
+  markdown.objects.set(key, { text: raw, updatedAt: new Date() });
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+
+  await service.reindex('demo');
+
+  await expect(metadata.listMemoryIndexes('demo')).resolves.toHaveLength(0);
+  await expect(index.query('SELECT id FROM memories WHERE project_id = ?', ['demo'])).resolves.toHaveLength(0);
 });
 
 test('SQLite cache更新に失敗したupdateはFirestore metadataを旧本文へ戻す', async () => {

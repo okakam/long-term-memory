@@ -848,8 +848,8 @@ export class CloudMemoryService {
         const savepoint = 'cloud_reindex_' + savepointId++;
         try {
           await tx.exec('SAVEPOINT ' + savepoint);
-          await this.metadata.putMemoryIndex(snapshot.projectId, toMemoryIndexRecord(snapshot.projectId, snapshot.object.key, computeHash(snapshot.raw), snapshot.memory));
           await insertMemoryIndex(tx, snapshot.projectId, snapshot.object.key, snapshot.raw, snapshot.memory);
+          await this.metadata.putMemoryIndex(snapshot.projectId, toMemoryIndexRecord(snapshot.projectId, snapshot.object.key, computeHash(snapshot.raw), snapshot.memory));
           await tx.exec('RELEASE SAVEPOINT ' + savepoint);
         } catch {
           await tx.exec('ROLLBACK TO SAVEPOINT ' + savepoint);
