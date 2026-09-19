@@ -6,9 +6,6 @@ FROM ${NODE_IMAGE}
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-ARG PNPM_VERSION=11.1.3
-ARG CODEX_VERSION=0.153.4
-
 ENV DEBIAN_FRONTEND=noninteractive \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     COREPACK_HOME=/pnpm/.corepack \
@@ -39,8 +36,8 @@ RUN apt-get update \
       xz-utils \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
-    && corepack install --global pnpm@${PNPM_VERSION} \
-    && npm install --global @openai/codex@${CODEX_VERSION} \
+    && corepack install --global pnpm \
+    && npm install --global @openai/codex \
     && npm cache clean --force
 
 WORKDIR /workspace
@@ -48,8 +45,6 @@ WORKDIR /workspace
 # named volume を node ユーザーで書き込めるよう、マウント先を先に作る。
 RUN mkdir -p /workspace/node_modules /workspace/.long-term-memory /home/node/.codex /pnpm/.corepack \
     && chown -R node:node /workspace /home/node/.codex /pnpm
-
-USER node
 
 # Turso CLI とローカル libSQL server を node ユーザーの領域へ導入する。
 # 認証はイメージに含めず、コンテナ起動後に `turso auth login` で行う。
