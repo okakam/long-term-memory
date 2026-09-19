@@ -36,6 +36,6 @@
 - Cloud Run/Firebase/S3/Firestore移行の設計・実装計画は `docs/superpowers/specs/2026-09-19-cloud-run-firebase-s3-firestore-design.md` と `docs/superpowers/plans/2026-09-19-cloud-run-firebase-s3-firestore-migration.md` を正本とする。
 - Cloud Run用S3 Markdown adapter、Firestore metadata/auth store、`/tmp` SQLite cache、Firebase ID token/session cookie、API認可、Cloud Run workflow/smoke、移行export/import/verifyを実装済み。
 - production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote service、永続telemetry DBを削除した。旧Vercel Blob/Tursoは移行export専用のdevDependenciesと `scripts/migration/` に限定して残す。
-- ローカル検証時点で全テスト 69 files・191 tests、lint、型検査、`NODE_ENV=production pnpm build` を通過する。Cloud Run/Firebase/AWSの実環境smoke、実データexport/import/verify、旧Vercel Project削除は外部資格情報が必要な未完了ゲートである。
+- ローカル検証時点で全テスト 69 files・193 tests、lint、型検査、`NODE_ENV=production pnpm build` を通過する。Cloud Run/Firebase/AWSの実環境smoke、実データexport/import/verify、旧Vercel Project削除は外部資格情報が必要な未完了ゲートである。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
