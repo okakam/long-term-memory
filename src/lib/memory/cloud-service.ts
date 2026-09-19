@@ -19,7 +19,12 @@ import { assertMemoryName, assertProjectId, isReservedProjectId, isValidSlug, SH
 import { memoryObjectKey as s3MemoryObjectKey, s3StoragePrefix } from '@/lib/storage/s3-markdown';
 import { createMarkdownStore } from '@/lib/storage/factory';
 import type { IndexStore, MarkdownStore, StoredObject } from '@/lib/storage/contracts';
-import { createFirestoreMetadataStore, type FirestoreMetadataStore, type MemoryIndexRecord } from '@/lib/storage/firestore-metadata';
+import {
+  createFirestoreMetadataStore,
+  type FirestoreMetadataStore,
+  type MemoryIndexRecord,
+  type TombstoneRecord,
+} from '@/lib/storage/firestore-metadata';
 import { openEphemeralIndex } from '@/lib/storage/sqlite-index';
 import { rerank } from '@/lib/memory/rerank';
 
@@ -506,11 +511,17 @@ export class CloudMemoryService {
       id: reference.row.id,
       key: reference.row.file_path,
     }))];
+    const tombstones: TombstoneRecord[] = oldObjects.map((oldObject) => ({
+      project_id: project,
+      memory_id: oldObject.id,
+      content_key: oldObject.key,
+      deleted_at: nowIso(),
+    }));
     try {
       await this.metadata.replaceMemoryIndexes(project, old, [
         toMemoryIndexRecord(project, key, contentHash, updated),
         ...references.map((reference) => toMemoryIndexRecord(project, reference.key, reference.hash, reference.memory)),
-      ]);
+      ], tombstones);
       await store.transaction(async (tx) => {
         const currentRow = await selectRow(tx, project, old);
         if (!currentRow) throw new MemoryNotFoundError(oldName);
@@ -538,9 +549,9 @@ export class CloudMemoryService {
           await insertFts(tx, reference.memory);
         }
 
-        for (const oldObject of oldObjects) {
+        for (const tombstone of tombstones) {
           await tx.exec('INSERT OR REPLACE INTO memory_tombstones (project_id, memory_id, file_path, deleted_at) VALUES (?, ?, ?, ?)',
-            [project, oldObject.id, oldObject.key, nowIso()]);
+            [project, tombstone.memory_id, tombstone.content_key, tombstone.deleted_at]);
         }
       });
     } catch (error) {
@@ -551,6 +562,7 @@ export class CloudMemoryService {
     for (const oldObject of oldObjects) {
       try {
         await this.markdown.remove(oldObject.key);
+        await this.metadata.clearTombstone(project, oldObject.key);
         await store.transaction((tx) => tx.exec('DELETE FROM memory_tombstones WHERE project_id = ? AND file_path = ?', [project, oldObject.key]));
       } catch {
         // Tombstone remains until a later cleanup removes the old S3 object.

@@ -412,7 +412,12 @@ export class FirestoreMetadataStore {
     });
   }
 
-  async replaceMemoryIndexes(projectId: string, oldName: string, records: MemoryIndexRecord[]): Promise<void> {
+  async replaceMemoryIndexes(
+    projectId: string,
+    oldName: string,
+    records: MemoryIndexRecord[],
+    tombstones: TombstoneRecord[] = [],
+  ): Promise<void> {
     const project = projectPath(projectId);
     const oldNamePath = documentPath(namesPath(projectId), nameDocumentId(oldName));
     const names = records.map((record) => ({
@@ -441,6 +446,12 @@ export class FirestoreMetadataStore {
           content_hash: item.record.content_hash,
         });
       }
+      for (const tombstone of tombstones) {
+        await transaction.set(
+          documentPath(tombstonesPath(projectId), tombstoneDocumentId(tombstone.content_key)),
+          { ...tombstone },
+        );
+      }
       const updatedAt = records.reduce((latest, record) => latest > record.updated_at ? latest : record.updated_at, currentProject.updated_at);
       await transaction.set(project, { revision: currentProject.revision + 1, updated_at: updatedAt }, true);
     });
@@ -463,6 +474,10 @@ export class FirestoreMetadataStore {
   async listTombstones(projectId: string): Promise<TombstoneRecord[]> {
     const documents = await this.gateway.list(tombstonesPath(projectId));
     return documents.filter((document) => document.exists).map(tombstoneRecord);
+  }
+
+  async clearTombstone(projectId: string, contentKey: string): Promise<void> {
+    await this.gateway.delete(documentPath(tombstonesPath(projectId), tombstoneDocumentId(contentKey)));
   }
 
   async isTombstoned(projectId: string, contentKey: string): Promise<boolean> {

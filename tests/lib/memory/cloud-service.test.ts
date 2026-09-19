@@ -28,6 +28,7 @@ class FakeFirestore implements FirestoreGateway {
 
 class FakeMarkdownStore implements MarkdownStore {
   readonly objects = new Map<string, { text: string; updatedAt: Date }>();
+  readonly removeFailures = new Set<string>();
   async read(key: string): Promise<string> {
     const object = this.objects.get(key);
     if (!object) throw new Error(`missing object: ${key}`);
@@ -38,7 +39,10 @@ class FakeMarkdownStore implements MarkdownStore {
     this.objects.set(key, { text, updatedAt });
     return { key, size: Buffer.byteLength(text), updatedAt };
   }
-  async remove(key: string): Promise<void> { this.objects.delete(key); }
+  async remove(key: string): Promise<void> {
+    if (this.removeFailures.has(key)) throw new Error(`remove failed: ${key}`);
+    this.objects.delete(key);
+  }
   async list(prefix: string): Promise<StoredObject[]> {
     return [...this.objects.entries()]
       .filter(([key]) => key.startsWith(prefix))
@@ -149,4 +153,36 @@ test('renameはFirestore name indexと参照先を更新する', async () => {
   await expect(metadata.getNameIndex('demo', 'old-name')).resolves.toBeNull();
   await expect(metadata.getNameIndex('demo', 'new-name')).resolves.toMatchObject({ name: 'new-name' });
   await expect(service.get('demo', reference.id)).resolves.toMatchObject({ links: ['new-name'] });
+});
+
+test('renameで旧S3 objectの削除に失敗した場合もFirestore tombstoneを残す', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+
+  await service.save('demo', { name: 'old-name', description: 'old', type: 'reference', body: '対象' });
+  const oldKey = [...markdown.objects.keys()][0];
+  markdown.removeFailures.add(oldKey);
+
+  await service.rename('demo', 'old-name', 'new-name');
+
+  await expect(metadata.isTombstoned('demo', oldKey)).resolves.toBe(true);
+});
+
+test('renameで旧S3 objectの削除に成功した場合はFirestore tombstoneを消す', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+
+  await service.save('demo', { name: 'old-name', description: 'old', type: 'reference', body: '対象' });
+  const oldKey = [...markdown.objects.keys()][0];
+  await service.rename('demo', 'old-name', 'new-name');
+
+  await expect(metadata.isTombstoned('demo', oldKey)).resolves.toBe(false);
 });
