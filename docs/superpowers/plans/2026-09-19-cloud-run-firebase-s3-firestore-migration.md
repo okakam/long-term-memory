@@ -12,7 +12,7 @@
 
 ## 実装進捗（2026-09-19）
 
-Task 1〜8の主要実装、Task 9のfake targetによる冪等import/verify、Task 7の旧runtime整理まで完了している。ローカルでは全テスト・lint・型検査・production buildが通過している。実AWS/Firebase/GCP接続、実データ移行verify、Cloud Run smoke、旧Vercel Project削除は外部資格情報が必要な未完了ゲートであり、これらを確認するまで旧移行用credentialとdevDependenciesは削除しない。
+Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、tombstone移行、旧runtime整理まで完了している。対応するコミットは `4251c82`、`9772f3b`、`6c9f38e`、`97acc9b`、`fb5a3c3`、`97beff3`、`bd31e2a`、`2cc330c`、`dc2d1a1`、`b95e897`、`d45bb54`、`897b836`、`4ad17a5` である。ローカルでは全テスト・lint・型検査・production buildが通過している。実AWS/Firebase/GCP接続、実データ移行verify、Cloud Run smoke、旧Vercel Project削除は外部資格情報が必要な未完了ゲートであり、これらを確認するまで旧移行用credentialとdevDependenciesは削除しない。最終受け入れは `docs/migration/cloud-run-cutover-checklist.md` に記録する。
 
 ## 全体制約
 
@@ -102,7 +102,13 @@ Task 1〜8の主要実装、Task 9のfake targetによる冪等import/verify、T
             key: string,
             content_hash: string,
             local_path: string
-          }>
+        }>
+      }>,
+        tombstones: Array<{
+          project_id: string,
+          memory_id: string,
+          content_key: string,
+          deleted_at: string
         }>,
         auth: {
           projects: Array<ProjectRecord>,
