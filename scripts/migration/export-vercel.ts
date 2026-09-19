@@ -6,9 +6,9 @@ import { pathToFileURL } from 'node:url';
 import { computeHash } from '@/lib/markdown/file-io';
 import { assertMemoryName, assertProjectId } from '@/lib/slug';
 import type { IndexStore, MarkdownStore } from '@/lib/storage/contracts';
-import { createMarkdownStore } from '@/lib/storage/factory';
 import { TursoIndexStore } from '@/lib/storage/turso-index';
 import type { MemberRecord, ProjectRecord, TokenRecord } from '@/lib/auth/store';
+import { createLegacyVercelBlobStore } from './legacy-vercel-blob';
 
 interface MemoryRow {
   id: string;
@@ -94,7 +94,7 @@ export async function exportVercelData(options: ExportVercelOptions): Promise<Mi
   const outputDir = resolve(options.outputDir);
   secureDirectory(outputDir);
 
-  const markdown = options.markdownStore ?? createMarkdownStore({ mode: 'vercel', blobToken: options.blobToken });
+    const markdown = options.markdownStore ?? createLegacyVercelBlobStore(options.blobToken);
   const memoryConnection = options.memoryDb ? null : openLegacyDb(options.memoryDbUrl, options.memoryDbToken);
   const authConnection = options.authDb ? null : openLegacyDb(options.authDbUrl, options.authDbToken);
   const memoryDb = options.memoryDb ?? memoryConnection!.store;

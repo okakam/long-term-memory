@@ -44,7 +44,7 @@ async function call(service: MemoryService, name: string, arguments_: object, pr
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: name, method: 'tools/call', params: { name, arguments: arguments_ } }),
     },
-  ), { mode: 'vercel-stateless', service });
+  ), { mode: 'stateless', service });
   const body = await response.json() as { result: { content: Array<{ text: string }>; isError?: boolean } };
   if (!body.result?.content?.[0]) throw new Error('missing MCP result');
   return { response, body, value: JSON.parse(body.result.content[0].text) as unknown };

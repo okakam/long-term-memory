@@ -1,4 +1,4 @@
-export type StorageMode = 'local' | 'vercel' | 'cloud';
+export type StorageMode = 'local' | 'cloud';
 export interface StoredObject {
   key: string;
   size: number;
@@ -27,6 +27,6 @@ export interface IndexStore {
 }
 export function resolveStorageMode(): StorageMode {
   const mode = process.env.LTM_STORAGE_DRIVER ?? 'local';
-  if (mode === 'local' || mode === 'vercel' || mode === 'cloud') return mode;
-  throw new Error('LTM_STORAGE_DRIVER must be local, vercel, or cloud');
+  if (mode === 'local' || mode === 'cloud') return mode;
+  throw new Error('LTM_STORAGE_DRIVER must be local or cloud');
 }

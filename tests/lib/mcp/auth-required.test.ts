@@ -36,7 +36,7 @@ test('AUTH_REQUIRED=1 の MCP は PAT と membership を要求する', async () 
   try {
     const missing = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
       method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-    }), { mode: 'vercel-stateless', service });
+    }), { mode: 'stateless', service });
     expect(missing.status).toBe(401);
 
     const pat = await createPat('user-1', 'test');
@@ -44,7 +44,7 @@ test('AUTH_REQUIRED=1 の MCP は PAT と membership を要求する', async () 
       method: 'POST',
       headers: { authorization: 'Bearer ' + pat.token },
       body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
-    }), { mode: 'vercel-stateless', service });
+    }), { mode: 'stateless', service });
     expect(allowed.status).toBe(200);
   } finally { db.close(); }
 });
@@ -65,7 +65,7 @@ test('共有書き込みは curator principal と maintenance token の二重条
         name: 'remember_user_fact',
         arguments: { name: 'shared-memory', description: 'd', body: 'b', entities: [{ name: 'Entity' }] },
       } }),
-    }), { mode: 'vercel-stateless', service });
+    }), { mode: 'stateless', service });
     process.env.LTM_MAINTENANCE_TOKEN = 'maintenance';
     const denied = await request('wrong');
     expect(denied.status).toBe(403);
@@ -89,7 +89,7 @@ test('reindexはproject owner以外のmemberには許可しない', async () => 
         jsonrpc: '2.0', id: 4, method: 'tools/call',
         params: { name: 'reindex', arguments: {} },
       }),
-    }), { mode: 'vercel-stateless', service });
+    }), { mode: 'stateless', service });
     expect(response.status).toBe(403);
   } finally { db.close(); }
 });

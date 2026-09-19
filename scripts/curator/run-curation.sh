@@ -67,7 +67,7 @@ if [[ "$MODE" == "remote" ]]; then
     exit 1
   fi
   WORK_DIR="$(cd -- "$(dirname -- "$SNAPSHOT")" && pwd -P)"
-  MCP_CONFIG="${LTM_CURATOR_MCP_CONFIG:-$REPO_ROOT/docs/mcp-config.vercel.json}"
+  MCP_CONFIG="${LTM_CURATOR_MCP_CONFIG:-$REPO_ROOT/docs/mcp-config.cloud-run.json}"
 else
   if [[ -z "$STORE" || ! -d "$STORE" ]]; then
     echo "local curator requires an existing LTM_STORE" >&2

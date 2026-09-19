@@ -8,7 +8,7 @@ const service = {
   listProjects: () => [],
 } as unknown as MemoryService;
 
-async function call(message: object, mode: 'local-session' | 'vercel-stateless' = 'vercel-stateless') {
+async function call(message: object, mode: 'local-session' | 'stateless' = 'stateless') {
   return handleMcpRequest(new Request('https://example.test/api/mcp?project_id=stateless', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -78,7 +78,7 @@ test('tool response timeout は HTTP 200 の JSON-RPC -32000 を返す', async (
         name: 'timeout-memory', description: 'desc', body: 'body', entities: [{ name: 'Entity' }],
       } },
     }),
-  }), { mode: 'vercel-stateless', service: hanging, timeoutMs: 10 });
+  }), { mode: 'stateless', service: hanging, timeoutMs: 10 });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ id: 99, error: { code: -32000, message: 'timeout waiting for MCP response' } });
 });
