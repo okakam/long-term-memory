@@ -411,6 +411,40 @@ export class FirestoreMetadataStore {
     });
   }
 
+  async replaceMemoryIndexes(projectId: string, oldName: string, records: MemoryIndexRecord[]): Promise<void> {
+    const project = projectPath(projectId);
+    const oldNamePath = documentPath(namesPath(projectId), nameDocumentId(oldName));
+    const names = records.map((record) => ({
+      record,
+      memory: documentPath(memoriesPath(projectId), record.id),
+      name: documentPath(namesPath(projectId), nameDocumentId(record.name)),
+    }));
+    await this.gateway.runTransaction(async (transaction) => {
+      const projectDocument = await transaction.get(project);
+      if (!projectDocument.exists) throw new Error(`project not found: ${projectId}`);
+      const currentProject = projectRecord(projectDocument);
+      for (const item of names) {
+        const existingName = await transaction.get(item.name);
+        if (existingName.exists) {
+          const existing = nameRecord(existingName);
+          if (existing.memory_id !== item.record.id) throw new MemoryConflictError('memory name already exists');
+        }
+      }
+      if (!names.some((item) => item.name === oldNamePath)) await transaction.delete(oldNamePath);
+      for (const item of names) {
+        await transaction.set(item.memory, memoryData(item.record));
+        await transaction.set(item.name, {
+          memory_id: item.record.id,
+          name: item.record.name,
+          content_key: item.record.content_key,
+          content_hash: item.record.content_hash,
+        });
+      }
+      const updatedAt = records.reduce((latest, record) => latest > record.updated_at ? latest : record.updated_at, currentProject.updated_at);
+      await transaction.set(project, { revision: currentProject.revision + 1, updated_at: updatedAt }, true);
+    });
+  }
+
   async deleteMemoryIndex(projectId: string, memoryId: string, tombstone: TombstoneRecord): Promise<void> {
     const memory = documentPath(memoriesPath(projectId), memoryId);
     const tombstonePath = documentPath(tombstonesPath(projectId), tombstoneDocumentId(tombstone.content_key));
