@@ -1,0 +1,62 @@
+name: cloud-run
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22
+  PNPM_VERSION: 11.1.3
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm lint
+      - run: NODE_ENV=production pnpm build
+      - run: docker build --tag long-term-memory:test .
+
+  deploy:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: |
+          gcloud run deploy long-term-memory \
+            --source . \
+            --region asia-northeast1 \
+            --min 0 --max 1 --concurrency 1 \
+            --cpu 1 --memory 512Mi --timeout 300
+      - name: Cloud Run smoke
+        env:
+          CLOUD_RUN_URL: ${{ secrets.CLOUD_RUN_URL }}
+          LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
+          LTM_SMOKE_PROJECT_ID: smoke
+        run: |
+          corepack enable
+          pnpm dlx tsx scripts/cloud-run-smoke.ts
