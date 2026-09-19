@@ -13,6 +13,8 @@
 - [x] `NODE_ENV=production pnpm build` が成功した。
 - [ ] `docker build` とコンテナhealth checkを実行した。Docker未導入環境では未実行として記録する。
 
+補足（2026-09-19）: `docker compose -f .devcontainer/compose.yaml config --quiet` とDocker buildは、実行環境にDocker CLIがないため未実行。`pnpm test`（69 files・198 tests）、lint、型検査、本番build、`git diff --check`は成功。
+
 ## 2. GCP、Firebase、S3の準備
 
 - [ ] GCPプロジェクト、Cloud Run API、Artifact Registry API、Firestore APIを有効化した。
