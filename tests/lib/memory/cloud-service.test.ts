@@ -22,7 +22,8 @@ class FakeFirestore implements FirestoreGateway {
     return fn({ get: (path) => this.get(path), set: (path, data, merge) => this.set(path, data, merge), update: (path, data) => this.update(path, data), delete: (path) => this.delete(path) });
   }
   private snapshot(path: string): FirestoreDocument {
-    return { id: path.split('/').at(-1)!, path, exists: this.documents.has(path), data: () => this.documents.get(path) };
+    const data = this.documents.get(path);
+    return { id: path.split('/').at(-1)!, path, exists: data !== undefined, data: () => data };
   }
 }
 
@@ -164,6 +165,30 @@ test('SQLite cache更新に失敗したupdateはFirestore metadataを旧本文�
 
   await expect(metadata.getMemoryIndex('demo', saved.id)).resolves.toMatchObject({ content_key: oldKey, content_hash: expect.any(String) });
   expect([...markdown.objects.keys()]).toEqual([oldKey]);
+});
+
+test('SQLite cache削除に失敗したforgetはFirestore metadataを復元する', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const firstService = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+  const saved = await firstService.save('demo', {
+    name: 'forget-rollback',
+    description: 'before',
+    type: 'reference',
+    body: '削除前',
+  });
+  const oldKey = [...markdown.objects.keys()][0];
+
+  const failingService = new CloudMemoryService(Promise.resolve(new FailingTransactionIndex(index)), markdown, metadata, new KeyedMutex(), 'projects');
+  await expect(failingService.forget('demo', saved.id)).rejects.toThrow('cache transaction failed');
+
+  await expect(metadata.getMemoryIndex('demo', saved.id)).resolves.toMatchObject({ content_key: oldKey });
+  await expect(metadata.isTombstoned('demo', oldKey)).resolves.toBe(false);
+  await expect(failingService.get('demo', saved.id)).resolves.toMatchObject({ body: '削除前' });
+  expect(markdown.objects.has(oldKey)).toBe(true);
 });
 
 test('新しいCloud Run instanceは最初のread前にS3からSQLite cacheを再構築する', async () => {

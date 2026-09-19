@@ -462,13 +462,32 @@ export class CloudMemoryService {
     const store = await this.index();
     const row = await selectRow(store, project, idOrName);
     if (!row) throw new MemoryNotFoundError(idOrName);
-    await this.metadata.deleteMemoryIndex(project, row.id, {
+    const current = parseMemoryString(await this.markdown.read(row.file_path));
+    const previousRecord = toMemoryIndexRecord(project, row.file_path, row.content_hash, current);
+    const tombstone = {
       project_id: project,
       memory_id: row.id,
       content_key: row.file_path,
       deleted_at: nowIso(),
-    });
-    await store.transaction(async (tx) => deleteIndex(tx, project, row.id));
+    };
+    let metadataCommitted = false;
+    try {
+      await this.metadata.deleteMemoryIndex(project, row.id, tombstone);
+      metadataCommitted = true;
+      await store.transaction(async (tx) => deleteIndex(tx, project, row.id));
+    } catch (error) {
+      if (metadataCommitted) {
+        try {
+          await this.metadata.restoreMemoryIndex(project, previousRecord, {
+            content_key: row.file_path,
+            content_hash: row.content_hash,
+          });
+        } catch (rollbackError) {
+          throw new AggregateError([error, rollbackError], 'forget compensation failed');
+        }
+      }
+      throw error;
+    }
     try {
       await this.markdown.remove(row.file_path);
     } catch {

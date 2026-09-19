@@ -456,10 +456,34 @@ export class FirestoreMetadataStore {
     const project = projectPath(projectId);
     const memory = documentPath(memoriesPath(projectId), record.id);
     const previousName = documentPath(namesPath(projectId), nameDocumentId(record.name));
+    const tombstone = documentPath(tombstonesPath(projectId), tombstoneDocumentId(record.content_key));
     await this.gateway.runTransaction(async (transaction) => {
       const projectDocument = await transaction.get(project);
       const memoryDocument = await transaction.get(memory);
-      if (!memoryDocument.exists) return;
+      const tombstoneDocument = await transaction.get(tombstone);
+      if (!memoryDocument.exists) {
+        if (!tombstoneDocument.exists) return;
+        const currentTombstone = tombstoneRecord(tombstoneDocument);
+        if (currentTombstone.memory_id !== record.id || currentTombstone.content_key !== record.content_key) return;
+        const previousNameDocument = await transaction.get(previousName);
+        if (previousNameDocument.exists) {
+          const existing = nameRecord(previousNameDocument);
+          if (existing.memory_id !== record.id) throw new MemoryConflictError('memory name already exists');
+        }
+        await transaction.set(memory, memoryData(record));
+        await transaction.set(previousName, {
+          memory_id: record.id,
+          name: record.name,
+          content_key: record.content_key,
+          content_hash: record.content_hash,
+        });
+        await transaction.delete(tombstone);
+        if (projectDocument.exists) {
+          const currentProject = projectRecord(projectDocument);
+          await transaction.set(project, { revision: currentProject.revision + 1 }, true);
+        }
+        return;
+      }
       const current = memoryRecord(memoryDocument);
       if (current.content_key !== expected.content_key || current.content_hash !== expected.content_hash) return;
       const currentName = documentPath(namesPath(projectId), nameDocumentId(current.name));
