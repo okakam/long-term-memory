@@ -375,6 +375,13 @@ export class FirestoreMetadataStore {
     return documents.filter((document) => document.exists).map(memberRecord).sort((left, right) => left.user_id.localeCompare(right.user_id));
   }
 
+  async listProjects(): Promise<FirestoreProjectRecord[]> {
+    return (await this.gateway.list('projects'))
+      .filter((document) => document.exists)
+      .map(projectRecord)
+      .sort((left, right) => left.project_id.localeCompare(right.project_id));
+  }
+
   async getMemoryIndex(projectId: string, memoryId: string): Promise<MemoryIndexRecord | null> {
     const document = await this.gateway.get(documentPath(memoriesPath(projectId), memoryId));
     return document.exists ? memoryRecord(document) : null;
@@ -699,6 +706,13 @@ export class FirestoreMetadataStore {
       void token_hash;
       return token;
     });
+  }
+
+  async listTokenHashes(): Promise<Array<Pick<TokenRecord, 'id' | 'user_id' | 'token_hash'>>> {
+    return (await this.gateway.list('mcpTokens'))
+      .filter((document) => document.exists)
+      .map(tokenRecord)
+      .map(({ id, user_id, token_hash }) => ({ id, user_id, token_hash }));
   }
 }
 

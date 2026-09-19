@@ -94,18 +94,33 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
 
   const membershipMismatches: string[] = [];
   const mapUid = (uid: string) => input.firebaseUidMap?.[uid] ?? uid;
+  const expectedProjectIds = new Set(manifest.auth.projects.map((project) => project.project_id));
+  for (const project of await input.firestore.metadata.listProjects()) {
+    if (!expectedProjectIds.has(project.project_id)) membershipMismatches.push(`${project.project_id}:project:extra`);
+  }
   for (const project of manifest.auth.projects) {
     const target = await input.firestore.metadata.getProject(project.project_id);
     if (!target || target.owner_user_id !== mapUid(project.owner_user_id)) membershipMismatches.push(`${project.project_id}:owner`);
-    for (const member of manifest.auth.members.filter((item) => item.project_id === project.project_id)) {
-      const targetMember = await input.firestore.metadata.getMembership(project.project_id, mapUid(member.user_id));
+    const expectedMembers = manifest.auth.members.filter((item) => item.project_id === project.project_id);
+    const targetMembers = await input.firestore.metadata.listMembers(project.project_id);
+    const targetMembersByUser = new Map(targetMembers.map((member) => [member.user_id, member]));
+    for (const member of expectedMembers) {
+      const targetMember = targetMembersByUser.get(mapUid(member.user_id));
       if (!targetMember || targetMember.role !== member.role) membershipMismatches.push(`${project.project_id}:member:${member.user_id}`);
+    }
+    const expectedMemberIds = new Set(expectedMembers.map((member) => mapUid(member.user_id)));
+    for (const member of targetMembers) {
+      if (!expectedMemberIds.has(member.user_id)) membershipMismatches.push(`${project.project_id}:member:${member.user_id}:extra`);
     }
   }
   const patMismatches: string[] = [];
+  const expectedTokenIds = new Set(manifest.auth.tokens.map((token) => token.id));
   for (const token of manifest.auth.tokens) {
     const target = await input.firestore.metadata.findTokenByHash(token.token_hash);
-    if (!target || target.id !== token.id) patMismatches.push(token.id);
+    if (!target || target.id !== token.id || target.user_id !== mapUid(token.user_id)) patMismatches.push(token.id);
+  }
+  for (const token of await input.firestore.metadata.listTokenHashes()) {
+    if (!expectedTokenIds.has(token.id)) patMismatches.push(`${token.id}:extra`);
   }
   const tombstoneMismatches: string[] = [];
   const expectedTombstones = new Map(

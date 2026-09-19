@@ -228,6 +228,25 @@ describe('importMigration / verifyMigration', () => {
     expect((await metadata.listTokens('firebase-owner'))).toHaveLength(1);
     await expect(verifyMigration(input)).resolves.toMatchObject({ source_count: 1, target_count: 1, ok: true });
 
+    await metadata.addMember('demo', 'firebase-extra', 'member');
+    await metadata.insertToken({
+      id: 'extra-token',
+      user_id: 'firebase-owner',
+      token_hash: 'extra-hash',
+      token_prefix: 'ltm_extra',
+      label: 'extra',
+      audience: 'mcp',
+      created_at: memory().created_at,
+      last_used_at: null,
+      expires_at: null,
+      revoked_at: null,
+    });
+    await expect(verifyMigration(input)).resolves.toMatchObject({
+      ok: false,
+      membership_mismatches: expect.arrayContaining(['demo:member:firebase-extra:extra']),
+      pat_mismatches: expect.arrayContaining(['extra-token:extra']),
+    });
+
     firestore.documents.delete(`projects/demo/memories/${memory().id}`);
     firestore.documents.delete('projects/demo/names/migration-note');
     await expect(verifyMigration(input)).resolves.toMatchObject({
