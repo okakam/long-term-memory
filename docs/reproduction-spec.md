@@ -67,7 +67,7 @@ SQLiteは `/tmp/long-term-memory/index.db` に作成し、WAL、foreign key、FT
 - `/api/auth/session`: Firebase ID tokenを短期session cookieへ交換。余計なquery parameterは拒否。
 - `/api/projects`、`/api/projects/:id/members`、`/api/auth/tokens`、`/api/memories/:id`: Firebase principalとFirestore membershipをservice呼び出し前に検証する。
 - `/api/mcp`: requestごとにPAT、project access、shared maintenance条件を検証する。認証主体やproject stateをmodule globalへ保存しない。
-- Web UIは `/sign-in` と `/sign-up` をpublicにし、Firebase client SDKのemail/password・Google providerを使う。共有scopeでは編集・削除を表示しない。
+- Web UIは `/sign-in` と `/sign-up` をpublicにし、Firebase client SDKのemail/password・Google providerを使う。Firebase公開設定は `/api/auth/config` からno-storeで取得でき、client bundleへ秘密値を埋め込まない。共有scopeでは編集・削除を表示しない。
 
 MCP toolsは次の16個を維持する。
 
@@ -87,7 +87,7 @@ exportのtemporary output、UID map、manifest、PATやprovider credentialはrep
 
 ## 8. CI/CD
 
-`.github/workflows/cloud-run.yml` はPRでtest・lint・production build・Docker buildだけを実行し、runtime secretを渡さない。mainまたはmanual dispatchだけがWorkload Identity Federationでdeployする。
+`.github/workflows/cloud-run.yml` はPRでtest・lint・production build・Docker buildだけを実行し、runtime secretを渡さない。mainまたはmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` をGitHub Environment secretから読み、非秘密のFirebase/S3設定はEnvironment variables、AWS keyとmaintenance tokenはSecret Manager secret参照でCloud Runへ注入する。
 
 deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase/S3 secretはproduction environmentからsmokeへ渡し、ログへ出力しない。
 

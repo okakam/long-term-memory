@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
+import { GET as GETConfig } from '@/app/api/auth/config/route';
 import { POST, DELETE } from '@/app/api/auth/session/route';
 import { setFirebaseAuthForTests, type FirebaseAdminAuth } from '@/lib/auth/firebase';
 
@@ -51,4 +52,35 @@ test('DELETEでsession cookieを消去する', async () => {
   const response = await DELETE(new Request('https://example.test/api/auth/session', { method: 'DELETE' }));
   expect(response.status).toBe(204);
   expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+});
+
+test('Firebase client config endpointは公開設定だけをno-storeで返す', async () => {
+  const keys = [
+    'NEXT_PUBLIC_FIREBASE_API_KEY',
+    'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+    'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+    'NEXT_PUBLIC_FIREBASE_APP_ID',
+  ] as const;
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY = 'public-api-key';
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN = 'example.firebaseapp.com';
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID = 'firebase-project';
+    process.env.NEXT_PUBLIC_FIREBASE_APP_ID = 'app-id';
+    const response = await GETConfig(new Request('https://example.test/api/auth/config'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    await expect(response.json()).resolves.toEqual({
+      apiKey: 'public-api-key',
+      authDomain: 'example.firebaseapp.com',
+      projectId: 'firebase-project',
+      appId: 'app-id',
+    });
+  } finally {
+    for (const key of keys) {
+      const value = previous[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });

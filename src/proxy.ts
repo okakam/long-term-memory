@@ -7,6 +7,7 @@ const publicPaths = [
   /^\/sign-in(?:\/|$)/,
   /^\/sign-up(?:\/|$)/,
   /^\/api\/auth\/session$/,
+  /^\/api\/auth\/config$/,
   /^\/api\/health$/,
   /^\/_next(?:\/|$)/,
 ];

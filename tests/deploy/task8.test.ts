@@ -54,6 +54,12 @@ test('Cloud Run workflowはPRでruntime secretを使わず低コスト設定でd
   expect(workflow).toContain('id-token: write');
   expect(workflow).toContain('--min 0 --max 1 --concurrency 1');
   expect(workflow).toContain('--cpu 1 --memory 512Mi');
+  expect(workflow).toContain('--service-account');
+  expect(workflow).toContain('--set-env-vars');
+  expect(workflow).toContain('LTM_STORAGE_DRIVER=cloud');
+  expect(workflow).toContain('NEXT_PUBLIC_FIREBASE_API_KEY');
+  expect(workflow).toContain('--set-secrets');
+  expect(workflow).toContain('AWS_ACCESS_KEY_ID');
   const verify = workflow.slice(0, workflow.indexOf('  deploy:'));
   expect(verify).not.toContain('secrets.');
 });
@@ -66,4 +72,5 @@ test('Firebase/Firestore設定とCloud Run smokeをリポジトリ内に用意�
   expect(read('src/app/api/health/route.ts')).toContain("service: 'long-term-memory'");
   expect(read('scripts/cloud-run-smoke.ts')).toContain('tools/list');
   expect(read('scripts/cloud-run-smoke.ts')).toContain('CLOUD_RUN_URL');
+  expect(existsSync(resolve(root, 'src/app/api/auth/config/route.ts'))).toBe(true);
 });
