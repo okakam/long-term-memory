@@ -1,4 +1,4 @@
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { listPats } from '@/lib/auth/pat';
 
 export const runtime = 'nodejs';

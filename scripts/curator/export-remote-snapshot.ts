@@ -43,7 +43,6 @@ export interface RemoteSnapshotOptions {
   token: string;
   scopeProjectId?: string;
   maxMemories?: number;
-  protectionBypassSecret?: string;
   fetcher?: typeof fetch;
 }
 
@@ -51,7 +50,7 @@ const SECRET_PATTERNS = [
   /Bearer\s+[A-Za-z0-9._~+\/-]{8,}/gi,
   /\b(?:sk|pk|ltm)_[A-Za-z0-9_-]{12,}\b/gi,
   /\b(?:api[_-]?key|secret|password|token)\s*[:=]\s*[^\s]+/gi,
-  /\b(?:TURSO_AUTH_TOKEN|BLOB_READ_WRITE_TOKEN|UPSTASH_REDIS_REST_TOKEN|CLERK_SECRET_KEY|LTM_MAINTENANCE_TOKEN)\s*=\s*[^\s]+/gi,
+  /\b(?:LTM_MCP_TOKEN|LTM_MAINTENANCE_TOKEN|AWS_SECRET_ACCESS_KEY|FIREBASE_PRIVATE_KEY)\s*=\s*[^\s]+/gi,
 ];
 
 function redact(value: unknown): string {
@@ -147,7 +146,6 @@ async function call(
   method: string,
   params: object,
   fetcher: typeof fetch,
-  protectionBypassSecret?: string,
 ): Promise<unknown> {
   const response = await fetcher(
     baseUrl.replace(/\/+$/, '') + '/api/mcp?project_id=' + encodeURIComponent(projectId),
@@ -156,7 +154,6 @@ async function call(
       headers: {
         authorization: 'Bearer ' + token,
         'content-type': 'application/json',
-        ...(protectionBypassSecret ? { 'x-vercel-protection-bypass': protectionBypassSecret } : {}),
       },
       body: JSON.stringify({ jsonrpc: '2.0', id: randomUUID(), method, params }),
     },
@@ -172,20 +169,20 @@ export async function fetchRemoteSnapshot(options: RemoteSnapshotOptions): Promi
   const projects = await call(options.baseUrl, scopeProjectId, options.token, 'tools/call', {
     name: 'list_projects',
     arguments: {},
-  }, fetcher, options.protectionBypassSecret) as RemoteProject[];
+  }, fetcher) as RemoteProject[];
   const memories: SnapshotMemory[] = [];
   const maxMemories = options.maxMemories ?? 500;
   for (const project of projects) {
     const index = await call(options.baseUrl, project.id, options.token, 'tools/call', {
       name: 'get_memory_index',
       arguments: { include_shared: false },
-    }, fetcher, options.protectionBypassSecret) as SnapshotIndexEntry[];
+    }, fetcher) as SnapshotIndexEntry[];
     for (const entry of index) {
       if (memories.length >= maxMemories) break;
       const memory = await call(options.baseUrl, project.id, options.token, 'tools/call', {
         name: 'get_memory',
         arguments: { id_or_name: entry.name, include_shared: false },
-      }, fetcher, options.protectionBypassSecret) as Omit<SnapshotMemory, 'projectId'>;
+      }, fetcher) as Omit<SnapshotMemory, 'projectId'>;
       memories.push({ ...memory, projectId: project.id });
     }
     if (memories.length >= maxMemories) break;
@@ -210,7 +207,6 @@ async function main(): Promise<void> {
     baseUrl: required('MCP_PUBLIC_URL'),
     token: required('LTM_MCP_TOKEN'),
     maxMemories: Number(process.env.LTM_SNAPSHOT_MAX_MEMORIES ?? 500),
-    protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
   });
   const file = outputPath();
   writeFileSync(file, snapshot, { mode: 0o600 });

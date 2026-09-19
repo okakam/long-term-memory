@@ -4,8 +4,8 @@ afterEach(() => vi.unstubAllEnvs());
 test('storage selection reads the current environment on every call', () => {
   vi.stubEnv('LTM_STORAGE_DRIVER', undefined);
   expect(resolveStorageMode()).toBe('local');
-  vi.stubEnv('LTM_STORAGE_DRIVER', 'vercel');
-  expect(resolveStorageMode()).toBe('vercel');
+  vi.stubEnv('LTM_STORAGE_DRIVER', 'cloud');
+  expect(resolveStorageMode()).toBe('cloud');
   vi.stubEnv('LTM_STORAGE_DRIVER', 'local');
   expect(resolveStorageMode()).toBe('local');
 });

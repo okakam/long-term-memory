@@ -9,7 +9,7 @@ import { grantsSharedWrite } from './auth';
 import { createMcpSession, getOrCreateSession, McpRequestTimeoutError, type McpSession } from './session';
 import type { ToolContext } from './context';
 
-export type McpTransportMode = 'local-session' | 'vercel-stateless';
+export type McpTransportMode = 'local-session' | 'stateless';
 
 export interface McpRequestOptions {
   mode?: McpTransportMode;
@@ -18,7 +18,7 @@ export interface McpRequestOptions {
 }
 
 function defaultMode(): McpTransportMode {
-  return process.env.VERCEL === '1' ? 'vercel-stateless' : 'local-session';
+  return 'stateless';
 }
 
 function jsonResponse(value: unknown, status = 200, request: Request | null = null): Response {
@@ -110,16 +110,16 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
   const timeoutMs = options.timeoutMs ?? 30_000;
   let session: McpSession;
   try {
-    session = mode === 'vercel-stateless' ? await createMcpSession(ctx) : await getOrCreateSession(ctx);
+    session = mode === 'stateless' ? await createMcpSession(ctx) : await getOrCreateSession(ctx);
     const response = await dispatch(session, message as JSONRPCMessage, timeoutMs);
     if (!hasId(message as JSONRPCMessage)) {
-      if (mode === 'vercel-stateless') await session.close();
+      if (mode === 'stateless') await session.close();
       return new Response(null, { status: 202 });
     }
-    if (mode === 'vercel-stateless') await session.close();
+    if (mode === 'stateless') await session.close();
     return jsonResponse(response, 200, req);
   } catch (error) {
-    if (mode === 'vercel-stateless' && session!) await session.close().catch(() => undefined);
+    if (mode === 'stateless' && session!) await session.close().catch(() => undefined);
     if (error instanceof McpRequestTimeoutError) {
       const id = hasId(message as JSONRPCMessage) ? (message as { id: string | number }).id : null;
       return errorResponse(id, -32000, 'timeout waiting for MCP response');

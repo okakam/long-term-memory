@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER PRIMARY KEY
 );
 
--- Deletion markers prevent a Blob delete failure from resurrecting a forgotten
+-- Deletion markers prevent a storage delete failure from resurrecting a forgotten
 -- memory during a later remote reindex. They are metadata, not soft-deleted
 -- memories, and are intentionally preserved when rebuildable index tables reset.
 CREATE TABLE IF NOT EXISTS memory_tombstones (

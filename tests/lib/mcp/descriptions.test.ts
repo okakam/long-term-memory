@@ -30,7 +30,7 @@ function collectNamedDescriptions(schema: Record<string, unknown>, result: strin
 test('全 MCP tool の description と named input field description が配信される', async () => {
   const response = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=descriptions', {
     method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-  }), { mode: 'vercel-stateless', service });
+  }), { mode: 'stateless', service });
   const tools = (await response.json()).result.tools as Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>;
   expect(tools).toHaveLength(16);
   expect(tools.every((tool) => tool.description.length > 0)).toBe(true);

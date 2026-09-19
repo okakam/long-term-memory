@@ -22,7 +22,7 @@ async function call(service: MemoryService, token?: string) {
         },
       }),
     },
-  ), { mode: 'vercel-stateless', service });
+  ), { mode: 'stateless', service });
   return response.json() as Promise<{ result: { content: Array<{ text: string }>; isError?: boolean } }>;
 }
 

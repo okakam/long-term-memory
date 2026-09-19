@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { assertSameOrigin, AuthorizationError } from '@/lib/auth/access';
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getAuthStore } from '@/lib/auth/store';
 import { assertMemoryName } from '@/lib/slug';
 
@@ -19,9 +19,9 @@ function errorResponse(error: unknown): Response {
   return new Response(message, { status });
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(req?: Request): Promise<Response> {
   try {
-    const principal = await requireWebPrincipal();
+    const principal = await requireWebPrincipal(req);
     const store = await getAuthStore();
     return Response.json(await store.listAccessibleProjects(principal.userId));
   } catch (error) {
@@ -32,7 +32,7 @@ export async function GET(): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   try {
     assertSameOrigin(req);
-    const principal = await requireWebPrincipal();
+    const principal = await requireWebPrincipal(req);
     const raw = CreateProjectInput.parse(await req.json());
     const id = assertMemoryName(raw.slug ?? raw.project_id);
     if (id === '__shared__') throw new AuthorizationError('shared scope cannot be created');

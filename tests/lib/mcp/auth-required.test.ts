@@ -36,7 +36,7 @@ test('AUTH_REQUIRED=1 の MCP は PAT と membership を要求する', async () 
   try {
     const missing = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
       method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-    }), { mode: 'vercel-stateless', service });
+    }), { mode: 'stateless', service });
     expect(missing.status).toBe(401);
 
     const pat = await createPat('user-1', 'test');
@@ -44,7 +44,7 @@ test('AUTH_REQUIRED=1 の MCP は PAT と membership を要求する', async () 
       method: 'POST',
       headers: { authorization: 'Bearer ' + pat.token },
       body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
-    }), { mode: 'vercel-stateless', service });
+    }), { mode: 'stateless', service });
     expect(allowed.status).toBe(200);
   } finally { db.close(); }
 });
@@ -65,7 +65,7 @@ test('共有書き込みは curator principal と maintenance token の二重条
         name: 'remember_user_fact',
         arguments: { name: 'shared-memory', description: 'd', body: 'b', entities: [{ name: 'Entity' }] },
       } }),
-    }), { mode: 'vercel-stateless', service });
+    }), { mode: 'stateless', service });
     process.env.LTM_MAINTENANCE_TOKEN = 'maintenance';
     const denied = await request('wrong');
     expect(denied.status).toBe(403);
@@ -89,7 +89,37 @@ test('reindexはproject owner以外のmemberには許可しない', async () => 
         jsonrpc: '2.0', id: 4, method: 'tools/call',
         params: { name: 'reindex', arguments: {} },
       }),
-    }), { mode: 'vercel-stateless', service });
+    }), { mode: 'stateless', service });
     expect(response.status).toBe(403);
+  } finally { db.close(); }
+});
+
+test('MCPの既定セッションはユーザー間で認証コンテキストを共有しない', async () => {
+  process.env.AUTH_REQUIRED = '1';
+  const { db, store } = await setup();
+  const projectListingService = {
+    listProjects: () => [
+      { id: 'secure-project', count: 1, updated_at: '2026-09-19T00:00:00.000Z', shared: false },
+      { id: 'owner-only-project', count: 1, updated_at: '2026-09-19T00:00:00.000Z', shared: false },
+    ],
+  } as unknown as MemoryService;
+  try {
+    await store.createProject('owner-only-project', 'user-1');
+    await store.addMember('secure-project', 'user-2', 'member');
+    const ownerPat = await createPat('user-1', 'owner');
+    const memberPat = await createPat('user-2', 'member');
+    const request = (token: string, id: number) => handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token },
+      body: JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'list_projects', arguments: {} } }),
+    }), { service: projectListingService });
+
+    const ownerResponse = await request(ownerPat.token, 10);
+    expect(ownerResponse.status).toBe(200);
+    expect((await ownerResponse.json()).result.content[0].text).toContain('owner-only-project');
+
+    const memberResponse = await request(memberPat.token, 11);
+    expect(memberResponse.status).toBe(200);
+    expect((await memberResponse.json()).result.content[0].text).not.toContain('owner-only-project');
   } finally { db.close(); }
 });

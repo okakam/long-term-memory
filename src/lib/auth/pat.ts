@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
-import { getAuthStore, type AuthStore, type TokenRecord } from './store';
+import { getAuthStore, type AuthStoreLike, type TokenRecord } from './store';
 
 export class UnauthorizedMcpError extends Error {
   readonly status = 401;
@@ -35,7 +35,7 @@ export async function createPat(
   userId: string,
   label: string,
   expiresAt?: string | Date,
-  store?: AuthStore,
+  store?: AuthStoreLike,
 ): Promise<{ token: string; tokenId: string }> {
   if (!userId || !label.trim()) throw new Error('userId and label are required');
   const token = 'ltm_' + randomBytes(32).toString('base64url');
@@ -74,21 +74,21 @@ function usable(record: TokenRecord | null): record is TokenRecord {
 
 export async function requireMcpPrincipal(
   req: Request,
-  store?: AuthStore,
+  store?: AuthStoreLike,
 ): Promise<{ userId: string; tokenId: string }> {
   const token = bearerToken(req);
   const authStore = store ?? await getAuthStore();
   const record = await authStore.findTokenByHash(hashPat(token));
   if (!usable(record)) throw new UnauthorizedMcpError();
-  await authStore.touchToken(record.id);
+  await authStore.touchToken(record.id, undefined, record.token_hash);
   return { userId: record.user_id, tokenId: record.id };
 }
 
-export async function revokePat(userId: string, tokenId: string, store?: AuthStore): Promise<void> {
+export async function revokePat(userId: string, tokenId: string, store?: AuthStoreLike): Promise<void> {
   const revoked = await (store ?? await getAuthStore()).revokeToken(userId, tokenId);
   if (!revoked) throw new TokenNotFoundError();
 }
 
-export async function listPats(userId: string, store?: AuthStore): Promise<Array<Omit<TokenRecord, 'token_hash'>>> {
+export async function listPats(userId: string, store?: AuthStoreLike): Promise<Array<Omit<TokenRecord, 'token_hash'>>> {
   return (store ?? await getAuthStore()).listTokens(userId);
 }

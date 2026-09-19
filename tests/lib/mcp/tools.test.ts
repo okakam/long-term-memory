@@ -43,7 +43,7 @@ async function call(service: MemoryService, name: string, arguments_: object, pr
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: arguments_ } }),
-  }), { mode: 'vercel-stateless', service });
+  }), { mode: 'stateless', service });
   return response.json() as Promise<{ result: { content: Array<{ text: string }>; isError?: boolean } }> ;
 }
 

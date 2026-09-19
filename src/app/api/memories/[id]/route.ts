@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { assertSameOrigin, assertProjectAccess } from '@/lib/auth/access';
 import { authRequired } from '@/lib/auth/config';
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getMemoryService } from '@/lib/memory/singleton';
 import { MemoryNotFoundError } from '@/lib/memory/types';
 import { assertProjectId, SHARED_PROJECT_ID, SlugError } from '@/lib/slug';
@@ -41,7 +41,7 @@ function routeError(error: unknown): Response {
 async function authorizeMutation(projectId: string, req: Request): Promise<void> {
   assertSameOrigin(req);
   if (authRequired()) {
-    const principal = await requireWebPrincipal();
+    const principal = await requireWebPrincipal(req);
     await assertProjectAccess(principal, projectId, 'write');
   }
   if (projectId === SHARED_PROJECT_ID) throw Object.assign(new Error('shared scope is read-only'), { status: 403 });

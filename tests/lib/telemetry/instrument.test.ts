@@ -60,7 +60,7 @@ test('MCP initialize と tools/call は aggregate telemetry を記録する', as
         params: { name: 'get_memory', arguments: { id_or_name: 'private-memory', secret: 'TOKEN_VALUE' } },
       }),
     },
-  ), { mode: 'vercel-stateless', service });
+  ), { mode: 'stateless', service });
   expect(response.status).toBe(200);
 
   const rows = telemetry.rows();

@@ -1,6 +1,6 @@
 import { assertProjectAccess } from '@/lib/auth/access';
 import { authRequired } from '@/lib/auth/config';
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getAuthStore } from '@/lib/auth/store';
 
 export async function authorizeWebProject(projectId: string): Promise<void> {

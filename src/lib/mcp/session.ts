@@ -147,7 +147,11 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
 const sessions = new Map<string, Promise<McpSession>>();
 
 export function getOrCreateSession(ctx: ToolContext): Promise<McpSession> {
-  const key = `${ctx.projectId}#${ctx.canWriteShared ? 'rw' : 'ro'}`;
+  const key = JSON.stringify({
+    projectId: ctx.projectId,
+    sharedWrite: ctx.canWriteShared === true,
+    principal: ctx.principal ? [ctx.principal.userId, ctx.principal.tokenId ?? null] : null,
+  });
   const existing = sessions.get(key);
   if (existing) return existing;
   const promise = createMcpSession(ctx);

@@ -1,5 +1,8 @@
 import type { IndexStore, SqlValue } from '@/lib/storage/contracts';
+import { resolveStorageMode } from '@/lib/storage/contracts';
 import { openAuthDb } from './connection';
+import { FirestoreAuthStore } from './firestore-store';
+import { createFirestoreMetadataStore } from '@/lib/storage/firestore-metadata';
 
 export interface ProjectRecord {
   project_id: string;
@@ -27,7 +30,24 @@ export interface TokenRecord {
   revoked_at: string | null;
 }
 
-export class AuthStore {
+export interface AuthStoreLike {
+  createProject(projectId: string, ownerUserId: string, now?: string): Promise<void>;
+  getProject(projectId: string): Promise<ProjectRecord | null>;
+  getMembership(projectId: string, userId: string): Promise<MemberRecord | null>;
+  listAccessibleProjects(userId: string): Promise<Array<ProjectRecord & { role: 'owner' | 'member' }>>;
+  addMember(projectId: string, userId: string, role?: 'owner' | 'member'): Promise<void>;
+  removeMember(projectId: string, userId: string): Promise<void>;
+  setMemberRole(projectId: string, userId: string, role: 'owner' | 'member'): Promise<void>;
+  listMembers(projectId: string): Promise<MemberRecord[]>;
+  insertToken(record: TokenRecord): Promise<void>;
+  findTokenByHash(hash: string): Promise<TokenRecord | null>;
+  touchToken(id: string, timestamp?: string, tokenHash?: string): Promise<void>;
+  revokeToken(userId: string, id: string, timestamp?: string): Promise<boolean>;
+  listTokens(userId: string): Promise<Array<Omit<TokenRecord, 'token_hash'>>>;
+  close?(): void | Promise<void>;
+}
+
+export class AuthStore implements AuthStoreLike {
   constructor(public readonly db: IndexStore) {}
 
   async rawQuery<T extends object>(sql: string, args: readonly SqlValue[] = []): Promise<T[]> {
@@ -137,20 +157,28 @@ export class AuthStore {
       [userId],
     );
   }
+
+  close(): void {
+    this.db.close?.();
+  }
 }
 
-let storePromise: Promise<AuthStore> | null = null;
-let testStore: AuthStore | null = null;
+let storePromise: Promise<AuthStoreLike> | null = null;
+let testStore: AuthStoreLike | null = null;
 
-export async function getAuthStore(): Promise<AuthStore> {
+export async function getAuthStore(): Promise<AuthStoreLike> {
   if (testStore) return testStore;
   if (!storePromise) {
-    storePromise = openAuthDb().then((db) => new AuthStore(db));
+    if (resolveStorageMode() === 'cloud') {
+      storePromise = Promise.resolve(new FirestoreAuthStore(createFirestoreMetadataStore()));
+    } else {
+      storePromise = openAuthDb().then((db) => new AuthStore(db));
+    }
   }
   return storePromise;
 }
 
-export function setAuthStoreForTests(store: AuthStore): void {
+export function setAuthStoreForTests(store: AuthStoreLike): void {
   testStore = store;
   storePromise = Promise.resolve(store);
 }
@@ -159,5 +187,5 @@ export async function resetAuthStoreForTests(): Promise<void> {
   const current = testStore ?? (storePromise ? await storePromise.catch(() => null) : null);
   testStore = null;
   storePromise = null;
-  if (current) await current.db.close?.();
+  if (current) await current.close?.();
 }

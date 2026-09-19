@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import { expect, test } from 'vitest';
 
 import nextConfig from '../../next.config';
-import { requestHeaders } from '../../scripts/vercel-smoke';
 
 const root = resolve(import.meta.dirname, '../..');
 
@@ -11,103 +10,87 @@ function read(relativePath: string): string {
   return readFileSync(resolve(root, relativePath), 'utf8');
 }
 
-test('Docker配布設定は本番Node runtimeと明示的schemaを含む', () => {
+test('Docker配布設定はCloud RunのPORTと一時SQLiteを使う', () => {
   const dockerfile = read('Dockerfile');
   expect(dockerfile).toContain('ARG NODE_IMAGE=node:22-bookworm-slim');
   expect(dockerfile).toContain('pnpm install --frozen-lockfile');
-  expect(dockerfile).toContain('COPY --from=builder  /app/src/lib/db/schema.sql ./src/lib/db/schema.sql');
-  expect(dockerfile).toContain('EXPOSE 3939');
+  expect(dockerfile).toContain('LTM_HOME=/tmp/long-term-memory');
+  expect(dockerfile).toContain('LTM_STORAGE_DRIVER=cloud');
+  expect(dockerfile).toContain('AUTH_REQUIRED=1');
+  expect(dockerfile).toContain('PORT=8080');
+  expect(dockerfile).toContain('EXPOSE 8080');
+  expect(dockerfile).toContain('${PORT:-8080}');
   const compose = read('docker-compose.yml');
   expect(compose).toContain('create_host_path: false');
   expect(compose).toContain('target: /data');
   expect(compose).toContain('3939:3939');
+  expect(compose).toContain('LTM_STORAGE_DRIVER: local');
 });
 
-test('Vercel環境変数サンプルは必須キーを網羅し秘密値を含まない', () => {
+test('環境変数サンプルはCloud Run/Firebase/S3のキーだけを含み秘密値を含まない', () => {
   const env = read('.env.example');
   for (const name of [
-    'LTM_STORAGE_DRIVER',
-    'TURSO_DATABASE_URL',
-    'TURSO_AUTH_DATABASE_URL',
-    'TURSO_TELEMETRY_DATABASE_URL',
-    'BLOB_READ_WRITE_TOKEN',
-    'UPSTASH_REDIS_REST_URL',
-    'UPSTASH_REDIS_REST_TOKEN',
-    'UPSTASH_REDIS_REST_KV_REST_API_URL',
-    'UPSTASH_REDIS_REST_KV_REST_API_TOKEN',
-    'LTM_MAINTENANCE_TOKEN',
-    'LTM_CURATOR_USER_ID',
-    'LTM_BOOTSTRAP_OWNER_USER_ID',
-    'LTM_BLOB_PREFIX',
-    'MCP_PUBLIC_URL',
-    'MCP_ALLOWED_ORIGINS',
-    'AUTH_REQUIRED',
-    'CLERK_SECRET_KEY',
-    'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
-    'NEXT_PUBLIC_CLERK_SIGN_IN_URL',
-    'NEXT_PUBLIC_CLERK_SIGN_UP_URL',
-  ]) {
-    expect(env).toMatch(new RegExp('^' + name + '=', 'm'));
-  }
-  expect(env).not.toMatch(/^(?:TURSO|BLOB|UPSTASH|CLERK_SECRET_KEY|LTM_MAINTENANCE_TOKEN).*=[^\s]+/m);
+    'LTM_STORAGE_DRIVER', 'AUTH_REQUIRED', 'LTM_LOCAL_USER_ID', 'LTM_S3_BUCKET', 'LTM_S3_PREFIX', 'AWS_REGION',
+    'FIREBASE_PROJECT_ID', 'NEXT_PUBLIC_FIREBASE_API_KEY', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+    'NEXT_PUBLIC_FIREBASE_PROJECT_ID', 'NEXT_PUBLIC_FIREBASE_APP_ID', 'MCP_PUBLIC_URL',
+    'MCP_ALLOWED_ORIGINS', 'LTM_CURATOR_USER_ID', 'LTM_MAINTENANCE_TOKEN',
+  ]) expect(env).toMatch(new RegExp('^' + name + '=', 'm'));
+  expect(env).not.toMatch(/^(?:TURSO|BLOB|UPSTASH|CLERK|VERCEL).*=[^\s]+/m);
 });
 
-test('Vercel設定とNext security headersを固定する', async () => {
-  const vercel = JSON.parse(read('vercel.json')) as {
-    installCommand: string;
-    buildCommand: string;
-    functions?: Record<string, { maxDuration?: number }>;
-  };
-  expect(vercel.installCommand).toBe('pnpm install --frozen-lockfile');
-  expect(vercel.buildCommand).toBe('pnpm build');
-  expect(vercel.functions?.['src/app/api/mcp/route.ts']?.maxDuration).toBe(60);
-
+test('Next security headersはFirebase endpointと基本防御を含む', async () => {
   const headerGroups = await nextConfig.headers?.() ?? [];
   const headers = new Map(headerGroups.flatMap((group) => group.headers.map((header) => [header.key, header.value])));
   expect(headers.get('X-Content-Type-Options')).toBe('nosniff');
   expect(headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
-  expect(headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+  const csp = headers.get('Content-Security-Policy') ?? '';
+  expect(csp).toContain('identitytoolkit.googleapis.com');
+  expect(csp).toMatch(/frame-src 'self' https:\/\/\*\.firebaseapp\.com https:\/\/\*\.web\.app https:\/\/accounts\.google\.com/);
+  expect(csp).toContain("frame-ancestors 'none'");
 });
 
-test('CIは通常検証・migration preflight・固定Vercel CLI smokeを定義する', () => {
-  const testWorkflow = read('.github/workflows/test.yml');
-  expect(testWorkflow).toContain('version: 11.1.3');
-  expect(testWorkflow).toContain('pnpm test');
-  expect(testWorkflow).toContain('pnpm lint');
-  expect(testWorkflow).toContain('NODE_ENV=production pnpm build');
-  expect(testWorkflow).toContain('scripts/preflight-migration.ts');
-  expect(testWorkflow).toContain('scripts/probe-turso.ts');
-
-  const vercelWorkflow = read('.github/workflows/vercel.yml');
-  expect(vercelWorkflow).toContain('version: 11.1.3');
-  expect(vercelWorkflow).toContain('vercel@41.7.3');
-  expect(vercelWorkflow).toContain('vercel@41.7.3 pull --yes');
-  expect(vercelWorkflow).toContain('vercel@41.7.3 build');
-  expect(vercelWorkflow).toContain('vercel@41.7.3 deploy --prebuilt');
-  expect(vercelWorkflow).toContain('scripts/vercel-smoke.ts');
+test('Cloud Run workflowはPRでruntime secretを使わず低コスト設定でdeployする', () => {
+  const workflow = read('.github/workflows/cloud-run.yml');
+  expect(workflow).toContain('pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]');
+  expect(workflow).toContain('push:\n    branches: [main]');
+  expect(workflow).toMatch(/if: github\.ref == 'refs\/heads\/main' && \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\)/);
+  expect(workflow).toContain('group: cloud-run-production');
+  expect(workflow).toContain('pnpm test');
+  expect(workflow).toContain('NODE_ENV=production pnpm build');
+  expect(workflow).toContain('docker build');
+  expect(workflow).toContain('id-token: write');
+  expect(workflow).toContain('--min 0 --max 1 --concurrency 1');
+  expect(workflow).toContain('--allow-unauthenticated');
+  expect(workflow).toContain('--cpu 1 --memory 512Mi');
+  expect(workflow).toContain('--service-account');
+  expect(workflow).toContain('--set-env-vars');
+  expect(workflow).toContain('LTM_STORAGE_DRIVER=cloud');
+  expect(workflow).toContain('NEXT_PUBLIC_FIREBASE_API_KEY');
+  expect(workflow).toContain('--set-secrets');
+  expect(workflow).toContain('AWS_ACCESS_KEY_ID');
+  const verify = workflow.slice(0, workflow.indexOf('  deploy:'));
+  expect(verify).not.toContain('secrets.');
 });
 
-test('deploy smokeと運用手順をリポジトリ内に用意する', () => {
-  expect(existsSync(resolve(root, 'scripts/vercel-smoke.ts'))).toBe(true);
-  expect(existsSync(resolve(root, 'docs/vercel-operations.md'))).toBe(true);
-  expect(read('scripts/vercel-smoke.ts')).toContain('tools/list');
-  expect(read('docs/vercel-operations.md')).toContain('vercel@41.7.3 rollback');
-  expect(read('docs/vercel-operations.md')).toContain('pull_request');
+test('Firebase/Firestore設定とCloud Run smokeをリポジトリ内に用意する', () => {
+  expect(existsSync(resolve(root, 'firebase.json'))).toBe(true);
+  expect(existsSync(resolve(root, 'firestore.rules'))).toBe(true);
+  expect(read('firestore.rules')).toContain('allow read, write: if false');
+  expect(read('firestore.indexes.json')).toContain('"indexes": []');
+  expect(read('src/app/api/health/route.ts')).toContain("service: 'long-term-memory'");
+  expect(read('scripts/cloud-run-smoke.ts')).toContain('tools/list');
+  expect(read('scripts/cloud-run-smoke.ts')).toContain('CLOUD_RUN_URL');
+  expect(existsSync(resolve(root, 'src/app/api/auth/config/route.ts'))).toBe(true);
+  expect(existsSync(resolve(root, 'docs/eval/cloud-run-smoke.json'))).toBe(true);
 });
 
-test('deploy smokeはVercel Protection Bypassを任意のヘッダーで送る', () => {
-  expect(requestHeaders('ltm_token', 'vercel_bypass')).toMatchObject({
-    authorization: 'Bearer ltm_token',
-    'x-vercel-protection-bypass': 'vercel_bypass',
-  });
-  expect(requestHeaders('ltm_token')).not.toHaveProperty('x-vercel-protection-bypass');
-
-  const vercelWorkflow = read('.github/workflows/vercel.yml');
-  expect(vercelWorkflow).toContain('VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}');
-  const previewStart = vercelWorkflow.indexOf('      - name: Run preview smoke');
-  const productionStart = vercelWorkflow.indexOf('  production:');
-  const previewSmoke = vercelWorkflow.slice(previewStart, productionStart);
-  expect(previewSmoke).not.toContain('VERCEL_AUTOMATION_BYPASS_SECRET:');
-  const productionSmoke = vercelWorkflow.slice(productionStart);
-  expect(productionSmoke).toContain('VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}');
+test('Cloud Run smokeはMCPの主要read/write/reindex経路を実際に呼び出す', () => {
+  const smoke = read('scripts/cloud-run-smoke.ts');
+  for (const toolCall of [
+    "callTool(baseUrl, projectId, token, 4, 'get_memory'",
+    "callTool(baseUrl, projectId, token, 5, 'update_memory'",
+    "callTool(baseUrl, projectId, token, 7, 'link_memories'",
+    "callTool(baseUrl, projectId, token, 9, 'reindex'",
+    "callTool(baseUrl, projectId, token, 11, 'forget_memory'",
+  ]) expect(smoke).toContain(toolCall);
 });

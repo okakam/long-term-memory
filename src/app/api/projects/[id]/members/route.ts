@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { assertProjectAccess, assertSameOrigin, AuthorizationError } from '@/lib/auth/access';
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getAuthStore } from '@/lib/auth/store';
 import { assertProjectId } from '@/lib/slug';
 
@@ -18,9 +18,9 @@ async function projectId(params: Promise<{ id: string }>): Promise<string> {
   return assertProjectId((await params).id);
 }
 
-async function requireOwner(id: string) {
+async function requireOwner(id: string, req: Request) {
   if (id === '__shared__') throw new AuthorizationError('shared scope has no members');
-  const principal = await requireWebPrincipal();
+  const principal = await requireWebPrincipal(req);
   const store = await getAuthStore();
   await assertProjectAccess(principal, id, 'write', store);
   const membership = await store.getMembership(id, principal.userId);
@@ -34,10 +34,10 @@ function errorResponse(error: unknown): Response {
   return new Response(message, { status });
 }
 
-export async function GET(_req: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     const id = await projectId(context.params);
-    const principal = await requireWebPrincipal();
+    const principal = await requireWebPrincipal(req);
     const store = await getAuthStore();
     await assertProjectAccess(principal, id, 'read', store);
     return Response.json(await store.listMembers(id));
@@ -50,7 +50,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   try {
     assertSameOrigin(req);
     const id = await projectId(context.params);
-    const { store } = await requireOwner(id);
+    const { store } = await requireOwner(id, req);
     const input = MemberInput.parse(await req.json());
     await store.addMember(id, input.user_id, input.role ?? 'member');
     return Response.json({ project_id: id, user_id: input.user_id, role: input.role ?? 'member' }, { status: 201 });
@@ -63,7 +63,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   try {
     assertSameOrigin(req);
     const id = await projectId(context.params);
-    const { store } = await requireOwner(id);
+    const { store } = await requireOwner(id, req);
     const input = RoleInput.parse(await req.json());
     await store.setMemberRole(id, input.user_id, input.role);
     return Response.json({ project_id: id, user_id: input.user_id, role: input.role });
@@ -76,7 +76,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   try {
     assertSameOrigin(req);
     const id = await projectId(context.params);
-    const { store } = await requireOwner(id);
+    const { store } = await requireOwner(id, req);
     const userId = new URL(req.url).searchParams.get('user_id');
     if (!userId) return new Response('user_id is required', { status: 400 });
     await store.removeMember(id, userId);

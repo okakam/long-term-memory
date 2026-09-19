@@ -1,7 +1,7 @@
-import { SignUp } from '@clerk/nextjs';
+import { FirebaseAuthForm } from '@/components/FirebaseAuthForm';
 
 export const dynamic = 'force-dynamic';
 
 export default function SignUpPage() {
-  return <main><SignUp /></main>;
+  return <main><FirebaseAuthForm mode="sign-up" /></main>;
 }

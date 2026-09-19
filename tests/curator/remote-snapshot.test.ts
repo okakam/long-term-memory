@@ -21,7 +21,7 @@ const memory: SnapshotMemory = {
   tags: ['deploy'],
   links: [],
   source_refs: [],
-  entities: [{ name: 'Vercel' }],
+  entities: [{ name: 'Cloud Run' }],
   triples: [['CI', 'protects', 'production']],
   created_at: '2026-09-05T00:00:00.000Z',
   updated_at: '2026-09-06T00:00:00.000Z',
@@ -72,38 +72,6 @@ test('remote snapshotはlist/index/getを呼び、認証ヘッダを転送する
   expect(result).not.toContain('ltm_live_secret_123456');
   expect(result).toContain('[REDACTED]');
   expect(() => assertSnapshotSafe(result)).not.toThrow();
-});
-
-test('remote snapshotはVercel Protection Bypassを全リクエストへ転送する', async () => {
-  const bypassHeaders: Array<string | null> = [];
-  await fetchRemoteSnapshot({
-    baseUrl: 'https://memory.example',
-    token: 'ltm_test_token_secret',
-    protectionBypassSecret: 'bypass-secret',
-    fetcher: async (_input, init) => {
-      bypassHeaders.push(new Headers(init?.headers).get('x-vercel-protection-bypass'));
-      const body = String(init?.body ?? '');
-      if (body.includes('list_projects')) {
-        return new Response(JSON.stringify({ result: { content: [{ type: 'text', text: JSON.stringify([project]) }] } }));
-      }
-      if (body.includes('get_memory_index')) {
-        return new Response(JSON.stringify({ result: { content: [{ type: 'text', text: JSON.stringify([{
-          id: memory.id,
-          name: memory.name,
-          type: memory.type,
-          description: memory.description,
-          body_chars: memory.body.length,
-          tags: memory.tags,
-          links: memory.links,
-          updated_at: memory.updated_at,
-          scope: 'project',
-        }]) }] } }));
-      }
-      return new Response(JSON.stringify({ result: { content: [{ type: 'text', text: JSON.stringify(memory) }] } }));
-    },
-  });
-
-  expect(bypassHeaders).toEqual(['bypass-secret', 'bypass-secret', 'bypass-secret']);
 });
 
 test('snapshotの安全検査は未サニタイズのtokenを拒否する', () => {
