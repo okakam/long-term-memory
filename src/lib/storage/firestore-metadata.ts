@@ -392,6 +392,11 @@ export class FirestoreMetadataStore {
     return documents.filter((document) => document.exists).map(memoryRecord).sort((left, right) => left.name.localeCompare(right.name));
   }
 
+  async listNameIndexes(projectId: string): Promise<NameIndexRecord[]> {
+    const documents = await this.gateway.list(namesPath(projectId));
+    return documents.filter((document) => document.exists).map(nameRecord).sort((left, right) => left.name.localeCompare(right.name));
+  }
+
   async getNameIndex(projectId: string, name: string): Promise<NameIndexRecord | null> {
     const document = await this.gateway.get(documentPath(namesPath(projectId), nameDocumentId(name)));
     return document.exists ? nameRecord(document) : null;

@@ -18,6 +18,7 @@ export interface VerificationReport {
   parse_failures: string[];
   membership_mismatches: string[];
   memory_mismatches: string[];
+  name_index_mismatches: string[];
   pat_mismatches: string[];
   tombstone_mismatches: string[];
   ok: boolean;
@@ -70,12 +71,17 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
   for (const key of targetKeys) if (!expected.has(key)) extraKeys.push(key);
 
   const memoryMismatches: string[] = [];
+  const nameIndexMismatches: string[] = [];
   for (const project of manifest.projects) {
     const targetRecords = await input.firestore.metadata.listMemoryIndexes(project.project_id);
     const targetById = new Map(targetRecords.map((record) => [record.id, record]));
+    const targetNames = await input.firestore.metadata.listNameIndexes(project.project_id);
+    const targetNameByName = new Map(targetNames.map((record) => [record.name, record]));
     const expectedIds = new Set<string>();
+    const expectedNames = new Set<string>();
     for (const memory of project.memories) {
       expectedIds.add(memory.id);
+      expectedNames.add(memory.name);
       const expectedKey = memoryObjectKey(prefix, project.project_id, memory.name, memory.content_hash);
       const target = targetById.get(memory.id);
       if (!target) {
@@ -86,9 +92,21 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
         || target.content_key !== expectedKey || target.content_hash !== memory.content_hash) {
         memoryMismatches.push(`${project.project_id}/${memory.name}:metadata`);
       }
+      const targetName = targetNameByName.get(memory.name);
+      if (!targetName) {
+        nameIndexMismatches.push(`${project.project_id}/${memory.name}:missing`);
+      } else if (targetName.memory_id !== memory.id
+        || targetName.name !== memory.name
+        || targetName.content_key !== expectedKey
+        || targetName.content_hash !== memory.content_hash) {
+        nameIndexMismatches.push(`${project.project_id}/${memory.name}:metadata`);
+      }
     }
     for (const target of targetRecords) {
       if (!expectedIds.has(target.id)) memoryMismatches.push(`${project.project_id}/${target.name}:extra`);
+    }
+    for (const target of targetNames) {
+      if (!expectedNames.has(target.name)) nameIndexMismatches.push(`${project.project_id}/${target.name}:extra`);
     }
   }
 
@@ -152,11 +170,12 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
     parse_failures: parseFailures.sort(),
     membership_mismatches: membershipMismatches.sort(),
     memory_mismatches: memoryMismatches.sort(),
+    name_index_mismatches: nameIndexMismatches.sort(),
     pat_mismatches: patMismatches.sort(),
     tombstone_mismatches: tombstoneMismatches.sort(),
     ok: missingKeys.length === 0 && extraKeys.length === 0 && hashMismatches.length === 0
       && parseFailures.length === 0 && membershipMismatches.length === 0 && patMismatches.length === 0
-      && memoryMismatches.length === 0 && tombstoneMismatches.length === 0,
+      && memoryMismatches.length === 0 && nameIndexMismatches.length === 0 && tombstoneMismatches.length === 0,
   };
 }
 
