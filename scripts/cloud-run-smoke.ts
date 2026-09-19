@@ -41,6 +41,12 @@ export function assertTools(response: JsonRpcResponse): void {
   }
 }
 
+async function callTool(baseUrl: string, projectId: string, token: string, id: number, name: string, arguments_: object): Promise<string> {
+  return resultText(await call(baseUrl, projectId, token, {
+    jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: arguments_ },
+  }));
+}
+
 export async function smoke(): Promise<void> {
   const baseUrl = required('CLOUD_RUN_URL').replace(/\/+$/, '');
   const token = required('LTM_MCP_TOKEN');
@@ -53,21 +59,33 @@ export async function smoke(): Promise<void> {
   });
   assertTools(await call(baseUrl, projectId, token, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }));
   const name = `cloud-run-smoke-${Date.now().toString(36)}`;
+  const targetName = `${name}-target`;
   let saved = false;
+  let targetSaved = false;
   try {
-    resultText(await call(baseUrl, projectId, token, {
-      jsonrpc: '2.0', id: 3, method: 'tools/call',
-      params: { name: 'remember_reference', arguments: { name, description: 'Cloud Run smoke', body: '日本語検索の確認' } },
-    }));
+    await callTool(baseUrl, projectId, token, 3, 'remember_reference', {
+      name, description: 'Cloud Run smoke', body: '日本語検索の確認',
+    });
     saved = true;
-    const search = JSON.parse(resultText(await call(baseUrl, projectId, token, {
-      jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'search_memories', arguments: { query: '日本語検索' } },
-    }))) as Array<{ name?: string }>;
+    const fetched = JSON.parse(await callTool(baseUrl, projectId, token, 4, 'get_memory', { id_or_name: name })) as { name?: string };
+    if (fetched.name !== name) throw new Error('smoke get_memory mismatch');
+    await callTool(baseUrl, projectId, token, 5, 'update_memory', {
+      id_or_name: name,
+      patch: { body: '日本語検索の更新確認', tags: ['cloud-run-smoke'] },
+    });
+    await callTool(baseUrl, projectId, token, 6, 'remember_reference', {
+      name: targetName, description: 'Cloud Run smoke target', body: 'リンク先確認',
+    });
+    targetSaved = true;
+    await callTool(baseUrl, projectId, token, 7, 'link_memories', { src: name, dst: targetName });
+    const linked = JSON.parse(await callTool(baseUrl, projectId, token, 8, 'get_memory', { id_or_name: name })) as { links?: string[] };
+    if (!linked.links?.includes(targetName)) throw new Error('smoke link mismatch');
+    await callTool(baseUrl, projectId, token, 9, 'reindex', {});
+    const search = JSON.parse(await callTool(baseUrl, projectId, token, 10, 'search_memories', { query: '更新確認' })) as Array<{ name?: string }>;
     if (!search.some((item) => item.name === name)) throw new Error('smoke memory not found');
   } finally {
-    if (saved) await call(baseUrl, projectId, token, {
-      jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'forget_memory', arguments: { id_or_name: name } },
-    });
+    if (targetSaved) await callTool(baseUrl, projectId, token, 11, 'forget_memory', { id_or_name: targetName });
+    if (saved) await callTool(baseUrl, projectId, token, 12, 'forget_memory', { id_or_name: name });
   }
 }
 
