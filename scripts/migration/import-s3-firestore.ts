@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 
 import { computeHash } from '@/lib/markdown/file-io';
 import { parseMemoryString } from '@/lib/markdown/frontmatter';
+import { bodyChars } from '@/lib/memory/types';
 import type { MarkdownStore } from '@/lib/storage/contracts';
 import { createMarkdownStore } from '@/lib/storage/factory';
 import { memoryObjectKey, s3StoragePrefix } from '@/lib/storage/s3-markdown';
@@ -68,7 +69,7 @@ function indexRecord(projectId: string, key: string, contentHash: string, parsed
     name: parsed.name,
     type: parsed.type,
     description: parsed.description,
-    body_chars: parsed.body.length,
+    body_chars: bodyChars(parsed.body),
     content_key: key,
     content_hash: contentHash,
     tags: parsed.tags,
