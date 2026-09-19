@@ -73,4 +73,5 @@ test('Firebase/Firestore設定とCloud Run smokeをリポジトリ内に用意�
   expect(read('scripts/cloud-run-smoke.ts')).toContain('tools/list');
   expect(read('scripts/cloud-run-smoke.ts')).toContain('CLOUD_RUN_URL');
   expect(existsSync(resolve(root, 'src/app/api/auth/config/route.ts'))).toBe(true);
+  expect(existsSync(resolve(root, 'docs/eval/cloud-run-smoke.json'))).toBe(true);
 });

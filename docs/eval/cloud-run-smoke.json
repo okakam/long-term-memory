@@ -1,0 +1,35 @@
+{
+  "recorded_at": "2026-09-19",
+  "status": "未実行",
+  "reason": "Cloud Run URL、Firebaseユーザー、MCP PAT、GCP資格情報が未提供",
+  "target": {
+    "cloud_run_url": null,
+    "revision": null,
+    "commit": null,
+    "project_id": "smoke"
+  },
+  "checks": {
+    "health": "未実行",
+    "firebase_login": "未実行",
+    "mcp_initialize": "未実行",
+    "tools_count": 16,
+    "tools_list": "未実行",
+    "save": "未実行",
+    "search": "未実行",
+    "get": "未実行",
+    "update": "未実行",
+    "rename": "未実行",
+    "link": "未実行",
+    "reindex": "未実行",
+    "delete": "未実行",
+    "shared_read_gate": "未実行",
+    "shared_write_gate": "未実行",
+    "cold_start": "未実行",
+    "secret_redaction": "未実行"
+  },
+  "smoke_run_id": null,
+  "notes": [
+    "このファイルへ実環境のPAT、secret、個人情報、認証cookieを記録しない",
+    "成功後にCloud Run revision URL、commit SHA、実行日時、結果だけを更新する"
+  ]
+}
