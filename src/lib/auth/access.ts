@@ -1,5 +1,5 @@
 import { assertProjectId } from '@/lib/slug';
-import { getAuthStore, type AuthStore } from './store';
+import { getAuthStore, type AuthStoreLike } from './store';
 
 export type ProjectAction = 'read' | 'write' | 'maintain';
 
@@ -40,7 +40,7 @@ export async function assertProjectAccess(
   principal: { userId: string },
   projectId: string,
   action: ProjectAction,
-  store?: AuthStore,
+  store?: AuthStoreLike,
 ): Promise<void> {
   assertProjectId(projectId);
   if (projectId === '__shared__') {
