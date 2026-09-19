@@ -19,3 +19,9 @@ Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存され
 ## バージョン
 
 Codex CLI は Dockerfile の `CODEX_VERSION`（現在 `0.153.4`）で固定しています。Turso CLI は公式インストーラーから取得します。更新時は Dockerfile と compose.yaml の両方を変更してイメージを再ビルドしてください。
+
+## Codex の sandbox
+
+`compose.yaml` の `app` サービスでは、Codex CLI の `bwrap` が nested namespace を作成できるよう `seccomp=unconfined` を設定しています。これは開発用コンテナに限定した設定であり、本番コンテナへは適用しません。
+
+`compose.yaml` を変更した後は、VS Code の「Dev Containers: Rebuild Container」でコンテナを再作成してください。再接続後、`bwrap --ro-bind / / true` が成功すれば namespace 設定を確認できます。
