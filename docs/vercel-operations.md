@@ -108,4 +108,4 @@ MCP clientはtools/listをキャッシュすることがある。tool schemaやd
 
 ## curator scheduling
 
-Vercel Function 内で Claude CLI や durable local store を動かさない。Production の curator は GitHub Actions の self-hosted runner で毎日 01:00 UTC（10:00 JST）に remote mode を実行する。PAT と maintenance token は短命 runner secret からのみ渡す。macOS のローカル運用では launchd template を使い、同じ 10:00 JST に local store を処理する。いずれも <code>DRY_RUN=1</code> では write PAT を渡さず、<code>last-success</code> を更新しない。
+Vercel Function 内で Claude CLI や durable local store を動かさない。Production の curator は GitHub Actions の self-hosted runner で毎日 01:00 UTC（10:00 JST）に remote mode を実行する。PAT、maintenance token、Deployment Protection を有効にした Preview/Production の snapshot 取得に必要な <code>VERCEL_AUTOMATION_BYPASS_SECRET</code> は短命 runner secret からのみ渡す。<code>docs/mcp-config.vercel.json</code> と snapshot exporter は同じ secret を <code>X-Vercel-Protection-Bypass</code> として転送する。macOS のローカル運用では launchd template を使い、同じ 10:00 JST に local store を処理する。いずれも <code>DRY_RUN=1</code> では write PAT を渡さず、<code>last-success</code> を更新しない。

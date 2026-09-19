@@ -85,7 +85,7 @@ test('curatorのlocal/remote設定は秘密を露出せず権限を絞る', () =
   expect(wrapper).not.toContain('pkill');
 
   const env = read('scripts/curator/env.example');
-  for (const name of ['LTM_MCP_TOKEN', 'LTM_MAINTENANCE_TOKEN']) {
+  for (const name of ['LTM_MCP_TOKEN', 'LTM_MAINTENANCE_TOKEN', 'VERCEL_AUTOMATION_BYPASS_SECRET']) {
     expect(env).toMatch(new RegExp('^' + name + '=\\s*$', 'm'));
   }
 
@@ -101,6 +101,7 @@ test('curatorのlocal/remote設定は秘密を露出せず権限を絞る', () =
   expect(config.mcpServers['ltm-shared'].url).toContain('$' + '{MCP_PUBLIC_URL}');
   expect(config.mcpServers['ltm-shared'].headers.Authorization).toContain('$' + '{LTM_MCP_TOKEN}');
   expect(config.mcpServers['ltm-shared'].headers['X-LTM-Maintenance-Token']).toContain('$' + '{LTM_MAINTENANCE_TOKEN}');
+  expect(config.mcpServers['ltm-shared'].headers['X-Vercel-Protection-Bypass']).toContain('$' + '{VERCEL_AUTOMATION_BYPASS_SECRET}');
   expect(existsSync(resolve(root, 'scripts/curator/install.sh'))).toBe(true);
 
   const workflow = read('.github/workflows/curator.yml');
@@ -108,6 +109,7 @@ test('curatorのlocal/remote設定は秘密を露出せず権限を絞る', () =
   expect(workflow).toContain('runs-on: [self-hosted, ltm-curator]');
   expect(workflow).toContain('scripts/curator/export-remote-snapshot.ts');
   expect(workflow.match(/^\s*MCP_PUBLIC_URL:/gm) ?? []).toHaveLength(2);
+  expect(workflow.match(/^\s*VERCEL_AUTOMATION_BYPASS_SECRET:/gm) ?? []).toHaveLength(2);
   expect(workflow).toContain('cat > "$LTM_CURATOR_ENV" <<ENV');
   expect(workflow).not.toContain('cat > "$LTM_CURATOR_ENV" <<' + "'ENV'");
 });
