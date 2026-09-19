@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/memory/singleton', () => ({ getMemoryService: mocks.getMemoryService }));
-vi.mock('@/lib/auth/clerk', () => ({ requireWebPrincipal: mocks.requireWebPrincipal }));
+vi.mock('@/lib/auth/web-principal', () => ({ requireWebPrincipal: mocks.requireWebPrincipal }));
 vi.mock('@/lib/auth/access', () => ({
   assertProjectAccess: mocks.assertProjectAccess,
   assertSameOrigin: mocks.assertSameOrigin,

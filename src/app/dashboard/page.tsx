@@ -5,7 +5,7 @@ import { Delta } from '@/components/dashboard/Delta';
 import { Sparkline } from '@/components/dashboard/Sparkline';
 import { assertProjectAccess } from '@/lib/auth/access';
 import { authRequired } from '@/lib/auth/config';
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getAuthStore } from '@/lib/auth/store';
 import { formatJst } from '@/lib/datetime';
 import { curatorStatus, dailySeries, errorBreakdown, perProject, perTool, summarize } from '@/lib/telemetry/query';

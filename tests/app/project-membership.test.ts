@@ -8,7 +8,7 @@ import { AuthStore, resetAuthStoreForTests, setAuthStoreForTests } from '@/lib/a
 const mocks = vi.hoisted(() => ({
   requireWebPrincipal: vi.fn(async () => ({ userId: 'owner' })),
 }));
-vi.mock('@/lib/auth/clerk', () => mocks);
+vi.mock('@/lib/auth/web-principal', () => mocks);
 
 import * as membersRoute from '@/app/api/projects/[id]/members/route';
 

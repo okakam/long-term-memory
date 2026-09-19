@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { assertProjectAccess, assertSameOrigin, AuthorizationError } from '@/lib/auth/access';
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getAuthStore } from '@/lib/auth/store';
 import { assertProjectId } from '@/lib/slug';
 

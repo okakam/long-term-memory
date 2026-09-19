@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { assertSameOrigin, assertProjectAccess } from '@/lib/auth/access';
 import { authRequired } from '@/lib/auth/config';
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getMemoryService } from '@/lib/memory/singleton';
 import { MemoryNotFoundError } from '@/lib/memory/types';
 import { assertProjectId, SHARED_PROJECT_ID, SlugError } from '@/lib/slug';

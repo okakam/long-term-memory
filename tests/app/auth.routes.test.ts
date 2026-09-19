@@ -8,7 +8,7 @@ import { AuthStore, resetAuthStoreForTests, setAuthStoreForTests } from '@/lib/a
 const mocks = vi.hoisted(() => ({
   requireWebPrincipal: vi.fn(async () => ({ userId: 'user-1' })),
 }));
-vi.mock('@/lib/auth/clerk', () => mocks);
+vi.mock('@/lib/auth/web-principal', () => mocks);
 
 import { DELETE, GET, POST } from '@/app/api/auth/tokens/route';
 import * as projectsRoute from '@/app/api/projects/route';

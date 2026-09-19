@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { assertSameOrigin } from '@/lib/auth/access';
-import { requireWebPrincipal } from '@/lib/auth/clerk';
+import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { createPat, listPats, revokePat } from '@/lib/auth/pat';
 
 export const runtime = 'nodejs';
