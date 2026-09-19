@@ -15,6 +15,8 @@ test('Docker配布設定はCloud RunのPORTと一時SQLiteを使う', () => {
   expect(dockerfile).toContain('ARG NODE_IMAGE=node:22-bookworm-slim');
   expect(dockerfile).toContain('pnpm install --frozen-lockfile');
   expect(dockerfile).toContain('LTM_HOME=/tmp/long-term-memory');
+  expect(dockerfile).toContain('LTM_STORAGE_DRIVER=cloud');
+  expect(dockerfile).toContain('AUTH_REQUIRED=1');
   expect(dockerfile).toContain('PORT=8080');
   expect(dockerfile).toContain('EXPOSE 8080');
   expect(dockerfile).toContain('${PORT:-8080}');

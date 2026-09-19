@@ -22,6 +22,8 @@ RUN pnpm prune --prod
 
 FROM base AS runner
 ENV NODE_ENV=production \
+    LTM_STORAGE_DRIVER=cloud \
+    AUTH_REQUIRED=1 \
     LTM_HOME=/tmp/long-term-memory \
     PORT=8080
 COPY --from=prod_deps /app/node_modules ./node_modules
