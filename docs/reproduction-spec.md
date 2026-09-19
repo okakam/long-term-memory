@@ -1973,7 +1973,7 @@ flowchart TD
 | 7 | ログは `chmod 700` のディレクトリへ。**成功スタンプ（`last-success`）はプロセス終了コードでは決めない** — モデルがツールエラーを本文として返しつつ 0 で終わる経路がある |
 | 8 | 成功判定は awk の状態機械で「`CURATION SUMMARY (DRY_RUN=<dr>)` の**行全体一致**を開始行とし、その**後**に `scanned_projects` / `no_op` / `shared_total_after` が数値で現れる」ことを要求。値の末尾までは固定しない（モデルが数値の後ろに自由記述を付けるため。厳格にすると成功した実行を誤って落とす） |
 
-**`scripts/curator/ltm-shared-curator.mcp.json`**:
+**`scripts/curator/ltm-shared-curator.mcp.json`**（local用）:
 
 ```json
 {
@@ -1986,6 +1986,8 @@ flowchart TD
   }
 }
 ```
+
+Vercel の remote curator は `docs/mcp-config.vercel.json` を使い、`Authorization`、`X-LTM-Maintenance-Token` に加えて、Deployment Protection が有効な場合は `X-Vercel-Protection-Bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}` を送る。snapshot exporter も同じ環境変数を全リクエストへ転送する。
 
 `scripts/curator/install.sh` は wrapper / SKILL.md / MCP 設定を 1 ディレクトリ（`~/.local/libexec/ltm-curator` 等）へステージし、plist をレンダリングする。
 

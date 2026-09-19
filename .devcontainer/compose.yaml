@@ -12,6 +12,8 @@ services:
     working_dir: /workspace
     user: node
     init: true
+    security_opt:
+      - seccomp:unconfined
     command: ["sleep", "infinity"]
     stdin_open: true
     tty: true

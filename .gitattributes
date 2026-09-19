@@ -1,0 +1,7 @@
+# These executable and generated documentation assets are parsed byte-for-byte.
+# Keep their checkout representation stable even when a developer enables
+# core.autocrlf globally.
+/claude-config/hooks/ltm-init-reminder.sh text eol=lf
+/scripts/curator/run-curation.sh text eol=lf
+/scripts/sync-embedded-docs.mjs text eol=lf
+/docs/post-mcp-setup.md text eol=lf

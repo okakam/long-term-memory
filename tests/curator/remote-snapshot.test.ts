@@ -28,16 +28,18 @@ const memory: SnapshotMemory = {
 };
 
 test('remote snapshotはlist/index/getを呼び、認証ヘッダを転送する', async () => {
-  const calls: Array<{ url: string; body: string; authorization?: string }> = [];
+  const calls: Array<{ url: string; body: string; authorization?: string; id?: unknown }> = [];
   const result = await fetchRemoteSnapshot({
     baseUrl: 'https://memory.example',
     token: 'ltm_test_token_secret',
     fetcher: async (input, init) => {
       const body = String(init?.body ?? '');
+      const request = JSON.parse(body) as { id?: unknown };
       calls.push({
         url: String(input),
         body,
         authorization: new Headers(init?.headers).get('authorization') ?? undefined,
+        id: request.id,
       });
       if (body.includes('list_projects')) {
         return new Response(JSON.stringify({ result: { content: [{ type: 'text', text: JSON.stringify([project]) }] } }));
@@ -60,6 +62,7 @@ test('remote snapshotはlist/index/getを呼び、認証ヘッダを転送する
   });
 
   expect(calls).toHaveLength(3);
+  expect(calls.every((call) => typeof call.id === 'string' && call.id.length > 0)).toBe(true);
   expect(calls.every((call) => call.authorization === 'Bearer ltm_test_token_secret')).toBe(true);
   expect(calls.some((call) => call.body.includes('list_projects'))).toBe(true);
   expect(calls.some((call) => call.body.includes('get_memory_index'))).toBe(true);
@@ -69,6 +72,38 @@ test('remote snapshotはlist/index/getを呼び、認証ヘッダを転送する
   expect(result).not.toContain('ltm_live_secret_123456');
   expect(result).toContain('[REDACTED]');
   expect(() => assertSnapshotSafe(result)).not.toThrow();
+});
+
+test('remote snapshotはVercel Protection Bypassを全リクエストへ転送する', async () => {
+  const bypassHeaders: Array<string | null> = [];
+  await fetchRemoteSnapshot({
+    baseUrl: 'https://memory.example',
+    token: 'ltm_test_token_secret',
+    protectionBypassSecret: 'bypass-secret',
+    fetcher: async (_input, init) => {
+      bypassHeaders.push(new Headers(init?.headers).get('x-vercel-protection-bypass'));
+      const body = String(init?.body ?? '');
+      if (body.includes('list_projects')) {
+        return new Response(JSON.stringify({ result: { content: [{ type: 'text', text: JSON.stringify([project]) }] } }));
+      }
+      if (body.includes('get_memory_index')) {
+        return new Response(JSON.stringify({ result: { content: [{ type: 'text', text: JSON.stringify([{
+          id: memory.id,
+          name: memory.name,
+          type: memory.type,
+          description: memory.description,
+          body_chars: memory.body.length,
+          tags: memory.tags,
+          links: memory.links,
+          updated_at: memory.updated_at,
+          scope: 'project',
+        }]) }] } }));
+      }
+      return new Response(JSON.stringify({ result: { content: [{ type: 'text', text: JSON.stringify(memory) }] } }));
+    },
+  });
+
+  expect(bypassHeaders).toEqual(['bypass-secret', 'bypass-secret', 'bypass-secret']);
 });
 
 test('snapshotの安全検査は未サニタイズのtokenを拒否する', () => {

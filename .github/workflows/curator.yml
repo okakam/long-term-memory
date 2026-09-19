@@ -37,6 +37,7 @@ jobs:
         env:
           MCP_PUBLIC_URL: ${{ secrets.MCP_PUBLIC_URL }}
           LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           mkdir -m 700 -p "$RUNNER_TEMP/ltm-curator"
           pnpm tsx scripts/curator/export-remote-snapshot.ts --output "$RUNNER_TEMP/ltm-curator/snapshot.md"
@@ -45,6 +46,7 @@ jobs:
           MCP_PUBLIC_URL: ${{ secrets.MCP_PUBLIC_URL }}
           LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
           LTM_MAINTENANCE_TOKEN: ${{ secrets.LTM_MAINTENANCE_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           LTM_SNAPSHOT: ${{ runner.temp }}/ltm-curator/snapshot.md
           LTM_CURATOR_MCP_CONFIG: ${{ github.workspace }}/docs/mcp-config.vercel.json
           LTM_CURATOR_LOG_DIR: ${{ runner.temp }}/ltm-curator/logs

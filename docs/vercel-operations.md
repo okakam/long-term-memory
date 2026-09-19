@@ -9,6 +9,8 @@
 Vercel MarketplaceでClerk、Turso、Blob、Upstashを同じプロジェクトへ接続する。次の値をProductionとPreviewへ設定し、実在する値はGitへ保存しない。
 Vercelの実行リージョンはTursoのprimaryリージョンに近い値を選び、Preview/Productionで同じ方針を維持する。
 
+Provisioning は次の順で行う。Turso は memory index、auth、telemetry 用に分離した3 database を作成し、Blob は private access の store を接続する。Upstash は Redis database を接続して project lock 用の REST URL/token を設定する。Clerk は Production/Preview の URL を登録した後で接続する。Preview と Production はそれぞれ別の Blob prefix とし、同一 prefix を共有しない。
+
 - <code>LTM_STORAGE_DRIVER=vercel</code>、<code>AUTH_REQUIRED=1</code>
 - <code>TURSO_DATABASE_URL</code> / <code>TURSO_AUTH_TOKEN</code>
 - <code>TURSO_AUTH_DATABASE_URL</code> / <code>TURSO_AUTH_DATABASE_TOKEN</code>
@@ -49,6 +51,10 @@ migrationをproductionへ直接適用せず、先にprobeとdry-runを通す。�
 
 <code>pnpm tsx scripts/vercel-smoke.ts</code>はinitialize、tools/list（16 tool）、KG付きproject memoryのsave、3文字以上の日本語検索、entity付き検索、get、dashboard到達性、deleteを確認する。PATやmemory本文をログへ出さない。
 
+完全受け入れでは、script に加えて次を同じ一時 memory を用いて確認する。Clerk session で UI の詳細ページを読み、同じ principal で REST API の read を確認する。dashboard の tool event / project 件数が smoke 前後で期待どおり増えることを確認する。通常の owner/member PAT による <code>__shared__</code> 書き込みは 403、curator PAT・<code>LTM_CURATOR_USER_ID</code>・<code>X-LTM-Maintenance-Token</code> が全て一致する場合だけ許可されることを確認する。最後に作成した project memory と shared の検証用 memory を削除し、削除後の read が not found であることを確認する。
+
+この完全受け入れに必要なものは、Preview URL、Deployment Protection を使う場合の automation bypass secret、smoke project の owner/member PAT、curator 専用 PAT、maintenance token、各 principal の project membership、Clerk でログインできるテストユーザーである。これらが揃わない場合は外部 smoke を実行せず、結果を PASS と記録しない。
+
 
 ## filesystem エラーの切り分け
 
@@ -74,6 +80,10 @@ pnpm dlx vercel@41.7.3 rollback <project-or-deployment> --token="$VERCEL_TOKEN"
 
 rollback後もDB schemaを前のアプリが読める状態に保つ。migrationを下げる操作は自動で行わず、互換性を確認してから別手順で実施する。
 
+## 耐障害性の受け入れ
+
+本番相当の隔離 Preview で、Blob upload/delete の失敗、Turso の一時エラー、Redis lease の競合、別 Function instance への request をそれぞれ強制する。各ケースで retry または reconcile/reindex 後に最後に成功した可視状態だけが read/search/UI に現れることを確認する。function log と telemetry export を確認し、PAT、maintenance token、raw request body、raw error message が含まれないことを確認する。実プロバイダの fault injection は資格情報と隔離環境を必要とするため、ローカル unit test の成功をその代替結果として扱わない。
+
 ## Dockerのローカル配布
 
 DockerはVercel本番の代替ではなく、localhost用のoffline配布である。初回はbind mount元を作成し、外部networkを用意する。
@@ -95,3 +105,7 @@ curl -X POST 'http://localhost:3939/api/mcp?project_id=smoke' \
 Blobはimmutable content hash objectを使う。DB pointerが参照する世代を先に保ち、旧世代や失敗したuploadのorphanは一覧とDBを突き合わせてから、保持期間を置いて管理者が削除する。promote前のGCで旧世代を削除しない。
 
 MCP clientはtools/listをキャッシュすることがある。tool schemaやdescriptionを変更したdeploy後はClaude Codeを再接続／再起動する。
+
+## curator scheduling
+
+Vercel Function 内で Claude CLI や durable local store を動かさない。Production の curator は GitHub Actions の self-hosted runner で毎日 01:00 UTC（10:00 JST）に remote mode を実行する。PAT、maintenance token、Deployment Protection を有効にした Preview/Production の snapshot 取得に必要な <code>VERCEL_AUTOMATION_BYPASS_SECRET</code> は短命 runner secret からのみ渡す。<code>docs/mcp-config.vercel.json</code> と snapshot exporter は同じ secret を <code>X-Vercel-Protection-Bypass</code> として転送する。macOS のローカル運用では launchd template を使い、同じ 10:00 JST に local store を処理する。いずれも <code>DRY_RUN=1</code> では write PAT を渡さず、<code>last-success</code> を更新しない。
