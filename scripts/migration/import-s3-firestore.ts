@@ -6,9 +6,10 @@ import { parseMemoryString } from '@/lib/markdown/frontmatter';
 import type { MarkdownStore } from '@/lib/storage/contracts';
 import { createMarkdownStore } from '@/lib/storage/factory';
 import { memoryObjectKey, s3StoragePrefix } from '@/lib/storage/s3-markdown';
-import { createFirestoreMetadataStore, type FirestoreMetadataStore } from '@/lib/storage/firestore-metadata';
+import { createFirestoreMetadataStore, type FirestoreMetadataStore, type MemoryIndexRecord } from '@/lib/storage/firestore-metadata';
 import type { MemberRecord, ProjectRecord, TokenRecord } from '@/lib/auth/store';
-import type { MigrationManifest } from './export-vercel';
+import type { ExportMemoryRecord, MigrationManifest } from './export-vercel';
+import { assertFirestoreDocumentBudget, assertFirestoreTransactionBudget } from './firestore-limits';
 
 export interface MigrationS3Target {
   markdown: MarkdownStore;
@@ -51,6 +52,93 @@ function targetKey(prefix: string, projectId: string, name: string, contentHash:
   return memoryObjectKey(prefix, projectId, name, contentHash);
 }
 
+interface PreparedMemory {
+  projectId: string;
+  memory: ExportMemoryRecord;
+  raw: string;
+  contentHash: string;
+  key: string;
+  index: MemoryIndexRecord;
+}
+
+function indexRecord(projectId: string, key: string, contentHash: string, parsed: ReturnType<typeof parseMemoryString>): MemoryIndexRecord {
+  return {
+    id: parsed.id,
+    project_id: projectId,
+    name: parsed.name,
+    type: parsed.type,
+    description: parsed.description,
+    body_chars: parsed.body.length,
+    content_key: key,
+    content_hash: contentHash,
+    tags: parsed.tags,
+    links: parsed.links,
+    supersedes: parsed.supersedes,
+    entities: parsed.entities,
+    triples: parsed.triples,
+    created_at: parsed.created_at,
+    updated_at: parsed.updated_at,
+  };
+}
+
+function prepareMemories(manifest: MigrationManifest, prefix: string): PreparedMemory[] {
+  const prepared: PreparedMemory[] = [];
+  for (const project of manifest.projects) {
+    for (const memory of project.memories) {
+      const raw = readFileSync(memory.local_path, 'utf8');
+      const contentHash = computeHash(raw);
+      if (contentHash !== memory.content_hash) throw new Error(`source content hash mismatch: ${project.project_id}/${memory.name}`);
+      const parsed = parseMemoryString(raw);
+      if (parsed.id !== memory.id || parsed.name !== memory.name) throw new Error(`source memory metadata mismatch: ${project.project_id}/${memory.name}`);
+      const key = targetKey(prefix, project.project_id, memory.name, memory.content_hash);
+      const index = indexRecord(project.project_id, key, memory.content_hash, parsed);
+      const memoryPath = `projects/${project.project_id}/memories/${parsed.id}`;
+      const namePath = `projects/${project.project_id}/names/${encodeURIComponent(parsed.name)}`;
+      const projectPath = `projects/${project.project_id}`;
+      const nameData = { memory_id: parsed.id, name: parsed.name, content_key: key, content_hash: memory.content_hash };
+      assertFirestoreDocumentBudget(`${project.project_id}/${parsed.name}:memory`, memoryPath, index);
+      assertFirestoreDocumentBudget(`${project.project_id}/${parsed.name}:name`, namePath, nameData);
+      assertFirestoreTransactionBudget(`${project.project_id}/${parsed.name}`, [
+        { path: memoryPath, data: index },
+        { path: namePath, data: nameData },
+        { path: projectPath, data: { revision: 1, updated_at: parsed.updated_at } },
+      ]);
+      prepared.push({ projectId: project.project_id, memory, raw, contentHash, key, index });
+    }
+  }
+  return prepared;
+}
+
+function validateAuthDocumentBudgets(manifest: MigrationManifest, uidMap: Record<string, string>): void {
+  for (const project of manifest.auth.projects) {
+    const owner = mappedUid(project.owner_user_id, uidMap);
+    const projectPath = `projects/${project.project_id}`;
+    const memberPath = `${projectPath}/members/${encodeURIComponent(owner)}`;
+    const projectData = { project_id: project.project_id, owner_user_id: owner, created_at: project.created_at, updated_at: project.updated_at, revision: 0 };
+    const memberData = { project_id: project.project_id, user_id: owner, role: 'owner' };
+    assertFirestoreDocumentBudget(`${project.project_id}:project`, projectPath, projectData);
+    assertFirestoreDocumentBudget(`${project.project_id}:owner`, memberPath, memberData);
+    assertFirestoreTransactionBudget(`${project.project_id}:create`, [
+      { path: projectPath, data: projectData },
+      { path: memberPath, data: memberData },
+    ]);
+  }
+  for (const member of manifest.auth.members) {
+    const userId = mappedUid(member.user_id, uidMap);
+    const path = `projects/${member.project_id}/members/${encodeURIComponent(userId)}`;
+    assertFirestoreDocumentBudget(`${member.project_id}:member:${userId}`, path, { project_id: member.project_id, user_id: userId, role: member.role });
+  }
+  for (const token of manifest.auth.tokens) {
+    const userId = mappedUid(token.user_id, uidMap);
+    const path = `mcpTokens/${token.token_hash}`;
+    assertFirestoreDocumentBudget(`token:${token.id}`, path, { ...token, user_id: userId });
+  }
+  for (const tombstone of manifest.tombstones ?? []) {
+    const path = `projects/${tombstone.project_id}/tombstones/${Buffer.from(tombstone.content_key).toString('hex').slice(0, 64)}`;
+    assertFirestoreDocumentBudget(`${tombstone.project_id}:tombstone:${tombstone.memory_id}`, path, tombstone);
+  }
+}
+
 async function importProject(
   project: ProjectRecord,
   members: MemberRecord[],
@@ -85,6 +173,8 @@ async function importProject(
 export async function importMigration(input: ImportMigrationInput): Promise<ImportReport> {
   const manifest = readManifest(input.manifestPath);
   const prefix = input.s3.prefix ?? s3StoragePrefix();
+  const preparedMemories = prepareMemories(manifest, prefix);
+  validateAuthDocumentBudgets(manifest, input.firebaseUidMap);
   const members = manifest.auth.members;
   let report: ImportReport = { projects: 0, members: 0, tokens: 0, memories: 0, objects: 0, tombstones: 0 };
 
@@ -93,33 +183,10 @@ export async function importMigration(input: ImportMigrationInput): Promise<Impo
     report = { ...report, projects: report.projects + 1, members: report.members + imported.members, tokens: report.tokens + imported.tokens };
   }
 
-  for (const project of manifest.projects) {
-    for (const memory of project.memories) {
-      const raw = readFileSync(memory.local_path, 'utf8');
-      if (computeHash(raw) !== memory.content_hash) throw new Error(`source content hash mismatch: ${project.project_id}/${memory.name}`);
-      const parsed = parseMemoryString(raw);
-      if (parsed.id !== memory.id || parsed.name !== memory.name) throw new Error(`source memory metadata mismatch: ${project.project_id}/${memory.name}`);
-      const key = targetKey(prefix, project.project_id, memory.name, memory.content_hash);
-      await input.s3.markdown.write(key, raw, { overwrite: true, contentHash: memory.content_hash });
-      await input.firestore.metadata.putMemoryIndex(project.project_id, {
-        id: parsed.id,
-        project_id: project.project_id,
-        name: parsed.name,
-        type: parsed.type,
-        description: parsed.description,
-        body_chars: parsed.body.length,
-        content_key: key,
-        content_hash: memory.content_hash,
-        tags: parsed.tags,
-        links: parsed.links,
-        supersedes: parsed.supersedes,
-        entities: parsed.entities,
-        triples: parsed.triples,
-        created_at: parsed.created_at,
-        updated_at: parsed.updated_at,
-      });
-      report = { ...report, memories: report.memories + 1, objects: report.objects + 1 };
-    }
+  for (const prepared of preparedMemories) {
+    await input.s3.markdown.write(prepared.key, prepared.raw, { overwrite: true, contentHash: prepared.contentHash });
+    await input.firestore.metadata.putMemoryIndex(prepared.projectId, prepared.index);
+    report = { ...report, memories: report.memories + 1, objects: report.objects + 1 };
   }
   for (const tombstone of manifest.tombstones ?? []) {
     await input.firestore.metadata.deleteMemoryIndex(tombstone.project_id, tombstone.memory_id, tombstone);

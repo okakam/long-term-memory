@@ -13,6 +13,7 @@ import type { MarkdownStore, StoredObject } from '@/lib/storage/contracts';
 import { exportVercelData } from '../../scripts/migration/export-vercel';
 import { importMigration } from '../../scripts/migration/import-s3-firestore';
 import { verifyMigration } from '../../scripts/migration/verify-migration';
+import { assertFirestoreTransactionBudget } from '../../scripts/migration/firestore-limits';
 import { FirestoreMetadataStore, type FirestoreDocument, type FirestoreGateway, type FirestoreTransaction } from '@/lib/storage/firestore-metadata';
 
 const roots: string[] = [];
@@ -277,5 +278,41 @@ describe('importMigration / verifyMigration', () => {
       firestore: { metadata: new FirestoreMetadataStore(new FakeFirestore()) },
       firebaseUidMap: {},
     })).rejects.toThrow('Firebase UID mapping is missing');
+  });
+
+  test('Firestore document上限に近いmetadataをimport前に拒否する', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ltm-import-limit-test-'));
+    roots.push(root);
+    const oversized = { ...memory(), description: 'x'.repeat(910_000) };
+    const raw = serializeMemory(oversized);
+    const sourcePath = join(root, 'oversized.md');
+    const manifestPath = join(root, 'manifest.json');
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(sourcePath, raw, { mode: 0o600 });
+    writeFileSync(manifestPath, JSON.stringify({
+      generated_at: oversized.created_at,
+      source: 'vercel',
+      projects: [{ project_id: 'demo', memories: [{
+        id: oversized.id, name: oversized.name, key: 'old-key', content_hash: computeHash(raw), local_path: sourcePath,
+      }] }],
+      auth: {
+        projects: [{ project_id: 'demo', owner_user_id: 'clerk-owner', created_at: oversized.created_at, updated_at: oversized.updated_at }],
+        members: [{ project_id: 'demo', user_id: 'clerk-owner', role: 'owner' }],
+        tokens: [],
+      },
+      tombstones: [],
+    }), { mode: 0o600 });
+    const objects = new Map<string, string>();
+    const firestore = new FakeFirestore();
+
+    await expect(importMigration({
+      manifestPath,
+      s3: { markdown: createMarkdownStore(objects), prefix: 'target' },
+      firestore: { metadata: new FirestoreMetadataStore(firestore) },
+      firebaseUidMap: { 'clerk-owner': 'firebase-owner' },
+    })).rejects.toThrow('Firestore document budget exceeded');
+    expect(objects).toHaveLength(0);
+    expect(firestore.documents).toHaveLength(0);
+    expect(() => assertFirestoreTransactionBudget('too-many-writes', Array.from({ length: 501 }, (_, index) => ({ path: `docs/${index}`, data: {} })))).toThrow('Firestore transaction write count exceeded');
   });
 });
