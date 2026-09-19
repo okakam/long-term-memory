@@ -19,7 +19,7 @@ export async function getWebPrincipal(request?: Request): Promise<WebPrincipal |
 }
 
 export async function requireWebPrincipal(request?: Request): Promise<WebPrincipal> {
-  if (!authRequired()) throw new UnauthorizedWebError();
+  if (!authRequired()) return { userId: process.env.LTM_LOCAL_USER_ID ?? 'local-user' };
   try {
     return request
       ? await requireFirebasePrincipal(request, { allowBearer: true })

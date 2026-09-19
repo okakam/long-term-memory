@@ -45,7 +45,7 @@ AWS access keyは可能ならCloud RunのSecret Managerから注入する。Fire
 
 ### ローカル
 
-`LTM_STORAGE_DRIVER=local`、`AUTH_REQUIRED=0`、`PORT=3939`、`LTM_HOME=.long-term-memory` を使う。Composeは `docker-compose.yml` を使用し、hostの `.long-term-memory` を `/data`へbind mountする。
+`LTM_STORAGE_DRIVER=local`、`AUTH_REQUIRED=0`、`LTM_LOCAL_USER_ID=local-user`、`PORT=3939`、`LTM_HOME=.long-term-memory` を使う。localのWeb/APIはこの合成UIDへ紐付け、Firebaseへ接続しない。Composeは `docker-compose.yml` を使用し、hostの `.long-term-memory` を `/data`へbind mountする。
 
 ## 5. データ保存契約
 
