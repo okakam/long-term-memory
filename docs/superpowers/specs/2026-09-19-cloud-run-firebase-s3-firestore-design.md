@@ -249,6 +249,7 @@ max instancesは費用上限であり、revision切り替え中の一時的な�
 - src/lib/auth/firebase-client.ts: browser Firebase app/Auth初期化
 - src/lib/auth/firestore-store.ts: 既存AuthStore相当のFirestore実装
 - src/app/api/auth/session/route.ts: session cookie endpoint
+- src/app/api/auth/config/route.ts: browserへFirebase公開設定をruntime提供するendpoint
 - src/app/api/health/route.ts: Cloud Run health endpoint
 - scripts/migration/export-vercel.ts: 旧Blob/Tursoからの一回限りexport
 - scripts/migration/import-s3-firestore.ts: S3/Firestoreへの検証付きimport
@@ -271,11 +272,9 @@ Remote serviceはS3/Firestore/SQLite adapterを組み合わせる実装へ置き
 ### 6.3 削除
 
 - src/lib/storage/blob-markdown.ts
-- src/lib/storage/turso-index.ts
-- src/lib/auth/clerk.ts
-- src/lib/auth/connection.ts
-- src/lib/auth/schema.sql
-- src/lib/auth/migrate.ts
+- src/lib/auth/web-principal.tsへ置換済みの旧Clerk helper
+- Cloud modeで呼び出さないlocal auth connection/schema/migrateはlocal開発用として残す
+- src/lib/storage/turso-index.tsと旧Blob adapterは実データmigration verifyまで一時的に残し、その後削除する
 - src/lib/lock/project-lock.tsのRedis経路
 - src/lib/telemetry/connection.ts、store.ts、schema.sql、永続dashboard依存
 - vercel.json

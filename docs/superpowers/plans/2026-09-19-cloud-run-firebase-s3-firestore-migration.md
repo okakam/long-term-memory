@@ -12,7 +12,7 @@
 
 ## 実装進捗（2026-09-19）
 
-Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、tombstone移行、旧runtime整理まで完了している。対応するコミットは `4251c82`、`9772f3b`、`6c9f38e`、`97acc9b`、`fb5a3c3`、`97beff3`、`bd31e2a`、`2cc330c`、`dc2d1a1`、`b95e897`、`d45bb54`、`897b836`、`4ad17a5` である。ローカルでは全テスト・lint・型検査・production buildが通過している。実AWS/Firebase/GCP接続、実データ移行verify、Cloud Run smoke、旧Vercel Project削除は外部資格情報が必要な未完了ゲートであり、これらを確認するまで旧移行用credentialとdevDependenciesは削除しない。最終受け入れは `docs/migration/cloud-run-cutover-checklist.md` に記録する。
+Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、tombstone移行、旧runtime整理まで完了している。追加レビューでCloud Run runtime環境注入とFirebase公開設定endpointも実装した。対応するコミットは `4251c82`、`9772f3b`、`6c9f38e`、`97acc9b`、`fb5a3c3`、`97beff3`、`bd31e2a`、`2cc330c`、`dc2d1a1`、`b95e897`、`d45bb54`、`897b836`、`4ad17a5`、`335892f`、`598cde3`、`2ab6096` である。ローカルでは全テスト187件、lint、型検査、production buildが通過している。実AWS/Firebase/GCP接続、実データ移行verify、Cloud Run smoke、旧Vercel Project削除は外部資格情報が必要な未完了ゲートであり、これらを確認するまで旧移行用credentialとdevDependenciesは削除しない。最終受け入れは `docs/migration/cloud-run-cutover-checklist.md` と `docs/eval/cloud-run-smoke.json` に記録する。
 
 ## 全体制約
 
@@ -43,7 +43,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 - 変更: `src/lib/storage/contracts.ts` — `StorageMode` とobject version/conditional write contract
 - 変更: `src/lib/storage/factory.ts` — `local` / `cloud` selector
 - 変更: `src/lib/storage/sqlite-index.ts`、`src/lib/db/connection.ts` — `/tmp` SQLite cache
-- 移行検証後に削除: `src/lib/storage/blob-markdown.ts`、`src/lib/storage/turso-index.ts`
+- 実データ移行verify後に削除: `src/lib/storage/turso-index.ts` と移行専用Blob adapter。local filesystem adapterは残す。
 - 変更: `src/lib/memory/remote-service.ts`、または`src/lib/memory/cloud-service.ts`へ置換 — S3/Firestore/SQLite service
 
 ### 認証・アプリ
@@ -378,7 +378,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 **対象ファイル:**
 
 - 変更: `package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.env.example`、`next.config.ts`、`docker-compose.yml`、`Dockerfile`
-- 削除: `src/lib/storage/blob-markdown.ts`、`src/lib/storage/turso-index.ts`、`src/lib/auth/clerk.ts`、旧auth connection/schema/migrate
+- 削除: `src/lib/storage/blob-markdown.ts`、`src/lib/auth/clerk.ts`、旧Vercel runtime。`src/lib/auth/connection.ts`、`src/lib/auth/schema.sql`、`src/lib/auth/migrate.ts`はlocal modeの認証DBに必要なため残す。`src/lib/storage/turso-index.ts`は実データmigration verify後に削除する。
 - 削除: Redis部分のproject lock、永続Telemetry DBとdashboard data access
 - テスト: `tests/deps.test.ts`、storage/auth/lock/telemetry test
 
