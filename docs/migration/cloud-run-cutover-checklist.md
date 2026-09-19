@@ -49,7 +49,8 @@
 ## 5. Cloud Run受け入れ
 
 - [ ] `GET /api/health` が200を返す。
-- [ ] `scripts/cloud-run-smoke.ts`でMCP initialize、16 tools/list、save、search、get、update、rename、link、reindex、deleteを確認した。
+- [ ] `scripts/cloud-run-smoke.ts`でMCP initialize、16 tools/list、save、search、get、update、link、reindex、deleteを確認した。
+- [x] renameはMCP公開toolに含まれないため、`CloudMemoryService`の回帰テストで検証済み。実環境smokeの対象外とする。
 - [ ] Firebaseログイン、session cookie交換、ログアウトをブラウザで確認した。
 - [ ] 未認証Web APIが401、別projectアクセスが403、MCP PATが対象projectだけへ到達することを確認した。
 - [ ] `__shared__`のwriteがFirebase UIDとmaintenance tokenの二重条件を満たさない限り拒否される。

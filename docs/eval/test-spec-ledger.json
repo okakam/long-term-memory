@@ -3,7 +3,7 @@
   "source": "tests/**/*.test.ts",
   "runtime": {
     "test_files": 69,
-    "tests": 196,
+    "tests": 197,
     "acceptance_status": "local-green"
   },
   "migration_gates": {
@@ -15,6 +15,7 @@
   "notes": [
     "SQLiteは検索cacheであり、S3 MarkdownとFirestore metadataが永続正本である",
     "旧Vercel Blob/Tursoはscripts/migrationの一回限りexport専用devDependenciesに限定している",
-    "ローカルテストの成功を外部provider接続済みとは扱わない"
+    "ローカルテストの成功を外部provider接続済みとは扱わない",
+    "Cloud Run smoke scriptは主要MCP経路を実行し、renameは公開tool対象外のためCloudMemoryService回帰テストで検証する"
   ]
 }

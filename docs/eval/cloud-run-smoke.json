@@ -18,7 +18,7 @@
     "search": "未実行",
     "get": "未実行",
     "update": "未実行",
-    "rename": "未実行",
+    "rename": "MCP公開tool対象外（CloudMemoryService回帰テスト済み）",
     "link": "未実行",
     "reindex": "未実行",
     "delete": "未実行",
