@@ -16,6 +16,7 @@
     "SQLiteは検索cacheであり、S3 MarkdownとFirestore metadataが永続正本である",
     "旧Vercel Blob/Tursoはscripts/migrationの一回限りexport専用devDependenciesに限定している",
     "ローカルテストの成功を外部provider接続済みとは扱わない",
-    "Cloud Run smoke scriptは主要MCP経路を実行し、renameは公開tool対象外のためCloudMemoryService回帰テストで検証する"
+    "Cloud Run smoke scriptは主要MCP経路を実行し、renameは公開tool対象外のためCloudMemoryService回帰テストで検証する",
+    "migration verifyはS3本文、Firestore memory metadata、name index、membership、PAT、tombstoneを比較する"
   ]
 }

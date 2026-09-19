@@ -44,7 +44,7 @@
 - [ ] import reportのS3 object数、Firestore memory数、membership数、PAT数、tombstone数を記録した。
 - [ ] 同じmanifestを再度importし、重複やhash変更が発生しないことを確認した。
 - [ ] `scripts/migration/verify-migration.ts`を実行した。
-- [ ] missing、extra、hash、parse、membership、PAT、tombstone mismatchがすべて0件である。
+- [ ] missing、extra、hash、parse、memory metadata、name index、membership、PAT、tombstone mismatchがすべて0件である。
 - [ ] S3本文を1件手動取得し、Firestore metadataのcontent hashと一致することを確認した。
 
 ## 5. Cloud Run受け入れ

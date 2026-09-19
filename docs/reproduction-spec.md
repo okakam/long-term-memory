@@ -80,7 +80,7 @@ MCP toolsは次の16個を維持する。
 2. `pnpm tsx scripts/migration/export-vercel.ts` でMarkdown、hash、metadata、membership、PAT hashをexportする。実credentialと平文PATは出力しない。
 3. 旧Clerk UIDからFirebase UIDへの対応表をrepository外で作成する。
 4. `pnpm tsx scripts/migration/import-s3-firestore.ts` でS3/Firestoreへimportする。同じmanifestの再実行は冪等である。
-5. `pnpm tsx scripts/migration/verify-migration.ts` を実行し、source/target count、missing/extra key、hash、parse、membership、PAT、tombstoneの全差分を0にする。
+5. `pnpm tsx scripts/migration/verify-migration.ts` を実行し、source/target count、missing/extra key、hash、parse、memory metadata、name index、membership、PAT、tombstoneの全差分を0にする。
 6. Cloud Run smokeでhealth、initialize、tools/list 16件、save、search、get、update、link、reindex、deleteを確認する。renameはMCP公開tool対象外のため`CloudMemoryService`の回帰テストで確認する。
 7. 旧credentialを失効・削除し、旧Vercel Projectを管理画面または認証済みCLIから削除する。外部削除はmigration verifyとCloud Run smokeの後だけ許可する。
 

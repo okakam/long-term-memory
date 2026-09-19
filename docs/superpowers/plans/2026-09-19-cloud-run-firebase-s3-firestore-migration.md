@@ -581,7 +581,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 
 - [ ] **手順5: import、検証、client切り替えを行う。**
 
-  `import-s3-firestore.ts`、`verify-migration.ts`の順に実行する。missing key、hash mismatch、parse failureをゼロにし、membership/PAT/tombstone countを一致させる。Claude Code MCP設定、curator環境、ドキュメントリンク、DNS/aliasをCloud Runへ変更する。
+  `import-s3-firestore.ts`、`verify-migration.ts`の順に実行する。missing key、hash mismatch、parse failure、memory metadata/name index mismatchをゼロにし、membership/PAT/tombstone countを一致させる。Claude Code MCP設定、curator環境、ドキュメントリンク、DNS/aliasをCloud Runへ変更する。
 
 - [ ] **手順6: rollback期間と最終snapshotを確認する。**
 
