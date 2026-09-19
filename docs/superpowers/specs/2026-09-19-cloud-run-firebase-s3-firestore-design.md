@@ -159,7 +159,7 @@ Firestore transactionが失敗した場合、新S3 objectは孤児になるが�
 
 Firestore transactionは競合時に再試行されるため、Redis lockは不要とする。Cloud Runの同時実行は1に固定するが、旧revisionと新revisionの一時共存にもFirestore側のrevision/name transactionで対応する。
 
-### 3.4 Reindexとreconcile
+### 3.4 再indexとreconcile
 
 - 通常起動時はFirestoreのactive memory documentsを読み、参照先S3本文を読み込んでSQLite FTS5を再構築する。
 - reconcileはFirestore metadataのcontent hashとS3本文を照合する。
@@ -321,14 +321,14 @@ Firebase Web SDKの公開設定はNEXT_PUBLIC_FIREBASE_*としてビルド時ま
 
 ## 8. CI/CDと運用
 
-### 8.1 Pull Request
+### 8.1 Pull Request時
 
 - install、test、lint、TypeScript検査、production build
 - Docker build
 - S3/Firestoreへアクセスしない単体テスト
 - secretsをPR由来コードへ渡さない
 
-### 8.2 main deploy
+### 8.2 mainへのdeploy
 
 - GitHub ActionsがGCPへWorkload Identity Federationで接続する。
 - Cloud Runへcandidate revisionをdeployする。
@@ -354,7 +354,7 @@ Firebase Web SDKの公開設定はNEXT_PUBLIC_FIREBASE_*としてビルド時ま
 - Clerk user IDとFirebase UIDの対応表を作る。
 - export manifestへ件数、key、SHA-256、project、nameを記録する。
 
-### 9.2 import
+### 9.2 データimport
 
 1. Firebase Authenticationへユーザーを作成または既存UIDを確認する。
 2. Clerk IDからFirebase UIDへmembershipとPAT ownerを変換する。
