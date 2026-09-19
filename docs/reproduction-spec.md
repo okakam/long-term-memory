@@ -88,7 +88,7 @@ exportのtemporary output、UID map、manifest、PATやprovider credentialはrep
 
 ## 8. CI/CD
 
-`.github/workflows/cloud-run.yml` はPRでtest・lint・production build・Docker buildだけを実行し、runtime secretを渡さない。mainへのpushまたはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` をGitHub Environment secretから読み、非秘密のFirebase/S3設定はEnvironment variables、AWS keyとmaintenance tokenはSecret Manager secret参照でCloud Runへ注入する。
+`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にtest・lint・production build・Docker buildだけを実行し、runtime secretを渡さない。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/S3設定はEnvironment variables、AWS keyとmaintenance tokenはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
 
 deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase/S3 secretはproduction environmentからsmokeへ渡し、ログへ出力しない。
 

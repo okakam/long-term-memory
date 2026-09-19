@@ -2,6 +2,7 @@ name: cloud-run
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   workflow_dispatch:
@@ -32,9 +33,12 @@ jobs:
       - run: docker build --tag long-term-memory:test .
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: verify
     runs-on: ubuntu-latest
+    concurrency:
+      group: cloud-run-production
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write

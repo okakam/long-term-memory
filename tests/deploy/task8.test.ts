@@ -51,8 +51,10 @@ test('Next security headersはFirebase endpointと基本防御を含む', async 
 
 test('Cloud Run workflowはPRでruntime secretを使わず低コスト設定でdeployする', () => {
   const workflow = read('.github/workflows/cloud-run.yml');
-  expect(workflow).toContain('pull_request:');
-  expect(workflow).toMatch(/if: github\.ref == 'refs\/heads\/main'\s*$/m);
+  expect(workflow).toContain('pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]');
+  expect(workflow).toContain('push:\n    branches: [main]');
+  expect(workflow).toMatch(/if: github\.ref == 'refs\/heads\/main' && \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\)/);
+  expect(workflow).toContain('group: cloud-run-production');
   expect(workflow).toContain('pnpm test');
   expect(workflow).toContain('NODE_ENV=production pnpm build');
   expect(workflow).toContain('docker build');

@@ -432,7 +432,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 
 - `scripts/cloud-run-smoke.ts`は`CLOUD_RUN_URL`、`LTM_MCP_TOKEN`、`LTM_SMOKE_PROJECT_ID`をenvから読み、secretをlogせずhealth、initialize、tools/list count=16、save、Japanese search、get、deleteを確認する。
 - `firestore.rules`はclientの直接read/writeを拒否し、production data accessはAdmin SDKだけにする。
-- `cloud-run.yml`はpush/PRでtestを実行し、mainへのpushまたはmainブランチからのmanual dispatchだけdeployする。`pull_request` jobへruntime secretを渡さない。
+- `cloud-run.yml`はPR作成・PRブランチpushでtestを実行し、mainへのPRマージで発生するpushまたはmainブランチからのmanual dispatchだけdeployする。`pull_request` jobへruntime secretを渡さず、Production deployはconcurrencyで直列化する。
 
 **手順:**
 

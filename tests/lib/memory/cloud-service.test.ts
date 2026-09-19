@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from 'vitest';
 
 import { computeHash } from '@/lib/markdown/file-io';
-import { serializeMemory, type Memory } from '@/lib/markdown/frontmatter';
+import { serializeMemory } from '@/lib/markdown/frontmatter';
+import type { Memory } from '@/lib/memory/types';
 import { openLocalDb } from '@/lib/storage/local-index';
 import { KeyedMutex } from '@/lib/memory/mutex';
 import { FirestoreMetadataStore, type FirestoreDocument, type FirestoreGateway, type FirestoreTransaction } from '@/lib/storage/firestore-metadata';
