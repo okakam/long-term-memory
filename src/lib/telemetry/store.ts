@@ -192,7 +192,7 @@ export class TursoTelemetryStore implements TelemetryStoreLike {
 let singleton: TelemetryStoreLike | null = null;
 let testStore: TelemetryStoreLike | null = null;
 
-function defaultMode(): 'local' | 'vercel' {
+function defaultMode(): import('@/lib/storage/contracts').StorageMode {
   return process.env.LTM_STORAGE_DRIVER
     ? resolveStorageMode()
     : (process.env.VERCEL === '1' ? 'vercel' : 'local');
