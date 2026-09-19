@@ -13,6 +13,7 @@ const securityHeaders = [
       "img-src 'self' data: blob: https://*.googleusercontent.com",
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
+      "frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com",
       "base-uri 'self'",
       "form-action 'self'",
       "frame-ancestors 'none'",

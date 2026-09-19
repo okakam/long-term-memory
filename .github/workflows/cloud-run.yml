@@ -32,7 +32,7 @@ jobs:
       - run: docker build --tag long-term-memory:test .
 
   deploy:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main'
     needs: verify
     runs-on: ubuntu-latest
     permissions:

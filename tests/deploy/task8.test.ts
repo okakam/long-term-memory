@@ -43,13 +43,16 @@ test('Next security headersはFirebase endpointと基本防御を含む', async 
   const headers = new Map(headerGroups.flatMap((group) => group.headers.map((header) => [header.key, header.value])));
   expect(headers.get('X-Content-Type-Options')).toBe('nosniff');
   expect(headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
-  expect(headers.get('Content-Security-Policy')).toContain('identitytoolkit.googleapis.com');
-  expect(headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+  const csp = headers.get('Content-Security-Policy') ?? '';
+  expect(csp).toContain('identitytoolkit.googleapis.com');
+  expect(csp).toMatch(/frame-src 'self' https:\/\/\*\.firebaseapp\.com https:\/\/\*\.web\.app https:\/\/accounts\.google\.com/);
+  expect(csp).toContain("frame-ancestors 'none'");
 });
 
 test('Cloud Run workflowはPRでruntime secretを使わず低コスト設定でdeployする', () => {
   const workflow = read('.github/workflows/cloud-run.yml');
   expect(workflow).toContain('pull_request:');
+  expect(workflow).toMatch(/if: github\.ref == 'refs\/heads\/main'\s*$/m);
   expect(workflow).toContain('pnpm test');
   expect(workflow).toContain('NODE_ENV=production pnpm build');
   expect(workflow).toContain('docker build');

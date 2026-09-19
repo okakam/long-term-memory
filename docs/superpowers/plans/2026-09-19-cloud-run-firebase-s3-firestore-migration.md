@@ -329,7 +329,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 
 - [ ] **手順6: CSPと認証設定を更新する。**
 
-  Clerk domainを削除し、client flowに必要なFirebase Auth/Google endpointだけを許可する。既存の`default-src 'self'`、`frame-ancestors 'none'`、`form-action 'self'`、production HSTSを維持し、`authConfigurationReady`がFirebase project設定を検証するようにする。
+  Clerk domainを削除し、client flowに必要なFirebase Auth/Google endpointだけを許可する。既存の`default-src 'self'`、Firebase popup用の`frame-src`、`frame-ancestors 'none'`、`form-action 'self'`、production HSTSを維持し、`authConfigurationReady`がFirebase project設定を検証するようにする。
 
 - [ ] **手順7: Firebase Authenticationの回帰を実行してcommitする。**
 
@@ -432,7 +432,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 
 - `scripts/cloud-run-smoke.ts`は`CLOUD_RUN_URL`、`LTM_MCP_TOKEN`、`LTM_SMOKE_PROJECT_ID`をenvから読み、secretをlogせずhealth、initialize、tools/list count=16、save、Japanese search、get、deleteを確認する。
 - `firestore.rules`はclientの直接read/writeを拒否し、production data accessはAdmin SDKだけにする。
-- `cloud-run.yml`はpush/PRでtestを実行し、mainまたはmanual dispatchだけdeployする。`pull_request` jobへruntime secretを渡さない。
+- `cloud-run.yml`はpush/PRでtestを実行し、mainへのpushまたはmainブランチからのmanual dispatchだけdeployする。`pull_request` jobへruntime secretを渡さない。
 
 **手順:**
 
