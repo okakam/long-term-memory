@@ -11,6 +11,9 @@ import { serializeMemory } from '@/lib/markdown/frontmatter';
 import type { Memory } from '@/lib/memory/types';
 import type { MarkdownStore, StoredObject } from '@/lib/storage/contracts';
 import { exportVercelData } from '../../scripts/migration/export-vercel';
+import { importMigration } from '../../scripts/migration/import-s3-firestore';
+import { verifyMigration } from '../../scripts/migration/verify-migration';
+import { FirestoreMetadataStore, type FirestoreDocument, type FirestoreGateway, type FirestoreTransaction } from '@/lib/storage/firestore-metadata';
 
 const roots: string[] = [];
 
@@ -56,6 +59,26 @@ function createMarkdownStore(objects: Map<string, string>): MarkdownStore {
         .map(([key, text]) => ({ key, size: Buffer.byteLength(text), updatedAt: new Date(0) }));
     },
   };
+}
+
+class FakeFirestore implements FirestoreGateway {
+  readonly documents = new Map<string, Record<string, unknown>>();
+  async get(path: string): Promise<FirestoreDocument> { return this.snapshot(path); }
+  async list(collectionPath: string): Promise<FirestoreDocument[]> {
+    const prefix = `${collectionPath}/`;
+    return [...this.documents.keys()].filter((path) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/')).map((path) => this.snapshot(path));
+  }
+  async set(path: string, data: Record<string, unknown>, merge = false): Promise<void> {
+    this.documents.set(path, merge && this.documents.has(path) ? { ...this.documents.get(path), ...data } : { ...data });
+  }
+  async update(path: string, data: Record<string, unknown>): Promise<void> { await this.set(path, data, true); }
+  async delete(path: string): Promise<void> { this.documents.delete(path); }
+  async runTransaction<T>(fn: (transaction: FirestoreTransaction) => Promise<T>): Promise<T> {
+    return fn({ get: (path) => this.get(path), set: (path, data, merge) => this.set(path, data, merge), update: (path, data) => this.update(path, data), delete: (path) => this.delete(path) });
+  }
+  private snapshot(path: string): FirestoreDocument {
+    return { id: path.split('/').at(-1)!, path, exists: this.documents.has(path), data: () => this.documents.get(path) };
+  }
 }
 
 describe('exportVercelData', () => {
@@ -146,5 +169,62 @@ describe('exportVercelData', () => {
       memoryDb.close();
       authDb.close();
     }
+  });
+});
+
+describe('importMigration / verifyMigration', () => {
+  test('同一manifestを二度importしても重複せず、UID mapping込みで検証できる', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ltm-import-test-'));
+    roots.push(root);
+    const raw = serializeMemory(memory());
+    const sourcePath = join(root, 'migration.md');
+    const manifestPath = join(root, 'manifest.json');
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(sourcePath, raw, { mode: 0o600 });
+    writeFileSync(manifestPath, JSON.stringify({
+      generated_at: memory().created_at,
+      source: 'vercel',
+      projects: [{ project_id: 'demo', memories: [{ id: memory().id, name: memory().name, key: 'old-key', content_hash: computeHash(raw), local_path: sourcePath }] }],
+      auth: {
+        projects: [{ project_id: 'demo', owner_user_id: 'clerk-owner', created_at: memory().created_at, updated_at: memory().updated_at }],
+        members: [{ project_id: 'demo', user_id: 'clerk-owner', role: 'owner' }],
+        tokens: [{ id: 'token-id', user_id: 'clerk-owner', token_hash: 'hash', token_prefix: 'ltm_hash', label: 'test', audience: 'mcp', created_at: memory().created_at, last_used_at: null, expires_at: null, revoked_at: null }],
+      },
+    }), { mode: 0o600 });
+    const objects = new Map<string, string>();
+    const markdown = createMarkdownStore(objects);
+    const metadata = new FirestoreMetadataStore(new FakeFirestore());
+    const input = {
+      manifestPath,
+      s3: { markdown, prefix: 'target' },
+      firestore: { metadata },
+      firebaseUidMap: { 'clerk-owner': 'firebase-owner' },
+    };
+
+    await importMigration(input);
+    await importMigration(input);
+
+    expect(objects).toHaveLength(1);
+    expect(await metadata.listMemoryIndexes('demo')).toHaveLength(1);
+    expect(await metadata.listMembers('demo')).toEqual([{ project_id: 'demo', user_id: 'firebase-owner', role: 'owner' }]);
+    expect((await metadata.listTokens('firebase-owner'))).toHaveLength(1);
+    await expect(verifyMigration(input)).resolves.toMatchObject({ source_count: 1, target_count: 1, ok: true });
+  });
+
+  test('UID mappingがないownerのimportを中断する', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ltm-import-mapping-test-'));
+    roots.push(root);
+    const manifestPath = join(root, 'manifest.json');
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(manifestPath, JSON.stringify({
+      generated_at: new Date().toISOString(), source: 'vercel', projects: [],
+      auth: { projects: [{ project_id: 'demo', owner_user_id: 'clerk-owner', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }], members: [], tokens: [] },
+    }), { mode: 0o600 });
+    await expect(importMigration({
+      manifestPath,
+      s3: { markdown: createMarkdownStore(new Map()), prefix: 'target' },
+      firestore: { metadata: new FirestoreMetadataStore(new FakeFirestore()) },
+      firebaseUidMap: {},
+    })).rejects.toThrow('Firebase UID mapping is missing');
   });
 });
