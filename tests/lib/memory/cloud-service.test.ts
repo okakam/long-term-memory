@@ -4,7 +4,7 @@ import { openLocalDb } from '@/lib/storage/local-index';
 import { KeyedMutex } from '@/lib/memory/mutex';
 import { FirestoreMetadataStore, type FirestoreDocument, type FirestoreGateway, type FirestoreTransaction } from '@/lib/storage/firestore-metadata';
 import { CloudMemoryService } from '@/lib/memory/cloud-service';
-import type { MarkdownStore, StoredObject } from '@/lib/storage/contracts';
+import type { IndexStore, MarkdownStore, StoredObject } from '@/lib/storage/contracts';
 
 class FakeFirestore implements FirestoreGateway {
   readonly documents = new Map<string, Record<string, unknown>>();
@@ -121,7 +121,15 @@ test('新しいCloud Run instanceは最初のread前にS3からSQLite cacheを�
 
   const secondIndex = openLocalDb(':memory:');
   resources.push(secondIndex);
-  const secondService = new CloudMemoryService(Promise.resolve(secondIndex), markdown, metadata, new KeyedMutex(), 'projects', true);
+  let resolveIndex!: (store: IndexStore) => void;
+  const indexPromise = new Promise<IndexStore>((resolve) => { resolveIndex = resolve; });
+  const secondService = new CloudMemoryService(indexPromise, markdown, metadata, new KeyedMutex(), 'projects', true);
+  const reindex = secondService.reindex('demo').then(() => true);
+  resolveIndex(secondIndex);
+  await expect(Promise.race([
+    reindex,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('startup reindex deadlocked')), 100)),
+  ])).resolves.toBe(true);
   await expect(secondService.get('demo', saved.id)).resolves.toMatchObject({ name: 'restart-note', body: '再起動後も取得' });
   await expect(secondService.searchFulltext('demo', '再起動後')).resolves.toHaveLength(1);
 });
