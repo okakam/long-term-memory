@@ -30,18 +30,24 @@ class FakeFirestore implements FirestoreGateway {
 class FakeMarkdownStore implements MarkdownStore {
   readonly objects = new Map<string, { text: string; updatedAt: Date }>();
   readonly removeFailures = new Set<string>();
+  removeAllFailures = false;
+  failAfterWrites: number | null = null;
   async read(key: string): Promise<string> {
     const object = this.objects.get(key);
     if (!object) throw new Error(`missing object: ${key}`);
     return object.text;
   }
   async write(key: string, text: string): Promise<StoredObject> {
+    if (this.failAfterWrites !== null) {
+      if (this.failAfterWrites === 0) throw new Error(`write failed: ${key}`);
+      this.failAfterWrites -= 1;
+    }
     const updatedAt = new Date();
     this.objects.set(key, { text, updatedAt });
     return { key, size: Buffer.byteLength(text), updatedAt };
   }
   async remove(key: string): Promise<void> {
-    if (this.removeFailures.has(key)) throw new Error(`remove failed: ${key}`);
+    if (this.removeAllFailures || this.removeFailures.has(key)) throw new Error(`remove failed: ${key}`);
     this.objects.delete(key);
   }
   async list(prefix: string): Promise<StoredObject[]> {
@@ -223,6 +229,26 @@ test('SQLite cache更新に失敗したrenameはFirestore metadataを旧nameへ�
   await expect(failingService.get('demo', saved.id)).resolves.toMatchObject({ name: 'rename-rollback', body: 'rename前' });
   await expect(failingService.get('demo', reference.id)).resolves.toMatchObject({ links: ['rename-rollback'] });
   expect([...markdown.objects.keys()]).toEqual(oldKeys);
+});
+
+test('renameの部分書き込みとcleanup失敗は新objectへtombstoneを残す', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+  await service.save('demo', { name: 'partial-rename', description: 'target', type: 'reference', body: '対象' });
+  await service.save('demo', { name: 'partial-reference', description: 'ref', type: 'reference', links: ['partial-rename'], body: '参照' });
+  const oldKeys = [...markdown.objects.keys()];
+  markdown.failAfterWrites = 1;
+  markdown.removeAllFailures = true;
+
+  await expect(service.rename('demo', 'partial-rename', 'partial-renamed')).rejects.toThrow('write failed');
+
+  const newKey = [...markdown.objects.keys()].find((key) => !oldKeys.includes(key));
+  expect(newKey).toBeDefined();
+  await expect(metadata.isTombstoned('demo', newKey!)).resolves.toBe(true);
 });
 
 test('新しいCloud Run instanceは最初のread前にS3からSQLite cacheを再構築する', async () => {

@@ -551,18 +551,6 @@ export class CloudMemoryService {
       });
     }
 
-    const writtenKeys = [key];
-    try {
-      await this.markdown.write(key, raw);
-      for (const reference of references) {
-        await this.markdown.write(reference.key, reference.raw);
-        writtenKeys.push(reference.key);
-      }
-    } catch (error) {
-      await Promise.all(writtenKeys.map((writtenKey) => this.markdown.remove(writtenKey).catch(() => undefined)));
-      throw error;
-    }
-
     const oldObjects = [{ id: row.id, key: row.file_path }, ...references.map((reference) => ({
       id: reference.row.id,
       key: reference.row.file_path,
@@ -581,12 +569,13 @@ export class CloudMemoryService {
       content_key: oldObject.key,
       deleted_at: nowIso(),
     }));
-    const cleanupWrittenKeys = async (): Promise<void> => {
+    const writtenKeys = [key];
+    const cleanupWrittenKeys = async (records: MemoryIndexRecord[]): Promise<void> => {
       await Promise.all(writtenKeys.map(async (writtenKey) => {
         try {
           await this.markdown.remove(writtenKey);
         } catch {
-          const record = nextRecords.find((candidate) => candidate.content_key === writtenKey);
+          const record = records.find((candidate) => candidate.content_key === writtenKey);
           if (record) {
             await this.metadata.putTombstone({
               project_id: project,
@@ -598,6 +587,16 @@ export class CloudMemoryService {
         }
       }));
     };
+    try {
+      await this.markdown.write(key, raw);
+      for (const reference of references) {
+        await this.markdown.write(reference.key, reference.raw);
+        writtenKeys.push(reference.key);
+      }
+    } catch (error) {
+      await cleanupWrittenKeys(nextRecords);
+      throw error;
+    }
     let metadataCommitted = false;
     try {
       await this.metadata.replaceMemoryIndexes(project, old, [
@@ -644,7 +643,7 @@ export class CloudMemoryService {
           throw new AggregateError([error, rollbackError], 'rename compensation failed');
         }
       }
-      await cleanupWrittenKeys();
+      await cleanupWrittenKeys(nextRecords);
       throw error;
     }
 
