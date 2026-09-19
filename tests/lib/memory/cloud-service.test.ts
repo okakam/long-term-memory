@@ -191,6 +191,40 @@ test('SQLite cache削除に失敗したforgetはFirestore metadataを復元す�
   expect(markdown.objects.has(oldKey)).toBe(true);
 });
 
+test('SQLite cache更新に失敗したrenameはFirestore metadataを旧nameへ戻す', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const firstService = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+  const saved = await firstService.save('demo', {
+    name: 'rename-rollback',
+    description: 'before',
+    type: 'reference',
+    body: 'rename前',
+  });
+  const reference = await firstService.save('demo', {
+    name: 'rename-reference',
+    description: 'reference',
+    type: 'reference',
+    links: ['rename-rollback'],
+    body: '参照元',
+  });
+  const oldKeys = [...markdown.objects.keys()];
+
+  const failingService = new CloudMemoryService(Promise.resolve(new FailingTransactionIndex(index)), markdown, metadata, new KeyedMutex(), 'projects');
+  await expect(failingService.rename('demo', 'rename-rollback', 'renamed')).rejects.toThrow('cache transaction failed');
+
+  await expect(metadata.getNameIndex('demo', 'rename-rollback')).resolves.toMatchObject({ memory_id: saved.id });
+  await expect(metadata.getNameIndex('demo', 'renamed')).resolves.toBeNull();
+  await expect(metadata.isTombstoned('demo', oldKeys[0])).resolves.toBe(false);
+  await expect(metadata.getMemoryIndex('demo', reference.id)).resolves.toMatchObject({ name: 'rename-reference', content_key: oldKeys[1] });
+  await expect(failingService.get('demo', saved.id)).resolves.toMatchObject({ name: 'rename-rollback', body: 'rename前' });
+  await expect(failingService.get('demo', reference.id)).resolves.toMatchObject({ links: ['rename-rollback'] });
+  expect([...markdown.objects.keys()]).toEqual(oldKeys);
+});
+
 test('新しいCloud Run instanceは最初のread前にS3からSQLite cacheを再構築する', async () => {
   const firstIndex = openLocalDb(':memory:');
   const markdown = new FakeMarkdownStore();

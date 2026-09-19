@@ -567,17 +567,43 @@ export class CloudMemoryService {
       id: reference.row.id,
       key: reference.row.file_path,
     }))];
+    const previousRecords = [
+      toMemoryIndexRecord(project, row.file_path, row.content_hash, current),
+      ...references.map((reference) => toMemoryIndexRecord(project, reference.row.file_path, reference.row.content_hash, reference.memory)),
+    ];
+    const nextRecords = [
+      toMemoryIndexRecord(project, key, contentHash, updated),
+      ...references.map((reference) => toMemoryIndexRecord(project, reference.key, reference.hash, reference.memory)),
+    ];
     const tombstones: TombstoneRecord[] = oldObjects.map((oldObject) => ({
       project_id: project,
       memory_id: oldObject.id,
       content_key: oldObject.key,
       deleted_at: nowIso(),
     }));
+    const cleanupWrittenKeys = async (): Promise<void> => {
+      await Promise.all(writtenKeys.map(async (writtenKey) => {
+        try {
+          await this.markdown.remove(writtenKey);
+        } catch {
+          const record = nextRecords.find((candidate) => candidate.content_key === writtenKey);
+          if (record) {
+            await this.metadata.putTombstone({
+              project_id: project,
+              memory_id: record.id,
+              content_key: writtenKey,
+              deleted_at: nowIso(),
+            }).catch(() => undefined);
+          }
+        }
+      }));
+    };
+    let metadataCommitted = false;
     try {
       await this.metadata.replaceMemoryIndexes(project, old, [
-        toMemoryIndexRecord(project, key, contentHash, updated),
-        ...references.map((reference) => toMemoryIndexRecord(project, reference.key, reference.hash, reference.memory)),
+        ...nextRecords,
       ], tombstones);
+      metadataCommitted = true;
       await store.transaction(async (tx) => {
         const currentRow = await selectRow(tx, project, old);
         if (!currentRow) throw new MemoryNotFoundError(oldName);
@@ -611,7 +637,14 @@ export class CloudMemoryService {
         }
       });
     } catch (error) {
-      await Promise.all(writtenKeys.map((writtenKey) => this.markdown.remove(writtenKey).catch(() => undefined)));
+      if (metadataCommitted) {
+        try {
+          await this.metadata.restoreMemoryIndexes(project, previousRecords, nextRecords, tombstones);
+        } catch (rollbackError) {
+          throw new AggregateError([error, rollbackError], 'rename compensation failed');
+        }
+      }
+      await cleanupWrittenKeys();
       throw error;
     }
 

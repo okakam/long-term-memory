@@ -515,6 +515,77 @@ export class FirestoreMetadataStore {
     });
   }
 
+  async restoreMemoryIndexes(
+    projectId: string,
+    previousRecords: MemoryIndexRecord[],
+    currentRecords: MemoryIndexRecord[],
+    tombstones: TombstoneRecord[],
+  ): Promise<void> {
+    const project = projectPath(projectId);
+    const previousById = new Map(previousRecords.map((record) => [record.id, record]));
+    const currentMemoryPaths = new Map(currentRecords.map((record) => [record.id, documentPath(memoriesPath(projectId), record.id)]));
+    const currentNamePaths = new Map(currentRecords.map((record) => [record.name, documentPath(namesPath(projectId), nameDocumentId(record.name))]));
+    const previousNamePaths = new Map(previousRecords.map((record) => [record.name, documentPath(namesPath(projectId), nameDocumentId(record.name))]));
+    const tombstonePaths = tombstones.map((tombstone) => documentPath(tombstonesPath(projectId), tombstoneDocumentId(tombstone.content_key)));
+    await this.gateway.runTransaction(async (transaction) => {
+      const projectDocument = await transaction.get(project);
+      const currentMemoryDocuments = new Map<string, FirestoreDocument>();
+      const currentNameDocuments = new Map<string, FirestoreDocument>();
+      const previousNameDocuments = new Map<string, FirestoreDocument>();
+      for (const [id, path] of currentMemoryPaths) currentMemoryDocuments.set(id, await transaction.get(path));
+      for (const [name, path] of currentNamePaths) currentNameDocuments.set(name, await transaction.get(path));
+      for (const [name, path] of previousNamePaths) {
+        if (!currentNamePaths.has(name)) previousNameDocuments.set(name, await transaction.get(path));
+      }
+      for (const record of currentRecords) {
+        const memoryDocument = currentMemoryDocuments.get(record.id);
+        if (!memoryDocument?.exists) throw new MemoryConflictError('memory restore conflict');
+        const current = memoryRecord(memoryDocument);
+        if (current.content_key !== record.content_key || current.content_hash !== record.content_hash) {
+          throw new MemoryConflictError('memory restore conflict');
+        }
+        const nameDocument = currentNameDocuments.get(record.name);
+        if (!nameDocument?.exists) throw new MemoryConflictError('memory restore conflict');
+        const currentName = nameRecord(nameDocument);
+        if (currentName.memory_id !== record.id
+          || currentName.content_key !== record.content_key
+          || currentName.content_hash !== record.content_hash) {
+          throw new MemoryConflictError('memory restore conflict');
+        }
+      }
+      for (const record of previousRecords) {
+        const nameDocument = currentNameDocuments.get(record.name) ?? previousNameDocuments.get(record.name);
+        if (nameDocument?.exists && nameRecord(nameDocument).memory_id !== record.id) {
+          throw new MemoryConflictError('memory name already exists');
+        }
+      }
+      for (const record of currentRecords) {
+        const previous = previousById.get(record.id);
+        if (!previous) {
+          await transaction.delete(currentMemoryPaths.get(record.id)!);
+          const nameDocument = currentNameDocuments.get(record.name);
+          if (nameDocument?.exists) await transaction.delete(currentNamePaths.get(record.name)!);
+          continue;
+        }
+        if (previous.name !== record.name) await transaction.delete(currentNamePaths.get(record.name)!);
+      }
+      for (const record of previousRecords) {
+        await transaction.set(documentPath(memoriesPath(projectId), record.id), memoryData(record));
+        await transaction.set(documentPath(namesPath(projectId), nameDocumentId(record.name)), {
+          memory_id: record.id,
+          name: record.name,
+          content_key: record.content_key,
+          content_hash: record.content_hash,
+        });
+      }
+      for (const path of tombstonePaths) await transaction.delete(path);
+      if (projectDocument.exists) {
+        const currentProject = projectRecord(projectDocument);
+        await transaction.set(project, { revision: currentProject.revision + 1 }, true);
+      }
+    });
+  }
+
   async putTombstone(tombstone: TombstoneRecord): Promise<void> {
     await this.gateway.set(
       documentPath(tombstonesPath(tombstone.project_id), tombstoneDocumentId(tombstone.content_key)),
