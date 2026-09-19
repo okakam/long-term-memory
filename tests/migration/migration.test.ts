@@ -229,6 +229,21 @@ describe('importMigration / verifyMigration', () => {
     expect((await metadata.listTokens('firebase-owner'))).toHaveLength(1);
     await expect(verifyMigration(input)).resolves.toMatchObject({ source_count: 1, target_count: 1, ok: true });
 
+    const memoryPath = `projects/demo/memories/${memory().id}`;
+    const originalMemoryDocument = { ...firestore.documents.get(memoryPath)! };
+    for (const mutation of [
+      { description: '改ざんされた説明' },
+      { body_chars: 999 },
+      { tags: ['改ざんされたタグ'] },
+    ]) {
+      firestore.documents.set(memoryPath, { ...originalMemoryDocument, ...mutation });
+      await expect(verifyMigration(input)).resolves.toMatchObject({
+        ok: false,
+        memory_mismatches: expect.arrayContaining(['demo/migration-note:metadata']),
+      });
+    }
+    firestore.documents.set(memoryPath, originalMemoryDocument);
+
     firestore.documents.delete('projects/demo/names/migration-note');
     await expect(verifyMigration(input)).resolves.toMatchObject({
       ok: false,

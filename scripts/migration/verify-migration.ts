@@ -3,10 +3,11 @@ import { pathToFileURL } from 'node:url';
 
 import { computeHash } from '@/lib/markdown/file-io';
 import { parseMemoryString } from '@/lib/markdown/frontmatter';
+import { bodyChars } from '@/lib/memory/types';
 import type { MarkdownStore } from '@/lib/storage/contracts';
 import { createMarkdownStore } from '@/lib/storage/factory';
 import { memoryObjectKey, s3StoragePrefix } from '@/lib/storage/s3-markdown';
-import { createFirestoreMetadataStore, type FirestoreMetadataStore } from '@/lib/storage/firestore-metadata';
+import { createFirestoreMetadataStore, type FirestoreMetadataStore, type MemoryIndexRecord } from '@/lib/storage/firestore-metadata';
 import type { MigrationManifest } from './export-vercel';
 
 export interface VerificationReport {
@@ -35,6 +36,52 @@ function readManifest(path: string): MigrationManifest {
   const manifest = JSON.parse(readFileSync(path, 'utf8')) as MigrationManifest;
   if (manifest.source !== 'vercel' || !Array.isArray(manifest.projects)) throw new Error('invalid migration manifest');
   return manifest;
+}
+
+function expectedMemoryIndex(projectId: string, prefix: string, memory: MigrationManifest['projects'][number]['memories'][number]): MemoryIndexRecord | null {
+  try {
+    const raw = readFileSync(memory.local_path, 'utf8');
+    if (computeHash(raw) !== memory.content_hash) return null;
+    const parsed = parseMemoryString(raw);
+    if (parsed.id !== memory.id || parsed.name !== memory.name) return null;
+    return {
+      id: parsed.id,
+      project_id: projectId,
+      name: parsed.name,
+      type: parsed.type,
+      description: parsed.description,
+      body_chars: bodyChars(parsed.body),
+      content_key: memoryObjectKey(prefix, projectId, parsed.name, memory.content_hash),
+      content_hash: memory.content_hash,
+      tags: parsed.tags,
+      links: parsed.links,
+      supersedes: parsed.supersedes,
+      entities: parsed.entities,
+      triples: parsed.triples,
+      created_at: parsed.created_at,
+      updated_at: parsed.updated_at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function sameMemoryIndex(actual: MemoryIndexRecord, expected: MemoryIndexRecord): boolean {
+  return actual.id === expected.id
+    && actual.project_id === expected.project_id
+    && actual.name === expected.name
+    && actual.type === expected.type
+    && actual.description === expected.description
+    && actual.body_chars === expected.body_chars
+    && actual.content_key === expected.content_key
+    && actual.content_hash === expected.content_hash
+    && JSON.stringify(actual.tags) === JSON.stringify(expected.tags)
+    && JSON.stringify(actual.links) === JSON.stringify(expected.links)
+    && JSON.stringify(actual.supersedes) === JSON.stringify(expected.supersedes)
+    && JSON.stringify(actual.entities) === JSON.stringify(expected.entities)
+    && JSON.stringify(actual.triples) === JSON.stringify(expected.triples)
+    && actual.created_at === expected.created_at
+    && actual.updated_at === expected.updated_at;
 }
 
 export async function verifyMigration(input: VerifyMigrationInput): Promise<VerificationReport> {
@@ -82,23 +129,26 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
     for (const memory of project.memories) {
       expectedIds.add(memory.id);
       expectedNames.add(memory.name);
-      const expectedKey = memoryObjectKey(prefix, project.project_id, memory.name, memory.content_hash);
-      const target = targetById.get(memory.id);
+      const expected = expectedMemoryIndex(project.project_id, prefix, memory);
+      if (!expected) {
+        memoryMismatches.push(`${project.project_id}/${memory.name}:source`);
+        continue;
+      }
+      const target = targetById.get(expected.id);
       if (!target) {
         memoryMismatches.push(`${project.project_id}/${memory.name}:missing`);
         continue;
       }
-      if (target.project_id !== project.project_id || target.name !== memory.name
-        || target.content_key !== expectedKey || target.content_hash !== memory.content_hash) {
+      if (!sameMemoryIndex(target, expected)) {
         memoryMismatches.push(`${project.project_id}/${memory.name}:metadata`);
       }
-      const targetName = targetNameByName.get(memory.name);
+      const targetName = targetNameByName.get(expected.name);
       if (!targetName) {
         nameIndexMismatches.push(`${project.project_id}/${memory.name}:missing`);
-      } else if (targetName.memory_id !== memory.id
-        || targetName.name !== memory.name
-        || targetName.content_key !== expectedKey
-        || targetName.content_hash !== memory.content_hash) {
+      } else if (targetName.memory_id !== expected.id
+        || targetName.name !== expected.name
+        || targetName.content_key !== expected.content_key
+        || targetName.content_hash !== expected.content_hash) {
         nameIndexMismatches.push(`${project.project_id}/${memory.name}:metadata`);
       }
     }
