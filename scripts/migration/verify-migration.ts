@@ -83,6 +83,26 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
     const target = await input.firestore.metadata.findTokenByHash(token.token_hash);
     if (!target || target.id !== token.id) patMismatches.push(token.id);
   }
+  const tombstoneMismatches: string[] = [];
+  const expectedTombstones = new Map(
+    (manifest.tombstones ?? []).map((tombstone) => [`${tombstone.project_id}:${tombstone.content_key}`, tombstone]),
+  );
+  const tombstoneProjects = new Set([
+    ...manifest.projects.map((project) => project.project_id),
+    ...manifest.auth.projects.map((project) => project.project_id),
+    ...(manifest.tombstones ?? []).map((tombstone) => tombstone.project_id),
+  ]);
+  const targetTombstones = new Map<string, Awaited<ReturnType<FirestoreMetadataStore['listTombstones']>>[number]>();
+  for (const projectId of tombstoneProjects) {
+    for (const tombstone of await input.firestore.metadata.listTombstones(projectId)) {
+      targetTombstones.set(`${projectId}:${tombstone.content_key}`, tombstone);
+    }
+  }
+  for (const [key, source] of expectedTombstones) {
+    const target = targetTombstones.get(key);
+    if (!target || target.memory_id !== source.memory_id || target.deleted_at !== source.deleted_at) tombstoneMismatches.push(key);
+  }
+  for (const key of targetTombstones.keys()) if (!expectedTombstones.has(key)) tombstoneMismatches.push(key);
 
   return {
     source_count: expected.size,
@@ -93,9 +113,10 @@ export async function verifyMigration(input: VerifyMigrationInput): Promise<Veri
     parse_failures: parseFailures.sort(),
     membership_mismatches: membershipMismatches.sort(),
     pat_mismatches: patMismatches.sort(),
-    tombstone_mismatches: [],
+    tombstone_mismatches: tombstoneMismatches.sort(),
     ok: missingKeys.length === 0 && extraKeys.length === 0 && hashMismatches.length === 0
-      && parseFailures.length === 0 && membershipMismatches.length === 0 && patMismatches.length === 0,
+      && parseFailures.length === 0 && membershipMismatches.length === 0 && patMismatches.length === 0
+      && tombstoneMismatches.length === 0,
   };
 }
 

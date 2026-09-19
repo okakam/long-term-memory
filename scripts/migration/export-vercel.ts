@@ -8,6 +8,7 @@ import { assertMemoryName, assertProjectId } from '@/lib/slug';
 import type { IndexStore, MarkdownStore } from '@/lib/storage/contracts';
 import { TursoIndexStore } from '@/lib/storage/turso-index';
 import type { MemberRecord, ProjectRecord, TokenRecord } from '@/lib/auth/store';
+import type { TombstoneRecord } from '@/lib/storage/firestore-metadata';
 import { createLegacyVercelBlobStore } from './legacy-vercel-blob';
 
 interface MemoryRow {
@@ -16,6 +17,13 @@ interface MemoryRow {
   name: string;
   file_path: string;
   content_hash: string;
+}
+
+interface TombstoneRow {
+  project_id: string;
+  memory_id: string;
+  file_path: string;
+  deleted_at: string;
 }
 
 export interface ExportMemoryRecord {
@@ -33,6 +41,7 @@ export interface MigrationManifest {
     project_id: string;
     memories: ExportMemoryRecord[];
   }>;
+  tombstones: TombstoneRecord[];
   auth: {
     projects: ProjectRecord[];
     members: MemberRecord[];
@@ -101,9 +110,12 @@ export async function exportVercelData(options: ExportVercelOptions): Promise<Mi
   const authDb = options.authDb ?? authConnection!.store;
 
   try {
-    const [memoryRows, projects, members, tokens] = await Promise.all([
+    const [memoryRows, tombstones, projects, members, tokens] = await Promise.all([
       memoryDb.query<MemoryRow>(
         'SELECT id, project_id, name, file_path, content_hash FROM memories ORDER BY project_id, name',
+      ),
+      memoryDb.query<TombstoneRow>(
+        'SELECT project_id, memory_id, file_path, deleted_at FROM memory_tombstones ORDER BY project_id, file_path',
       ),
       authDb.query<ProjectRecord>(
         'SELECT project_id, owner_user_id, created_at, updated_at FROM projects ORDER BY project_id',
@@ -148,6 +160,12 @@ export async function exportVercelData(options: ExportVercelOptions): Promise<Mi
       projects: [...projectMap.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([project_id, memories]) => ({
         project_id,
         memories: memories.sort((left, right) => left.name.localeCompare(right.name)),
+      })),
+      tombstones: tombstones.map((row): TombstoneRecord => ({
+        project_id: assertProjectId(row.project_id),
+        memory_id: row.memory_id,
+        content_key: row.file_path,
+        deleted_at: row.deleted_at,
       })),
       auth: { projects, members, tokens: tokenRows(tokens) },
     };

@@ -95,6 +95,10 @@ describe('exportVercelData', () => {
       'INSERT INTO memories (id, project_id, name, type, description, body_chars, file_path, content_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [memory().id, 'demo', memory().name, memory().type, memory().description, memory().body.length, key, computeHash(raw), memory().created_at, memory().updated_at],
     );
+    await memoryDb.exec(
+      'INSERT INTO memory_tombstones (project_id, memory_id, file_path, deleted_at) VALUES (?, ?, ?, ?)',
+      ['demo', 'deleted-memory', 'projects/demo/memories/deleted-memory/old.md', '2026-09-18T00:00:00.000Z'],
+    );
     await authDb.exec(
       'INSERT INTO projects (project_id, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?)',
       ['demo', 'firebase-owner', memory().created_at, memory().updated_at],
@@ -124,6 +128,12 @@ describe('exportVercelData', () => {
       const exported = manifest.projects[0]?.memories[0];
       expect(exported).toMatchObject({ name: 'migration-note', key });
       expect(exported?.content_hash).toBe(computeHash(raw));
+      expect(manifest.tombstones).toEqual([{
+        project_id: 'demo',
+        memory_id: 'deleted-memory',
+        content_key: 'projects/demo/memories/deleted-memory/old.md',
+        deleted_at: '2026-09-18T00:00:00.000Z',
+      }]);
       expect(exported?.local_path).toContain('/markdown/demo/migration-note/');
       expect(readFileSync(exported!.local_path, 'utf8')).toBe(raw);
       expect(statSync(exported!.local_path).mode & 0o777).toBe(0o600);
@@ -190,6 +200,7 @@ describe('importMigration / verifyMigration', () => {
         members: [{ project_id: 'demo', user_id: 'clerk-owner', role: 'owner' }],
         tokens: [{ id: 'token-id', user_id: 'clerk-owner', token_hash: 'hash', token_prefix: 'ltm_hash', label: 'test', audience: 'mcp', created_at: memory().created_at, last_used_at: null, expires_at: null, revoked_at: null }],
       },
+      tombstones: [{ project_id: 'demo', memory_id: 'deleted-memory', content_key: 'projects/demo/memories/deleted-memory/old.md', deleted_at: '2026-09-18T00:00:00.000Z' }],
     }), { mode: 0o600 });
     const objects = new Map<string, string>();
     const markdown = createMarkdownStore(objects);
@@ -206,6 +217,12 @@ describe('importMigration / verifyMigration', () => {
 
     expect(objects).toHaveLength(1);
     expect(await metadata.listMemoryIndexes('demo')).toHaveLength(1);
+    expect(await metadata.listTombstones('demo')).toEqual([{
+      project_id: 'demo',
+      memory_id: 'deleted-memory',
+      content_key: 'projects/demo/memories/deleted-memory/old.md',
+      deleted_at: '2026-09-18T00:00:00.000Z',
+    }]);
     expect(await metadata.listMembers('demo')).toEqual([{ project_id: 'demo', user_id: 'firebase-owner', role: 'owner' }]);
     expect((await metadata.listTokens('firebase-owner'))).toHaveLength(1);
     await expect(verifyMigration(input)).resolves.toMatchObject({ source_count: 1, target_count: 1, ok: true });

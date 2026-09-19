@@ -25,6 +25,7 @@ export interface ImportReport {
   tokens: number;
   memories: number;
   objects: number;
+  tombstones: number;
 }
 
 export interface ImportMigrationInput {
@@ -85,7 +86,7 @@ export async function importMigration(input: ImportMigrationInput): Promise<Impo
   const manifest = readManifest(input.manifestPath);
   const prefix = input.s3.prefix ?? s3StoragePrefix();
   const members = manifest.auth.members;
-  let report: ImportReport = { projects: 0, members: 0, tokens: 0, memories: 0, objects: 0 };
+  let report: ImportReport = { projects: 0, members: 0, tokens: 0, memories: 0, objects: 0, tombstones: 0 };
 
   for (const project of manifest.auth.projects) {
     const imported = await importProject(project, members, manifest.auth.tokens, input.firestore.metadata, input.firebaseUidMap);
@@ -119,6 +120,10 @@ export async function importMigration(input: ImportMigrationInput): Promise<Impo
       });
       report = { ...report, memories: report.memories + 1, objects: report.objects + 1 };
     }
+  }
+  for (const tombstone of manifest.tombstones ?? []) {
+    await input.firestore.metadata.deleteMemoryIndex(tombstone.project_id, tombstone.memory_id, tombstone);
+    report = { ...report, tombstones: report.tombstones + 1 };
   }
   return report;
 }
