@@ -18,9 +18,9 @@ function errorResponse(error: unknown): Response {
   return new Response(message, { status });
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(req?: Request): Promise<Response> {
   try {
-    const principal = await requireWebPrincipal();
+    const principal = await requireWebPrincipal(req);
     return Response.json(await listPats(principal.userId));
   } catch (error) {
     return errorResponse(error);
@@ -30,7 +30,7 @@ export async function GET(): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   try {
     assertSameOrigin(req);
-    const principal = await requireWebPrincipal();
+    const principal = await requireWebPrincipal(req);
     const input = CreateTokenInput.parse(await req.json());
     const created = await createPat(principal.userId, input.label, input.expires_at);
     return Response.json({ token: created.token, token_id: created.tokenId }, { status: 201 });
@@ -42,7 +42,7 @@ export async function POST(req: Request): Promise<Response> {
 export async function DELETE(req: Request): Promise<Response> {
   try {
     assertSameOrigin(req);
-    const principal = await requireWebPrincipal();
+    const principal = await requireWebPrincipal(req);
     const tokenId = new URL(req.url).searchParams.get('token_id');
     if (!tokenId) return new Response('token_id is required', { status: 400 });
     await revokePat(principal.userId, tokenId);

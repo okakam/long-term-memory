@@ -1,5 +1,8 @@
 import type { IndexStore, SqlValue } from '@/lib/storage/contracts';
+import { resolveStorageMode } from '@/lib/storage/contracts';
 import { openAuthDb } from './connection';
+import { FirestoreAuthStore } from './firestore-store';
+import { createFirestoreMetadataStore } from '@/lib/storage/firestore-metadata';
 
 export interface ProjectRecord {
   project_id: string;
@@ -166,7 +169,11 @@ let testStore: AuthStoreLike | null = null;
 export async function getAuthStore(): Promise<AuthStoreLike> {
   if (testStore) return testStore;
   if (!storePromise) {
-    storePromise = openAuthDb().then((db) => new AuthStore(db));
+    if (resolveStorageMode() === 'cloud') {
+      storePromise = Promise.resolve(new FirestoreAuthStore(createFirestoreMetadataStore()));
+    } else {
+      storePromise = openAuthDb().then((db) => new AuthStore(db));
+    }
   }
   return storePromise;
 }

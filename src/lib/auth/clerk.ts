@@ -1,5 +1,5 @@
 import { authRequired } from './config';
-import { getCurrentFirebasePrincipal, requireCurrentFirebasePrincipal } from './session';
+import { getCurrentFirebasePrincipal, getFirebasePrincipal, requireCurrentFirebasePrincipal, requireFirebasePrincipal } from './session';
 
 export interface WebPrincipal {
   userId: string;
@@ -13,12 +13,16 @@ export class UnauthorizedWebError extends Error {
   }
 }
 
-export async function getWebPrincipal(): Promise<WebPrincipal | null> {
+export async function getWebPrincipal(request?: Request): Promise<WebPrincipal | null> {
   if (!authRequired()) return null;
-  return getCurrentFirebasePrincipal();
+  return request ? getFirebasePrincipal(request, { allowBearer: true }) : getCurrentFirebasePrincipal();
 }
 
-export async function requireWebPrincipal(): Promise<WebPrincipal> {
+export async function requireWebPrincipal(request?: Request): Promise<WebPrincipal> {
   if (!authRequired()) throw new UnauthorizedWebError();
-  try { return await requireCurrentFirebasePrincipal(); } catch { throw new UnauthorizedWebError(); }
+  try {
+    return request
+      ? await requireFirebasePrincipal(request, { allowBearer: true })
+      : await requireCurrentFirebasePrincipal();
+  } catch { throw new UnauthorizedWebError(); }
 }

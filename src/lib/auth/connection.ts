@@ -32,6 +32,7 @@ export function openLocalAuthDb(path = join(resolveStorage().home, 'auth.db')): 
 export async function openAuthDb(): Promise<IndexStore> {
   const mode = process.env.LTM_STORAGE_DRIVER ? resolveStorageMode() : (process.env.VERCEL === '1' ? 'vercel' : 'local');
   if (mode === 'local') return openLocalAuthDb();
+  if (mode === 'cloud') throw new Error('openAuthDb is unavailable in cloud mode; use FirestoreAuthStore');
   const client: Client = createClient({
     url: requiredEnv('TURSO_AUTH_DATABASE_URL'),
     authToken: requiredEnv('TURSO_AUTH_DATABASE_TOKEN'),
