@@ -74,7 +74,7 @@ Node.jsアプリをローカルからGoogle APIへ接続して確認する必要
 確認します。
 
     gcloud storage buckets describe "gs://$LTM_GCS_BUCKET" \
-      --format='yaml(name,location,iamConfiguration.uniformBucketLevelAccess,iamConfiguration.publicAccessPrevention)'
+      --format='yaml(name,location,uniform_bucket_level_access,public_access_prevention)'
 
 アプリはオブジェクトを公開しません。Uniform bucket-level accessとPublic access preventionを有効にし、IAMでruntime service accountだけにアクセスを許可します。[gcloud storage buckets create](https://docs.cloud.google.com/sdk/gcloud/reference/storage/buckets/create)
 
