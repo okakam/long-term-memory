@@ -31,6 +31,24 @@ jobs:
       - run: pnpm lint
       - run: NODE_ENV=production pnpm build
       - run: docker build --tag long-term-memory:test .
+      - name: Container health check
+        run: |
+          set -eu
+          container_name=long-term-memory-health
+          cleanup() {
+            docker logs "$container_name" || true
+            docker rm --force "$container_name" || true
+          }
+          trap cleanup EXIT
+          docker run --detach --name "$container_name" \
+            --env AUTH_REQUIRED=0 \
+            --env LTM_STORAGE_DRIVER=local \
+            --env LTM_HOME=/tmp/long-term-memory \
+            --env PORT=8080 \
+            --publish 8080:8080 \
+            long-term-memory:test
+          curl --fail --retry 30 --retry-delay 1 --retry-connrefused \
+            http://127.0.0.1:8080/api/health
 
   deploy:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

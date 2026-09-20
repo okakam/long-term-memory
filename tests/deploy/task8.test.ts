@@ -58,6 +58,11 @@ test('Cloud Run workflowはPRでruntime secretを使わず低コスト設定でd
   expect(workflow).toContain('pnpm test');
   expect(workflow).toContain('NODE_ENV=production pnpm build');
   expect(workflow).toContain('docker build');
+  expect(workflow).toContain('docker run --detach --name "$container_name"');
+  expect(workflow).toContain('--env AUTH_REQUIRED=0');
+  expect(workflow).toContain('--env LTM_STORAGE_DRIVER=local');
+  expect(workflow).toContain('http://127.0.0.1:8080/api/health');
+  expect(workflow).toContain('docker rm --force "$container_name"');
   expect(workflow).toContain('id-token: write');
   expect(workflow).toContain('--min 0 --max 1 --concurrency 1');
   expect(workflow).toContain('--allow-unauthenticated');

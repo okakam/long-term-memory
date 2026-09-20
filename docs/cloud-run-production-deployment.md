@@ -8,7 +8,7 @@ PRを`main`へマージした直後にCloud Runへ自動デプロイする。常
 
 ```text
 PR作成・PRブランチpush
-  -> verify（test / lint / production build / Docker build）
+  -> verify（test / lint / production build / Docker build / container health）
   -> mainへマージ
   -> mainへのpush
   -> verify
@@ -79,7 +79,7 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 
 mainへマージした後、GitHub Actionsで次を確認する。
 
-1. `verify` jobが成功する。
+1. `verify` jobが成功する（Docker image build後の`GET /api/health`も含む）。
 2. `deploy` jobがproduction Environmentで実行される。
 3. Cloud Runのrevisionが作成される。
 4. Cloud Run smokeでhealth、MCP initialize、tools/list、save、search、get、update、link、reindex、deleteが成功する。
