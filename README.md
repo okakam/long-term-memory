@@ -20,7 +20,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-ローカルは `LTM_STORAGE_DRIVER=local`、`AUTH_REQUIRED=0`、port `3939` を使います。Docker Composeを使う場合は `docker-compose.yml` を利用します。
+ローカルは `LTM_STORAGE_DRIVER=local`、`AUTH_REQUIRED=0`、port `3939` を使います。Dev Containerは `.devcontainer/compose.yaml` を利用します。
 
 ## 検証
 
@@ -38,6 +38,7 @@ Cloud Runの実環境smokeは外部資格情報が必要です。ローカルテ
 設計と手順は次を正本とします。
 
 - [現行再現仕様書](docs/reproduction-spec.md)
+- [Google Cloud CLI / Firebase 初期設定手順](docs/google-cloud-cli-setup.md)
 - [設計書](docs/superpowers/specs/2026-09-19-cloud-run-firebase-gcs-firestore-design.md)
 - [実装計画](docs/superpowers/plans/2026-09-20-cloud-run-gcs-storage.md)
 - [切り替えチェックリスト](docs/migration/cloud-run-cutover-checklist.md)

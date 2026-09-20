@@ -19,7 +19,7 @@
 ## 開発環境
 
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
-- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
+- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
 - Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存し、`long-term-memory-codex` volume で永続化する。
 - `/workspace/.codex/config.toml` で Codex CLI の TUI フッターにコンテキスト残量、5時間制限、長期使用制限を表示する。
@@ -29,7 +29,7 @@
 ## 変更時の確認
 
 - YAML/JSON の構文を検証し、`docker compose -f .devcontainer/compose.yaml config --quiet` を実行する。
-- 開発コンテナをビルドし、`node`、`pnpm`、`codex`、`turso`、`gh`、`jq` のバージョンと volume の書き込み可否を確認する。
+- 開発コンテナをビルドし、`node`、`pnpm`、`codex`、`gh`、`gcloud`、`firebase`、`jq` のバージョンとvolumeの書き込み可否を確認する。GCP/Firebaseの認証はコンテナ内でCLIを使って行い、認証情報はnamed volumeに保存する。
 - 変更前後に `git diff --check` を実行する。
 - 完了を報告する前に、変更内容に応じたテストまたはビルドを実行し、結果を記録する。
 
@@ -38,5 +38,6 @@
 - production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote service、永続telemetry DBを削除した。旧Vercel Blob/Tursoのmigration専用スクリプト、テスト、devDependenciesも、旧データを移行せず空スタートする方針により削除済みである。
 - ローカル検証時点で全テスト、lint、型検査、`NODE_ENV=production pnpm build`を実行する。Cloud Run smoke scriptはinitialize、tools/list、save、get、update、link、reindex、search、deleteを実行し、renameは`CloudMemoryService`の回帰テストで検証する。Cloud Run/Firebase/GCSの実環境smokeは外部資格情報が必要な未完了ゲートであり、旧データのexport/import/verifyは対象外、旧Vercel Project削除はユーザー報告で完了している。
 - `main`へのPRマージ後は、`push`イベントでGitHub Actionsのverify完了後に`production` Environmentを使ってCloud Runへ自動deployする。手動dispatchもmainブランチだけを許可し、Production deployは同時実行しない。Environmentの設定値は`docs/cloud-run-production-deployment.md`に記録する。
+- GCPリソース、IAM、Workload Identity Federation、Secret Manager、Firestore Rules/IndexesのCLI手順は `docs/google-cloud-cli-setup.md` に記録する。Firebase Storageは使用せず、Markdown本文はCloud RunからGCS APIで扱う。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
