@@ -7,7 +7,7 @@
     "acceptance_status": "local-green"
   },
   "migration_gates": {
-    "container_health": "GitHub Actions cloud-run verify済み、ローカルDocker未実行",
+    "container_health": "GitHub Actions cloud-run verify済み、devcontainer内のローカルDocker検証は対象外",
     "cloud_run_smoke": "未実行: GCP資格情報とURLが必要",
     "s3_firestore_import": "未実行: 実データとAWS/Firebase資格情報が必要",
     "migration_verify": "fake target test済み、実target未実行",
