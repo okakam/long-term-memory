@@ -1,27 +1,66 @@
-# 開発コンテナの Codex 環境
+# 開発コンテナのCodex / Google Cloud環境
 
-この開発コンテナには、Node.js 開発に加えて OpenAI Codex CLI、GitHub CLI（`gh`）、`jq`、Turso CLI を導入しています。
+この開発コンテナには、Node.js開発に加えてOpenAI Codex CLI、GitHub CLI（gh）、Google Cloud CLI（gcloud）、Firebase CLI、jq、xz-utilsを導入しています。Turso CLIは使用しません。
 
 ## 初回利用
 
-1. VS Code で「コンテナーで再度開く」を実行する。
-2. ターミナルで `codex --version`、`gh --version`、`turso --version` を確認する。
-3. `codex` を起動し、表示された案内から ChatGPT または利用可能な方法でサインインする。
-4. GitHub 操作が必要な場合は `gh auth login` を実行する。
-5. Turso を使う場合は `turso auth login` を実行する。ブラウザを開けない環境では `turso auth login --headless` を使う。
+1. VS Codeで「Dev Containers: Rebuild Container」を実行する。
+2. ターミナルで次のバージョンを確認する。
 
-Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存され、Compose の `long-term-memory-codex` volume でコンテナ再作成後も保持されます。API キーや認証情報は Dockerfile に記述しません。
+       node --version
+       pnpm --version
+       codex --version
+       gh --version
+       gcloud --version
+       firebase --version
+       jq --version
 
-## VS Code 拡張機能
+3. Codexを起動し、表示された案内からChatGPTまたは利用可能な方法でサインインする。
+4. GitHub操作が必要な場合は gh auth login を実行する。
+5. Google Cloud操作が必要な場合は gcloud auth login --no-launch-browser を実行する。
+6. FirebaseのRules/Indexesを操作する場合は firebase login --no-localhost を実行する。
 
-`devcontainer.json` の `customizations.vscode.extensions` に `openai.chatgpt` を指定しています。既存のコンテナに反映するには、VS Code で「Dev Containers: Rebuild Container」を実行してください。
+Codex、gcloud、Firebase CLIの設定はnamed volumeへ保存され、コンテナ再作成後も再利用できます。APIキー、サービスアカウントJSON、PAT、maintenance tokenなどの認証情報はDockerfileやリポジトリへ記述しません。
 
-## バージョン
+## Google Cloud操作
 
-Codex CLI は Dockerfile の `CODEX_VERSION`（現在 `0.153.4`）で固定しています。Turso CLI は公式インストーラーから取得します。更新時は Dockerfile と compose.yaml の両方を変更してイメージを再ビルドしてください。
+プロジェクトをgcloudの既定値に設定します。
 
-## Codex の sandbox
+       export LTM_PROJECT_ID='実際のGCPプロジェクトID'
+       gcloud config set project "$LTM_PROJECT_ID"
+       gcloud auth list
+       gcloud config get-value project
 
-`compose.yaml` の `app` サービスでは、Codex CLI の `bwrap` が nested namespace を作成できるよう `seccomp=unconfined` を設定しています。これは開発用コンテナに限定した設定であり、本番コンテナへは適用しません。
+GCPリソース作成、IAM、GCS、Firestore、Secret Manager、Workload Identity Federationの手順は [Google Cloud CLI / Firebase 初期設定手順](../docs/google-cloud-cli-setup.md) を参照してください。
 
-`compose.yaml` を変更した後は、VS Code の「Dev Containers: Rebuild Container」でコンテナを再作成してください。再接続後、`bwrap --ro-bind / / true` が成功すれば namespace 設定を確認できます。
+Cloud Run本番deployのGitHub Environment設定は [Cloud Run本番デプロイ環境](../docs/cloud-run-production-deployment.md) を参照してください。
+
+ローカルのNode.jsアプリをGoogle APIへ接続する必要がある場合だけ、ユーザーADCを作成します。
+
+       gcloud auth application-default login --no-launch-browser
+
+通常のローカル開発は AUTH_REQUIRED=0 とlocal storageを使うため、ユーザーADCは必須ではありません。
+
+## Firebase CLI操作
+
+このリポジトリの firebase.json はFirestore RulesとIndexesを管理します。
+
+       firebase projects:list
+       firebase deploy --project="$LTM_PROJECT_ID" --only firestore
+       firebase firestore:indexes --project="$LTM_PROJECT_ID" --database='(default)'
+
+Firebase AuthenticationのWebアプリ登録、Email/Password・Google provider、Authorized domainsはFirebase Consoleで設定します。
+
+## VS Code拡張機能
+
+devcontainer.jsonの customizations.vscode.extensions に openai.chatgptを指定しています。既存のコンテナに反映するには、VS Codeで「Dev Containers: Rebuild Container」を実行してください。
+
+## バージョンと更新
+
+Node.jsは22、pnpmは11.1.3を使用します。Google Cloud CLIとFirebase CLIはイメージbuild時に公式配布元からインストールします。CLIを更新する場合はDockerfileを変更してDev Containers: Rebuild Containerを実行してください。
+
+## Codexのsandbox
+
+compose.yamlのappサービスでは、Codex CLIのbwrapがnested namespaceを作成できるよう seccomp=unconfined を設定しています。これは開発用コンテナに限定した設定であり、本番コンテナへは適用しません。
+
+compose.yamlを変更した後は、VS Codeの「Dev Containers: Rebuild Container」でコンテナを再作成してください。再接続後、bwrap --ro-bind / / true が成功すればnamespace設定を確認できます。

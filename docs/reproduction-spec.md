@@ -4,6 +4,13 @@
 
 - 設計: `docs/superpowers/specs/2026-09-19-cloud-run-firebase-gcs-firestore-design.md`
 - 実装計画: `docs/superpowers/plans/2026-09-20-cloud-run-gcs-storage.md`
+- GCP/Firebase CLI手順: `docs/google-cloud-cli-setup.md`
+
+## 0. 開発コンテナとCLI
+
+開発コンテナには Node.js 22、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
+
+Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret Managerは `gcloud` コマンドで実行する。FirebaseのFirestore Rules/Indexes適用は `firebase deploy --only firestore` を使用する。サービスアカウントJSON、APIキー、PAT、maintenance tokenをDockerfile・ソース・実在`.env`へ記載しない。
 
 ## 1. 目的と確定方針
 
@@ -46,7 +53,7 @@ GCSとFirestoreへのアクセスはCloud Runランタイムサービスアカ�
 
 ### ローカル
 
-`LTM_STORAGE_DRIVER=local`、`AUTH_REQUIRED=0`、`LTM_LOCAL_USER_ID=local-user`、`PORT=3939`、`LTM_HOME=.long-term-memory` を使う。localのWeb/APIはこの合成UIDへ紐付け、Firebaseへ接続しない。Composeは `docker-compose.yml` を使用し、hostの `.long-term-memory` を `/data`へbind mountする。
+`LTM_STORAGE_DRIVER=local`、`AUTH_REQUIRED=0`、`LTM_LOCAL_USER_ID=local-user`、`PORT=3939`、`LTM_HOME=.long-term-memory` を使う。localのWeb/APIはこの合成UIDへ紐付け、Firebaseへ接続しない。Dev Containerは `.devcontainer/compose.yaml` を使用し、開発用のnamed volumeへNode.js依存関係・Codex・gcloud/Firebase CLI設定を保存する。
 
 ## 5. データ保存契約
 

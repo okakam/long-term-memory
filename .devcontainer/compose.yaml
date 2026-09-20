@@ -27,7 +27,7 @@ services:
       LTM_HOME: /workspace/.long-term-memory
       NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
-      PATH: /home/node/.turso:/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       PNPM_HOME: /pnpm
     volumes:
       - type: bind
@@ -39,9 +39,14 @@ services:
       - type: volume
         source: codex_data
         target: /home/node/.codex
+      - type: volume
+        source: cloud_cli_data
+        target: /home/node/.config
 
 volumes:
   node_modules:
     name: long-term-memory-node_modules
   codex_data:
     name: long-term-memory-codex
+  cloud_cli_data:
+    name: long-term-memory-cloud-cli

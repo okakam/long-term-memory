@@ -4,6 +4,8 @@
 
 PRを`main`へマージした直後にCloud Runへ自動デプロイする。常設のstaging環境は作らず、Cloud Runはscale to zeroで運用する。
 
+GCPプロジェクト、GCS、Firestore、Firebase Authentication、IAM、Workload Identity Federation、Secret Managerの作成は [Google Cloud CLI / Firebase 初期設定手順](google-cloud-cli-setup.md) の `gcloud` / Firebase CLI手順を実行する。GitHub Environmentの値はこの文書の表と同手順の対応表を一致させる。
+
 ## デプロイ経路
 
 ```text
