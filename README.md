@@ -7,10 +7,10 @@ Markdownを正本として扱う、MCP対応の長期記憶アプリケーショ
 - Cloud Run: Next.jsアプリケーション。min 0、max 1、concurrency 1。
 - Firebase Authentication: Webのemail/password・Google認証。
 - Firestore: project、membership、memory metadata、name index、tombstone、MCP PAT hash。
-- Amazon S3: Markdown本文のimmutable object。
+- Google Cloud Storage (GCS): Markdown本文のimmutable object。Cloud RunからGCS APIでアクセスする。
 - `/tmp` SQLite: FTS5・KG・検索用の再構築可能cache。
 
-Cloud SQL、Redis、Upstash、Firebase Cloud Storage、Cloud Scheduler、常駐workerは使用しません。Cloud Runのscale to zeroを使って常時起動費を抑えますが、S3・Firestore・ログ・Artifact Registryには従量課金があり得るため、完全な金額ゼロは利用量に依存します。
+Cloud SQL、Redis、Upstash、Firebase StorageのクライアントSDK、Cloud Scheduler、常駐workerは使用しません。Cloud Runのscale to zeroを使って常時起動費を抑えますが、GCS・Firestore・ログ・Artifact Registryには従量課金があり得るため、完全な金額ゼロは利用量に依存します。
 
 ## ローカル開発
 
@@ -31,15 +31,15 @@ pnpm exec tsc --noEmit
 NODE_ENV=production pnpm build
 ```
 
-Cloud Runの実環境smoke、S3/Firestoreへの実データ移行、Vercel Project削除は外部資格情報が必要です。未実行の外部ゲートをローカルテスト成功だけで完了扱いにしません。ローカルではsmoke scriptの主要MCP経路を回帰検証し、renameはMCP公開toolではないため`CloudMemoryService`のテストで検証します。
+Cloud Runの実環境smokeは外部資格情報が必要です。ローカルテスト成功だけで外部provider接続済みとは扱いません。ローカルではsmoke scriptの主要MCP経路を回帰検証し、renameはMCP公開toolではないため`CloudMemoryService`のテストで検証します。
 
-## 移行
+## 初期セットアップ
 
 設計と手順は次を正本とします。
 
 - [現行再現仕様書](docs/reproduction-spec.md)
-- [設計書](docs/superpowers/specs/2026-09-19-cloud-run-firebase-s3-firestore-design.md)
-- [実装計画](docs/superpowers/plans/2026-09-19-cloud-run-firebase-s3-firestore-migration.md)
+- [設計書](docs/superpowers/specs/2026-09-19-cloud-run-firebase-gcs-firestore-design.md)
+- [実装計画](docs/superpowers/plans/2026-09-20-cloud-run-gcs-storage.md)
 - [切り替えチェックリスト](docs/migration/cloud-run-cutover-checklist.md)
 
-旧Vercel/Turso/Blobからのexportは `scripts/migration/` に一時的に残しています。migration verify、Cloud Run smoke、rollback期間の終了を確認するまで、旧credentialとmigration専用依存を削除しません。
+旧Vercel/Turso/Blobのデータは移行せず破棄し、新しいCloud Run/Firebase/GCS/Firestore環境を空の状態から開始します。旧providerのmigration専用スクリプトと依存は削除済みです。

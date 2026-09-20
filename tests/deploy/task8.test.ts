@@ -27,15 +27,16 @@ test('Docker配布設定はCloud RunのPORTと一時SQLiteを使う', () => {
   expect(compose).toContain('LTM_STORAGE_DRIVER: local');
 });
 
-test('環境変数サンプルはCloud Run/Firebase/S3のキーだけを含み秘密値を含まない', () => {
+test('環境変数サンプルはCloud Run/Firebase/GCSのキーだけを含み秘密値を含まない', () => {
   const env = read('.env.example');
   for (const name of [
-    'LTM_STORAGE_DRIVER', 'AUTH_REQUIRED', 'LTM_LOCAL_USER_ID', 'LTM_S3_BUCKET', 'LTM_S3_PREFIX', 'AWS_REGION',
+    'LTM_STORAGE_DRIVER', 'AUTH_REQUIRED', 'LTM_LOCAL_USER_ID', 'LTM_GCS_BUCKET', 'LTM_GCS_PREFIX',
     'FIREBASE_PROJECT_ID', 'NEXT_PUBLIC_FIREBASE_API_KEY', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
     'NEXT_PUBLIC_FIREBASE_PROJECT_ID', 'NEXT_PUBLIC_FIREBASE_APP_ID', 'MCP_PUBLIC_URL',
     'MCP_ALLOWED_ORIGINS', 'LTM_CURATOR_USER_ID', 'LTM_MAINTENANCE_TOKEN',
   ]) expect(env).toMatch(new RegExp('^' + name + '=', 'm'));
   expect(env).not.toMatch(/^(?:TURSO|BLOB|UPSTASH|CLERK|VERCEL).*=[^\s]+/m);
+  expect(env).not.toMatch(/^(?:AWS_|LTM_S3_).*=[^\s]+/m);
 });
 
 test('Next security headersはFirebase endpointと基本防御を含む', async () => {
@@ -73,7 +74,10 @@ test('Cloud Run workflowはPRでruntime secretを使わず低コスト設定でd
   expect(workflow).toContain('LTM_STORAGE_DRIVER=cloud');
   expect(workflow).toContain('NEXT_PUBLIC_FIREBASE_API_KEY');
   expect(workflow).toContain('--set-secrets');
-  expect(workflow).toContain('AWS_ACCESS_KEY_ID');
+  expect(workflow).toContain('LTM_GCS_BUCKET');
+  expect(workflow).toContain('LTM_GCS_PREFIX');
+  expect(workflow).not.toContain('AWS_ACCESS_KEY_ID');
+  expect(workflow).not.toContain('LTM_S3_BUCKET');
   const verify = workflow.slice(0, workflow.indexOf('  deploy:'));
   expect(verify).not.toContain('secrets.');
 });

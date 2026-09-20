@@ -51,9 +51,8 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 
 | Variable | 用途 |
 |---|---|
-| `AWS_REGION` | S3リージョン |
-| `LTM_S3_BUCKET` | S3 bucket |
-| `LTM_S3_PREFIX` | S3 prefix |
+| `LTM_GCS_BUCKET` | GCS bucket名 |
+| `LTM_GCS_PREFIX` | GCS object prefix |
 | `FIREBASE_PROJECT_ID` | Firebase project ID |
 | `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase公開設定 |
 | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase Auth domain |
@@ -62,8 +61,6 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 | `MCP_PUBLIC_URL` | 公開MCP URL |
 | `MCP_ALLOWED_ORIGINS` | MCP許可origin |
 | `LTM_CURATOR_USER_ID` | shared writeを許可するFirebase UID |
-| `GCP_SECRET_AWS_ACCESS_KEY_ID` | Secret Manager内のAWS access key secret名 |
-| `GCP_SECRET_AWS_SECRET_ACCESS_KEY` | Secret Manager内のAWS secret key secret名 |
 | `GCP_SECRET_LTM_MAINTENANCE_TOKEN` | Secret Manager内のmaintenance token secret名 |
 
 ## GCP側の前提
@@ -72,7 +69,8 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 - deploy service accountにはCloud Run deploy、Cloud Build、Artifact Registry、runtime service account impersonationに必要な権限を付与する。
 - runtime service accountにはFirestoreアクセス、Secret Manager secret access、Cloud Run実行に必要な権限だけを付与する。
 - Cloud Run serviceは`--allow-unauthenticated`で公開し、アプリ層の`AUTH_REQUIRED=1`、Firebase session、MCP PATで認証する。
-- AWS credentialとmaintenance tokenはGCP Secret Managerへ登録し、workflowから値をログ出力しない。
+- Cloud Run runtime service accountへ対象GCS bucketの必要なIAM権限とFirestore accessを付与する。GCS credential keyは作成せず、Application Default Credentialsを使う。
+- maintenance tokenはGCP Secret Managerへ登録し、workflowから値をログ出力しない。
 - Cloud Runは`asia-northeast1`、min 0、max 1、concurrency 1、1 vCPU、512 MiBを初期値とする。
 
 ## 受け入れ確認
@@ -85,4 +83,4 @@ mainへマージした後、GitHub Actionsで次を確認する。
 4. Cloud Run smokeでhealth、MCP initialize、tools/list、save、search、get、update、link、reindex、deleteが成功する。
 5. 失敗時はCloud Run revisionとGitHub Actionsログを確認し、必要ならmainからworkflow dispatchで再実行する。
 
-実環境のSecrets、GCP権限、Firebase/S3/Firestore接続、GitHub Environmentの作成はrepository外の管理作業である。認証済みGitHub管理者が設定し、値をcommitしない。
+実環境のSecrets、GCP権限、Firebase/GCS/Firestore接続、GitHub Environmentの作成はrepository外の管理作業である。認証済みGitHub管理者が設定し、値をcommitしない。
