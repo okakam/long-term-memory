@@ -1,0 +1,23 @@
+{
+  "recorded_at": "2026-09-20",
+  "source": "tests/**/*.test.ts",
+  "runtime": {
+    "test_files": 67,
+    "tests": 193,
+    "acceptance_status": "local-green"
+  },
+  "migration_gates": {
+    "container_health": "GitHub Actions cloud-run verify済み、devcontainer内のローカルDocker検証は対象外",
+    "cloud_run_smoke": "未実行: GCP資格情報とURLが必要",
+    "gcs_firestore_import": "対象外: 旧データを移行せず空スタート",
+    "migration_verify": "対象外: 旧データを移行せず空スタート",
+    "vercel_project_deletion": "ユーザー報告で削除済み（2026-09-20）"
+  },
+  "notes": [
+    "SQLiteは検索cacheであり、GCS MarkdownとFirestore metadataが永続正本である",
+    "旧Vercel Blob/Tursoのmigration専用スクリプトと依存は空スタート方針により削除済み",
+    "ローカルテストの成功を外部provider接続済みとは扱わない",
+    "Cloud Run smoke scriptは主要MCP経路を実行し、renameは公開tool対象外のためCloudMemoryService回帰テストで検証する",
+    "旧データのmigration verifyとimportは実施せず、新環境のCloud Run smokeでGCS本文とFirestore metadataの保存経路を確認する"
+  ]
+}

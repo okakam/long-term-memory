@@ -1,0 +1,9 @@
+# 追跡するテキストファイルは、環境の core.autocrlf 設定に関係なく LF で
+# 保存・checkout する。画像など Git がバイナリと判定するファイルは除外する。
+* text=auto eol=lf
+
+# These executable and generated documentation assets are parsed byte-for-byte.
+/claude-config/hooks/ltm-init-reminder.sh text eol=lf
+/scripts/curator/run-curation.sh text eol=lf
+/scripts/sync-embedded-docs.mjs text eol=lf
+/docs/post-mcp-setup.md text eol=lf
