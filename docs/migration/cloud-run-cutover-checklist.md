@@ -12,8 +12,9 @@
 - [x] `pnpm exec tsc --noEmit` が成功した。
 - [x] `NODE_ENV=production pnpm build` が成功した。
 - [ ] `docker build` とコンテナhealth checkを実行した。Docker未導入環境では未実行として記録する。
+- [x] GitHub Actionsの`cloud-run` verifyで`docker build`とコンテナhealth checkが成功した。
 
-補足（2026-09-19）: `docker compose -f .devcontainer/compose.yaml config --quiet` とDocker buildは、実行環境にDocker CLIがないため未実行。`pnpm test`（69 files・198 tests）、lint、型検査、本番build、`git diff --check`は成功。
+補足（2026-09-20）: `docker compose -f .devcontainer/compose.yaml config --quiet` とローカルDocker build/health checkは、実行環境にDocker CLIがないため未実行。GitHub ActionsのPR verify（run `35485079541`）ではDocker buildと`GET /api/health`が成功した。`pnpm test`（69 files・200 tests）、lint、型検査、本番build、`git diff --check`は成功。
 
 ## 2. GCP、Firebase、S3の準備
 
