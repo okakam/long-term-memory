@@ -7,10 +7,10 @@ Markdownを正本として扱う、MCP対応の長期記憶アプリケーショ
 - Cloud Run: Next.jsアプリケーション。min 0、max 1、concurrency 1。
 - Firebase Authentication: Webのemail/password・Google認証。
 - Firestore: project、membership、memory metadata、name index、tombstone、MCP PAT hash。
-- Amazon S3: Markdown本文のimmutable object。
+- Google Cloud Storage (GCS): Markdown本文のimmutable object。Cloud RunからGCS APIでアクセスする。
 - `/tmp` SQLite: FTS5・KG・検索用の再構築可能cache。
 
-Cloud SQL、Redis、Upstash、Firebase Cloud Storage、Cloud Scheduler、常駐workerは使用しません。Cloud Runのscale to zeroを使って常時起動費を抑えますが、S3・Firestore・ログ・Artifact Registryには従量課金があり得るため、完全な金額ゼロは利用量に依存します。
+Cloud SQL、Redis、Upstash、Firebase StorageのクライアントSDK、Cloud Scheduler、常駐workerは使用しません。Cloud Runのscale to zeroを使って常時起動費を抑えますが、GCS・Firestore・ログ・Artifact Registryには従量課金があり得るため、完全な金額ゼロは利用量に依存します。
 
 ## ローカル開発
 
@@ -38,8 +38,8 @@ Cloud Runの実環境smokeは外部資格情報が必要です。ローカルテ
 設計と手順は次を正本とします。
 
 - [現行再現仕様書](docs/reproduction-spec.md)
-- [設計書](docs/superpowers/specs/2026-09-19-cloud-run-firebase-s3-firestore-design.md)
-- [実装計画](docs/superpowers/plans/2026-09-19-cloud-run-firebase-s3-firestore-migration.md)
+- [設計書](docs/superpowers/specs/2026-09-19-cloud-run-firebase-gcs-firestore-design.md)
+- [実装計画](docs/superpowers/plans/2026-09-20-cloud-run-gcs-storage.md)
 - [切り替えチェックリスト](docs/migration/cloud-run-cutover-checklist.md)
 
-旧Vercel/Turso/Blobのデータは移行せず破棄し、新しいCloud Run/Firebase/S3/Firestore環境を空の状態から開始します。旧providerのmigration専用スクリプトと依存は削除済みです。
+旧Vercel/Turso/Blobのデータは移行せず破棄し、新しいCloud Run/Firebase/GCS/Firestore環境を空の状態から開始します。旧providerのmigration専用スクリプトと依存は削除済みです。

@@ -2,14 +2,14 @@
 
 この文書は、現在の `long-term-memory` を別環境で再現するための日本語の運用正本です。移行の設計判断と実装順序は、次の文書を補助資料として参照します。
 
-- 設計: `docs/superpowers/specs/2026-09-19-cloud-run-firebase-s3-firestore-design.md`
-- 実装計画: `docs/superpowers/plans/2026-09-19-cloud-run-firebase-s3-firestore-migration.md`
+- 設計: `docs/superpowers/specs/2026-09-19-cloud-run-firebase-gcs-firestore-design.md`
+- 実装計画: `docs/superpowers/plans/2026-09-20-cloud-run-gcs-storage.md`
 
 ## 1. 目的と確定方針
 
-旧Vercel/Turso/Blob/Redis/Clerkデータは移行せず破棄し、Cloud Run・Firebase Authentication・Amazon S3・Cloud Firestoreを空の状態から構築する。Cloud SQL、Redis、Firebase Cloud Storage、常駐worker、Cloud Schedulerは使わない。
+旧Vercel/Turso/Blob/Redis/Clerkデータは移行せず破棄し、Cloud Run・Firebase Authentication・Google Cloud Storage (GCS)・Cloud Firestoreを空の状態から構築する。Cloud SQL、Redis、Firebase StorageクライアントSDK、常駐worker、Cloud Schedulerは使わない。
 
-運用費は「常時起動サービスの費用を発生させない」ことを目標にする。Cloud Runはscale to zero、FirestoreはStandard、S3は従量課金のため、アクセス量・保存量・ログ量が増えれば完全な金額ゼロにはならない。予算アラートと利用上限を必ず設定する。
+運用費は「常時起動サービスの費用を発生させない」ことを目標にする。Cloud Runはscale to zero、FirestoreはStandard、GCSは従量課金のため、アクセス量・保存量・ログ量が増えれば完全な金額ゼロにはならない。予算アラートと利用上限を必ず設定する。
 
 ## 2. 実行構成
 
@@ -18,11 +18,11 @@
 | Cloud Run | Next.js単一コンテナ。Invokerは公開、アプリ層で`AUTH_REQUIRED=1`を強制する。Node.js 22、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
 | Firebase Authentication | Webのemail/password・Google認証。サーバはFirebase Admin SDKでID token/session cookieを検証 |
 | Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hashの永続保存 |
-| S3 | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
+| GCS | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
 | `/tmp` SQLite | FTS5・KG・検索用の再構築可能cache。コンテナ再起動で消える前提 |
 | MCP | `POST /api/mcp?project_id=<slug>`。16 tools、PATは `Authorization: Bearer ltm_...` |
 
-Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全文を永続保存しない。Firestoreのmemory metadataはS3 keyとhashを持ち、reindex時にS3本文・hash・frontmatter・tombstoneを照合する。
+Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全文を永続保存しない。Firestoreのmemory metadataはGCS keyとhashを持ち、reindex時にGCS本文・hash・frontmatter・tombstoneを照合する。
 
 ## 3. 認証・認可
 
@@ -40,9 +40,9 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 
 ### Cloud Run runtime
 
-`LTM_STORAGE_DRIVER=cloud`、`AUTH_REQUIRED=1`、`PORT`、`LTM_S3_BUCKET`、`LTM_S3_PREFIX`、`AWS_REGION`、`FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、`NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`LTM_CURATOR_USER_ID`、`LTM_MAINTENANCE_TOKEN` を設定する。
+`LTM_STORAGE_DRIVER=cloud`、`AUTH_REQUIRED=1`、`PORT`、`LTM_GCS_BUCKET`、`LTM_GCS_PREFIX`、`FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、`NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`LTM_CURATOR_USER_ID`、`LTM_MAINTENANCE_TOKEN` を設定する。
 
-AWS access keyは可能ならCloud RunのSecret Managerから注入する。Firebase Adminのservice account JSONをrepositoryへ置かず、Cloud RunのApplication Default Credentialsを使う。
+GCSとFirestoreへのアクセスはCloud RunランタイムサービスアカウントのIAMとApplication Default Credentialsを使う。Firebase Adminのservice account JSONをrepositoryやコンテナへコピーしない。
 
 ### ローカル
 
@@ -50,9 +50,9 @@ AWS access keyは可能ならCloud RunのSecret Managerから注入する。Fire
 
 ## 5. データ保存契約
 
-### S3
+### GCS
 
-S3 objectはcontent hashを含むためimmutable writeを基本とする。adapterはkey traversal、absolute path、backslash、project scope外keyを拒否し、Putには`If-None-Match: *`を付ける。本文のhashはS3 metadataにも記録する。
+GCS objectはcontent hashを含むためimmutable writeを基本とする。adapterはkey traversal、absolute path、backslash、project scope外keyを拒否し、書き込みには`ifGenerationMatch=0`を付ける。本文のhashはGCS metadataにも記録する。
 
 ### Firestore
 
@@ -60,7 +60,7 @@ project document配下にmembers、memories、names、tombstonesを持ち、PAT�
 
 ### SQLite
 
-SQLiteは `/tmp/long-term-memory/index.db` に作成し、WAL、foreign key、FTS5 trigram、既存KG tableを使う。save/update/search/KGはcacheを利用するが、cacheが空でもS3とFirestoreからreindexできる。SQLiteをバックアップや本文正本として扱わない。
+SQLiteは `/tmp/long-term-memory/index.db` に作成し、WAL、foreign key、FTS5 trigram、既存KG tableを使う。save/update/search/KGはcacheを利用するが、cacheが空でもGCSとFirestoreからreindexできる。SQLiteをバックアップや本文正本として扱わない。
 
 ## 6. API・MCP・UI
 
@@ -77,16 +77,16 @@ MCP toolsは次の16個を維持する。
 ## 7. 初期セットアップと旧環境の扱い
 
 1. 旧Vercel Project、Blob、Turso、Clerk、Redisのデータは移行せず破棄する。
-2. 旧providerのcredential、環境変数、GitHub連携を削除する。新しいCloud Run/Firebase/S3/Firestoreの設定と混同しない。
-3. Cloud Run、Firebase Authentication、Firestore、S3を新規作成し、空のプロジェクトとsmoke用ユーザーを用意する。
+2. 旧providerのcredential、環境変数、GitHub連携を削除する。新しいCloud Run/Firebase/GCS/Firestoreの設定と混同しない。
+3. Cloud Run、Firebase Authentication、Firestore、GCSを新規作成し、空のプロジェクトとsmoke用ユーザーを用意する。
 4. Cloud Run smokeでhealth、initialize、tools/list 16件、save、search、get、update、link、reindex、deleteを確認する。renameはMCP公開tool対象外のため`CloudMemoryService`の回帰テストで確認する。
 5. 初期データは新環境で作成し、以後のバックアップ・復旧手順をrepository外へ保存する。
 
 ## 8. CI/CD
 
-`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にtest・lint・production build・Docker buildだけを実行し、runtime secretを渡さない。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/S3設定はEnvironment variables、AWS keyとmaintenance tokenはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
+`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にtest・lint・production build・Docker buildだけを実行し、runtime secretを渡さない。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS設定はEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
 
-deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase/S3 secretはproduction environmentからsmokeへ渡し、ログへ出力しない。
+deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase設定はproduction environmentからsmokeへ渡し、ログへ出力しない。
 
 ## 9. 検証コマンド
 

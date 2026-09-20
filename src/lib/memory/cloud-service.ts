@@ -16,7 +16,7 @@ import {
   type UpdateInput,
 } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId, isReservedProjectId, isValidSlug, SHARED_PROJECT_ID } from '@/lib/slug';
-import { memoryObjectKey as s3MemoryObjectKey, s3StoragePrefix } from '@/lib/storage/s3-markdown';
+import { memoryObjectKey as gcsMemoryObjectKey, gcsStoragePrefix } from '@/lib/storage/gcs-markdown';
 import { createMarkdownStore } from '@/lib/storage/factory';
 import type { IndexStore, MarkdownStore, StoredObject } from '@/lib/storage/contracts';
 import {
@@ -56,8 +56,8 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function cloudMemoryObjectKey(projectId: string, name: string, contentHash: string, prefix = s3StoragePrefix()): string {
-  return s3MemoryObjectKey(prefix, projectId, name, contentHash);
+function cloudMemoryObjectKey(projectId: string, name: string, contentHash: string, prefix = gcsStoragePrefix()): string {
+  return gcsMemoryObjectKey(prefix, projectId, name, contentHash);
 }
 
 function toMemoryIndexRecord(projectId: string, key: string, contentHash: string, memory: Memory): MemoryIndexRecord {
@@ -189,7 +189,7 @@ export class CloudMemoryService {
     private readonly markdown: MarkdownStore,
     private readonly metadata: FirestoreMetadataStore,
     private readonly mutex: KeyedMutex,
-    private readonly s3Prefix: string = s3StoragePrefix(),
+    private readonly gcsPrefix: string = gcsStoragePrefix(),
     autoReindex = false,
   ) {
     this.readyPromise = autoReindex
@@ -203,7 +203,7 @@ export class CloudMemoryService {
       createMarkdownStore({ mode: 'cloud' }),
       createFirestoreMetadataStore(),
       new KeyedMutex(),
-      s3StoragePrefix(),
+      gcsStoragePrefix(),
       true,
     );
   }
@@ -219,7 +219,7 @@ export class CloudMemoryService {
   }
 
   private objectKey(projectId: string, name: string, contentHash: string): string {
-    return cloudMemoryObjectKey(projectId, name, contentHash, this.s3Prefix);
+    return cloudMemoryObjectKey(projectId, name, contentHash, this.gcsPrefix);
   }
 
   private requireProject(projectId: string): string {
@@ -653,7 +653,7 @@ export class CloudMemoryService {
         await this.metadata.clearTombstone(project, oldObject.key);
         await store.transaction((tx) => tx.exec('DELETE FROM memory_tombstones WHERE project_id = ? AND file_path = ?', [project, oldObject.key]));
       } catch {
-        // Tombstone remains until a later cleanup removes the old S3 object.
+        // Tombstone remains until a later cleanup removes the old GCS object.
       }
     }
     return updated;
@@ -797,7 +797,7 @@ export class CloudMemoryService {
 
   private async reindexUnlocked(projectId?: string, readyStore?: IndexStore): Promise<void> {
     const store = readyStore ?? await this.index();
-    const rootPrefix = this.s3Prefix;
+    const rootPrefix = this.gcsPrefix;
     const objects = await this.markdown.list(rootPrefix + '/');
     const snapshots = new Map<string, { projectId: string; object: StoredObject; raw: string; memory: Memory }>();
     for (const object of objects) {

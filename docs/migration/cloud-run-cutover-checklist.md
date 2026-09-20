@@ -4,8 +4,8 @@
 
 ## 1. コードとローカル検証
 
-- [x] Cloud Run/Firebase Authentication/S3/Firestoreの実装をfeature branchへ反映した。
-- [x] Cloud SQL、Redis、Upstash、Firebase Cloud Storage、Cloud Scheduler、常駐workerを採用していない。
+- [x] Cloud Run/Firebase Authentication/GCS/Firestoreの実装をfeature branchへ反映した。
+- [x] Cloud SQL、Redis、Upstash、Firebase StorageクライアントSDK、Cloud Scheduler、常駐workerを採用していない。
 - [x] `pnpm install --frozen-lockfile` が成功した。
 - [x] `pnpm test` が成功した。
 - [x] `pnpm lint` が成功した。
@@ -16,26 +16,26 @@
 
 補足（2026-09-20）: devcontainer内のローカルDocker build/health checkは実施しない。GitHub ActionsのPR verify（run `35485079541`）ではDocker buildと`GET /api/health`が成功した。`pnpm test`（67 files・193 tests）、lint、型検査、本番build、`git diff --check`は成功。
 
-## 2. GCP、Firebase、S3の準備
+## 2. GCP、Firebase、GCSの準備
 
 - [ ] GCPプロジェクト、Cloud Run API、Artifact Registry API、Firestore APIを有効化した。
-- [ ] Cloud Run用サービスアカウントを作成し、S3アクセスとFirestoreアクセスを最小権限で付与した。
+- [ ] Cloud Run用サービスアカウントを作成し、GCSアクセスとFirestoreアクセスを最小権限で付与した。
 - [ ] GitHub ActionsはWorkload Identity Federationを使い、長期秘密鍵を登録していない。
 - [ ] Cloud Runは `min=0`、`max=1`、`concurrency=1`、1 vCPU、512 MiBで設定した。
 - [ ] Cloud Run Invokerは公開にし、`AUTH_REQUIRED=1`とFirebase/MCPのアプリ層認証を有効にした。
 - [ ] Firebase AuthenticationでEmail/Passwordと必要なGoogle providerだけを有効化した。
 - [ ] Firebaseのauthorized domainsへ本番ドメインを追加した。
 - [ ] FirestoreをNative modeで作成し、`firestore.rules`をdeployした。
-- [ ] S3 bucketを非公開、Block Public Access有効、暗号化有効で作成した。
-- [ ] S3のIAM policyは対象bucketとprefixだけを許可している。
+- [ ] GCS bucketを非公開、Block Public Access有効、暗号化有効で作成した。
+- [ ] GCSのIAM policyは対象bucketとprefixだけを許可している。
 - [ ] 本番secretはCloud Run secret環境変数またはCI secretへ登録し、repositoryへ保存していない。
 
 ## 3. 旧環境の破棄（移行なし）
 
-- [x] 旧データは移行せず破棄し、空のCloud Run/Firebase/S3/Firestore環境から開始する方針を決定した。
+- [x] 旧データは移行せず破棄し、空のCloud Run/Firebase/GCS/Firestore環境から開始する方針を決定した。
 - [x] 旧Vercel Projectはユーザー操作で削除した（2026-09-20、対象Project名は未記録）。
 - [ ] 旧Turso、旧Blob、旧Clerk、旧Redisの独立リソースとcredentialを削除したことを確認する。
-- [x] 旧データのexport、UID map作成、S3/Firestore import、migration verifyは空スタート方針のため実施しない。
+- [x] 旧データのexport、UID map作成、GCS/Firestore import、migration verifyは空スタート方針のため実施しない。
 
 ## 4. importと整合性検証
 
@@ -51,16 +51,16 @@
 - [ ] 未認証Web APIが401、別projectアクセスが403、MCP PATが対象projectだけへ到達することを確認した。
 - [ ] `__shared__`のwriteがFirebase UIDとmaintenance tokenの二重条件を満たさない限り拒否される。
 - [ ] Cloud Run cold start後もFirestore metadataからSQLite cacheをreindexできる。
-- [ ] Cloud Run logへPAT本文、Firebase credential、AWS secretが出力されない。
-- [ ] 無料枠を超える可能性のあるS3、Firestore、Artifact Registry、Cloud Runの使用量監視を設定した。
+- [ ] Cloud Run logへPAT本文、Firebase credential、GCS credential keyが出力されない。
+- [ ] 無料枠を超える可能性のあるGCS、Firestore、Artifact Registry、Cloud Runの使用量監視を設定した。
 
 ## 6. 切り替えとrollback
 
 - [ ] Cloud Run revision URL、smoke実行日時、commit SHA、import reportを運用記録へ保存した。
 - [ ] DNS、カスタムドメイン、MCP client、Claude Code設定、curator設定をCloud Runへ切り替えた。
-- [ ] 切り替え後に新環境でmemory writeを1件実行し、S3とFirestoreの両方を確認した。
+- [ ] 切り替え後に新環境でmemory writeを1件実行し、GCSとFirestoreの両方を確認した。
 - [ ] rollback期間と判断責任者を決めた。
-- [ ] 最終S3 snapshotとFirestore exportまたは復旧手順をrepository外へ保存した。
+- [ ] 最終GCS snapshotとFirestore exportまたは復旧手順をrepository外へ保存した。
 - [ ] 旧Vercel環境へのwriteが拒否されることを確認した。
 
 ## 7. Vercel削除（最後の不可逆操作）

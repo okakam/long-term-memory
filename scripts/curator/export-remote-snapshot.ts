@@ -50,7 +50,7 @@ const SECRET_PATTERNS = [
   /Bearer\s+[A-Za-z0-9._~+\/-]{8,}/gi,
   /\b(?:sk|pk|ltm)_[A-Za-z0-9_-]{12,}\b/gi,
   /\b(?:api[_-]?key|secret|password|token)\s*[:=]\s*[^\s]+/gi,
-  /\b(?:LTM_MCP_TOKEN|LTM_MAINTENANCE_TOKEN|AWS_SECRET_ACCESS_KEY|FIREBASE_PRIVATE_KEY)\s*=\s*[^\s]+/gi,
+  /\b(?:LTM_MCP_TOKEN|LTM_MAINTENANCE_TOKEN|FIREBASE_PRIVATE_KEY)\s*=\s*[^\s]+/gi,
 ];
 
 function redact(value: unknown): string {

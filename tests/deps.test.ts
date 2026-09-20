@@ -23,10 +23,11 @@ test('依存関係とsource treeに旧providerの移行専用資産を残さな�
     expect(packageJson.dependencies?.[name]).toBeUndefined();
   }
   expect(packageJson.dependencies).toMatchObject({
-    '@aws-sdk/client-s3': expect.any(String),
+    '@google-cloud/storage': expect.any(String),
     firebase: expect.any(String),
     'firebase-admin': expect.any(String),
   });
+  expect(packageJson.dependencies?.['@aws-sdk/client-s3']).toBeUndefined();
   expect(packageJson.devDependencies?.['@libsql/client']).toBeUndefined();
   expect(packageJson.devDependencies?.['@vercel/blob']).toBeUndefined();
   expect(existsSync(resolve(import.meta.dirname, '../scripts/migration'))).toBe(false);

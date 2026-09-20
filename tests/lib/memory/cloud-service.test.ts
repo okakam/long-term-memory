@@ -86,7 +86,7 @@ afterEach(() => {
   for (const resource of resources.splice(0)) resource.close();
 });
 
-test('S3本文とFirestore metadataからsave/get/reindexを行いSQLite cacheを再構築できる', async () => {
+test('GCS本文とFirestore metadataからsave/get/reindexを行いSQLite cacheを再構築できる', async () => {
   const index = openLocalDb(':memory:');
   resources.push(index);
   const markdown = new FakeMarkdownStore();
@@ -98,10 +98,10 @@ test('S3本文とFirestore metadataからsave/get/reindexを行いSQLite cache�
     name: 'cloud-note',
     description: 'Cloud Run本文',
     type: 'reference',
-    body: 'S3本文',
+    body: 'GCS本文',
     tags: ['cloud'],
   });
-  expect(await service.get('demo', saved.id)).toMatchObject({ id: saved.id, body: 'S3本文' });
+  expect(await service.get('demo', saved.id)).toMatchObject({ id: saved.id, body: 'GCS本文' });
   expect((await metadata.listMemoryIndexes('demo'))).toHaveLength(1);
 
   await index.exec('DELETE FROM memories');
@@ -112,11 +112,11 @@ test('S3本文とFirestore metadataからsave/get/reindexを行いSQLite cache�
   await index.exec('DELETE FROM memories_fts');
   await service.reindex('demo');
 
-  await expect(service.get('demo', 'cloud-note')).resolves.toMatchObject({ body: 'S3本文' });
+  await expect(service.get('demo', 'cloud-note')).resolves.toMatchObject({ body: 'GCS本文' });
   await expect(service.searchFulltext('demo', 'Cloud')).resolves.toHaveLength(1);
 });
 
-test('設定したS3 prefixを本文キーに使う', async () => {
+test('設定したGCS prefixを本文キーに使う', async () => {
   const index = openLocalDb(':memory:');
   resources.push(index);
   const markdown = new FakeMarkdownStore();
@@ -285,7 +285,7 @@ test('renameの部分書き込みとcleanup失敗は新objectへtombstoneを残�
   await expect(metadata.isTombstoned('demo', newKey!)).resolves.toBe(true);
 });
 
-test('新しいCloud Run instanceは最初のread前にS3からSQLite cacheを再構築する', async () => {
+test('新しいCloud Run instanceは最初のread前にGCSからSQLite cacheを再構築する', async () => {
   const firstIndex = openLocalDb(':memory:');
   const markdown = new FakeMarkdownStore();
   const metadata = new FirestoreMetadataStore(new FakeFirestore());
@@ -343,7 +343,7 @@ test('renameはFirestore name indexと参照先を更新する', async () => {
   await expect(service.get('demo', reference.id)).resolves.toMatchObject({ links: ['new-name'] });
 });
 
-test('renameで旧S3 objectの削除に失敗した場合もFirestore tombstoneを残す', async () => {
+test('renameで旧GCS objectの削除に失敗した場合もFirestore tombstoneを残す', async () => {
   const index = openLocalDb(':memory:');
   resources.push(index);
   const markdown = new FakeMarkdownStore();
@@ -360,7 +360,7 @@ test('renameで旧S3 objectの削除に失敗した場合もFirestore tombstone�
   await expect(metadata.isTombstoned('demo', oldKey)).resolves.toBe(true);
 });
 
-test('renameで旧S3 objectの削除に成功した場合はFirestore tombstoneを消す', async () => {
+test('renameで旧GCS objectの削除に成功した場合はFirestore tombstoneを消す', async () => {
   const index = openLocalDb(':memory:');
   resources.push(index);
   const markdown = new FakeMarkdownStore();
