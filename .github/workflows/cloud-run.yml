@@ -47,7 +47,7 @@ jobs:
             --env PORT=8080 \
             --publish 8080:8080 \
             long-term-memory:test
-          curl --fail --retry 30 --retry-delay 1 --retry-connrefused \
+          curl --fail --retry 30 --retry-delay 1 --retry-connrefused --retry-all-errors \
             http://127.0.0.1:8080/api/health
 
   deploy:
