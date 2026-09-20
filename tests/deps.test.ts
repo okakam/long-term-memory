@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { existsSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from 'vitest';
@@ -13,7 +14,7 @@ test('native SQLite loads and supports the required FTS options', () => {
   } finally { db.close(); }
 });
 
-test('production依存はFirebase/S3/Firestore構成で旧providerを含まない', () => {
+test('依存関係とsource treeに旧providerの移行専用資産を残さない', () => {
   const packageJson = JSON.parse(readFileSync(resolve(import.meta.dirname, '../package.json'), 'utf8')) as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
@@ -26,5 +27,8 @@ test('production依存はFirebase/S3/Firestore構成で旧providerを含まな�
     firebase: expect.any(String),
     'firebase-admin': expect.any(String),
   });
-  expect(packageJson.devDependencies).toMatchObject({ '@libsql/client': expect.any(String), '@vercel/blob': expect.any(String) });
+  expect(packageJson.devDependencies?.['@libsql/client']).toBeUndefined();
+  expect(packageJson.devDependencies?.['@vercel/blob']).toBeUndefined();
+  expect(existsSync(resolve(import.meta.dirname, '../scripts/migration'))).toBe(false);
+  expect(existsSync(resolve(import.meta.dirname, './migration'))).toBe(false);
 });

@@ -19,7 +19,7 @@
 ## 開発環境
 
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
-- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、`jq`、`xz-utils` を用意する。Turso CLIは旧環境exportの確認用途に限定する。
+- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
 - Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存し、`long-term-memory-codex` volume で永続化する。
 - `/workspace/.codex/config.toml` で Codex CLI の TUI フッターにコンテキスト残量、5時間制限、長期使用制限を表示する。
@@ -35,8 +35,8 @@
 
 - Cloud Run/Firebase/S3/Firestore移行の設計・実装計画は `docs/superpowers/specs/2026-09-19-cloud-run-firebase-s3-firestore-design.md` と `docs/superpowers/plans/2026-09-19-cloud-run-firebase-s3-firestore-migration.md` を正本とする。
 - Cloud Run用S3 Markdown adapter、Firestore metadata/auth store、`/tmp` SQLite cache、Firebase ID token/session cookie、API認可、Invoker公開・アプリ層認証のCloud Run workflow/smoke、認証必須のimage既定値、Firestore memory/name indexを含む双方向移行export/import/verifyを実装済み。
-- production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote service、永続telemetry DBを削除した。旧Vercel Blob/Tursoは移行export専用のdevDependenciesと `scripts/migration/` に限定して残す。
-- ローカル検証時点で全テスト 69 files・200 tests、lint、型検査、`NODE_ENV=production pnpm build` を通過する。Cloud Run smoke scriptはinitialize、tools/list、save、get、update、link、reindex、search、deleteを実行し、renameは`CloudMemoryService`の回帰テストで検証する。移行importはFirestore document/transaction/write数のpreflight検査を行う。Cloud Run/Firebase/AWSの実環境smoke、実データexport/import/verify、旧Vercel Project削除は外部資格情報が必要な未完了ゲートである。
+- production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote service、永続telemetry DBを削除した。旧Vercel Blob/Tursoのmigration専用スクリプト、テスト、devDependenciesも、旧データを移行せず空スタートする方針により削除済みである。
+- ローカル検証時点で全テスト 67 files・193 tests、lint、型検査、`NODE_ENV=production pnpm build` を通過する。Cloud Run smoke scriptはinitialize、tools/list、save、get、update、link、reindex、search、deleteを実行し、renameは`CloudMemoryService`の回帰テストで検証する。Cloud Run/Firebase/AWSの実環境smokeは外部資格情報が必要な未完了ゲートであり、旧データのexport/import/verifyは対象外、旧Vercel Project削除はユーザー報告で完了している。
 - `main`へのPRマージ後は、`push`イベントでGitHub Actionsのverify完了後に`production` Environmentを使ってCloud Runへ自動deployする。手動dispatchもmainブランチだけを許可し、Production deployは同時実行しない。Environmentの設定値は`docs/cloud-run-production-deployment.md`に記録する。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。

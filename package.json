@@ -27,13 +27,11 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@libsql/client": "0.17.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/d3-force": "^3.0.10",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vercel/blob": "2.3.0",
     "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",

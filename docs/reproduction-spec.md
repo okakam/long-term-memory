@@ -7,7 +7,7 @@
 
 ## 1. 目的と確定方針
 
-既存の Vercel/Turso/Blob/Redis/Clerk 構成を、Cloud Run・Firebase Authentication・Amazon S3・Cloud Firestoreへ移行する。Cloud SQL、Redis、Firebase Cloud Storage、常駐worker、Cloud Schedulerは使わない。
+旧Vercel/Turso/Blob/Redis/Clerkデータは移行せず破棄し、Cloud Run・Firebase Authentication・Amazon S3・Cloud Firestoreを空の状態から構築する。Cloud SQL、Redis、Firebase Cloud Storage、常駐worker、Cloud Schedulerは使わない。
 
 運用費は「常時起動サービスの費用を発生させない」ことを目標にする。Cloud Runはscale to zero、FirestoreはStandard、S3は従量課金のため、アクセス量・保存量・ログ量が増えれば完全な金額ゼロにはならない。予算アラートと利用上限を必ず設定する。
 
@@ -74,17 +74,13 @@ MCP toolsは次の16個を維持する。
 
 `list_memories_by_type`、`search_by_tag`、`find_related`、`search_memories`、`get_memory`、`get_memory_index`、`remember_user_fact`、`remember_reference`、`remember_session_summary`、`remember_feedback`、`remember_project_fact`、`update_memory`、`forget_memory`、`link_memories`、`list_projects`、`reindex`。
 
-## 7. 移行手順と削除ゲート
+## 7. 初期セットアップと旧環境の扱い
 
-1. 旧環境をread-onlyまたはwrite停止へ切り替える。
-2. `pnpm tsx scripts/migration/export-vercel.ts` でMarkdown、hash、metadata、membership、PAT hashをexportする。実credentialと平文PATは出力しない。
-3. 旧Clerk UIDからFirebase UIDへの対応表をrepository外で作成する。
-4. `pnpm tsx scripts/migration/import-s3-firestore.ts` でS3/Firestoreへimportする。import前にFirestore document/request/write数の安全予算を検査し、超過時はS3/Firestoreへ書き込まない。同じmanifestの再実行は冪等である。
-5. `pnpm tsx scripts/migration/verify-migration.ts` を実行し、source/target count、missing/extra key、hash、parse、memory metadata、name index、membership、PAT、tombstoneの全差分を0にする。
-6. Cloud Run smokeでhealth、initialize、tools/list 16件、save、search、get、update、link、reindex、deleteを確認する。renameはMCP公開tool対象外のため`CloudMemoryService`の回帰テストで確認する。
-7. 旧credentialを失効・削除し、旧Vercel Projectを管理画面または認証済みCLIから削除する。外部削除はmigration verifyとCloud Run smokeの後だけ許可する。
-
-exportのtemporary output、UID map、manifest、PATやprovider credentialはrepository外の権限付き領域に保存し、作業後に安全に削除する。
+1. 旧Vercel Project、Blob、Turso、Clerk、Redisのデータは移行せず破棄する。
+2. 旧providerのcredential、環境変数、GitHub連携を削除する。新しいCloud Run/Firebase/S3/Firestoreの設定と混同しない。
+3. Cloud Run、Firebase Authentication、Firestore、S3を新規作成し、空のプロジェクトとsmoke用ユーザーを用意する。
+4. Cloud Run smokeでhealth、initialize、tools/list 16件、save、search、get、update、link、reindex、deleteを確認する。renameはMCP公開tool対象外のため`CloudMemoryService`の回帰テストで確認する。
+5. 初期データは新環境で作成し、以後のバックアップ・復旧手順をrepository外へ保存する。
 
 ## 8. CI/CD
 
@@ -103,4 +99,4 @@ git diff --check
 docker compose -f .devcontainer/compose.yaml config --quiet
 ```
 
-実環境へ接続するまで、Cloud Run smokeとmigration verifyは「未実行」と報告する。ローカルfake、unit test、production buildの成功だけで外部provider接続済みとは扱わない。
+実環境へ接続するまで、Cloud Run smokeは「未実行」と報告する。旧データのmigration verifyは空スタート方針のため対象外とする。ローカルfake、unit test、production buildの成功だけで外部provider接続済みとは扱わない。

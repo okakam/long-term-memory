@@ -12,7 +12,9 @@
 
 ## 実装進捗（2026-09-20）
 
-Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、tombstone移行、旧runtime整理まで完了している。追加レビューでCloud Run runtime環境注入、Firebase公開設定endpoint、rename時のFirestore tombstone整合性、起動時reindex競合テスト、SQLite cache失敗時のFirestore metadata補償、ローカル合成UID、Cloud Run imageの認証必須既定値、Firestore memory/name indexを含む双方向移行verify、rename部分書き込み時のtombstone隔離、Cloud Run smokeの主要MCP経路検証、Invoker公開とアプリ層認証の分離、Firestore document/request/write数のimport前preflight、旧Turso adapterのmigration専用隔離、Unicode本文長のmetadata統一、PAT更新時のFirestore直接参照を実装した。対応するコミットは `4251c82`、`9772f3b`、`6c9f38e`、`97acc9b`、`fb5a3c3`、`97beff3`、`bd31e2a`、`2cc330c`、`dc2d1a1`、`b95e897`、`d45bb54`、`897b836`、`4ad17a5`、`335892f`、`598cde3`、`2ab6096`、`e470f14`、`4676798`、`29a3f6d`、`ae42d35`、`aacaca2`、`7cd1335`、`ceb6f0f`、`a200755`、`261f741`、`2faff73`、`764ab2a`、`6710e57`、`109c39c`、`ae8bb8a`、`b8cbb77`、`e4fab0f`、`ccf7239`、`535fa32`、`01fbdeb`、`aa0cd52`、`fd5703f`、`ce6098c`、`da52505`、`6e71ae5`、`ec6fa87`、`5453523`、`94d0905`、`556448a` である。ローカルでは全テスト69 files・200 tests、lint、型検査、production buildが通過している。PRのCloud Run verifyではDocker image buildとコンテナhealth check（`GET /api/health`）まで成功した。ローカルDocker検証はdevcontainer内では実施しない方針とし、実AWS/Firebase/GCP接続、実データ移行verify、Cloud Run smoke、旧Vercel Project削除は外部環境または資格情報が必要な未完了ゲートである。これらを確認するまで旧移行用credentialとdevDependenciesは削除しない。最終受け入れは `docs/migration/cloud-run-cutover-checklist.md` と `docs/eval/cloud-run-smoke.json` に記録する。
+Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、tombstone移行、旧runtime整理まで完了している。追加レビューでCloud Run runtime環境注入、Firebase公開設定endpoint、rename時のFirestore tombstone整合性、起動時reindex競合テスト、SQLite cache失敗時のFirestore metadata補償、ローカル合成UID、Cloud Run imageの認証必須既定値、Firestore memory/name indexを含む双方向移行verify、rename部分書き込み時のtombstone隔離、Cloud Run smokeの主要MCP経路検証、Invoker公開とアプリ層認証の分離、Firestore document/request/write数のimport前preflight、旧Turso adapterのmigration専用隔離、Unicode本文長のmetadata統一、PAT更新時のFirestore直接参照を実装した。対応するコミットは `4251c82`、`9772f3b`、`6c9f38e`、`97acc9b`、`fb5a3c3`、`97beff3`、`bd31e2a`、`2cc330c`、`dc2d1a1`、`b95e897`、`d45bb54`、`897b836`、`4ad17a5`、`335892f`、`598cde3`、`2ab6096`、`e470f14`、`4676798`、`29a3f6d`、`ae42d35`、`aacaca2`、`7cd1335`、`ceb6f0f`、`a200755`、`261f741`、`2faff73`、`764ab2a`、`6710e57`、`109c39c`、`ae8bb8a`、`b8cbb77`、`e4fab0f`、`ccf7239`、`535fa32`、`01fbdeb`、`aa0cd52`、`fd5703f`、`ce6098c`、`da52505`、`6e71ae5`、`ec6fa87`、`5453523`、`94d0905`、`556448a` である。ローカルでは全テスト69 files・200 tests、lint、型検査、production buildが通過している。PRのCloud Run verifyではDocker image buildとコンテナhealth check（`GET /api/health`）まで成功した。ローカルDocker検証はdevcontainer内では実施しない方針とし、実AWS/Firebase/GCP接続とCloud Run smokeは外部環境または資格情報が必要な未完了ゲートである。旧データのexport/import/verifyは空スタート方針のため対象外、旧Vercel Project削除はユーザー報告で完了している。最終受け入れは `docs/migration/cloud-run-cutover-checklist.md` と `docs/eval/cloud-run-smoke.json` に記録する。
+
+2026-09-20: ユーザー判断により旧Vercel/Turso/Blob/Clerk/Redisデータは移行せず破棄し、空スタートへ方針変更した。旧Vercel Projectはユーザー操作で削除済み。移行専用スクリプト、テスト、`@libsql/client`、`@vercel/blob`は削除し、全テストは67 files・193 testsとなった。残る未完了ゲートは新環境のCloud Run/Firebase/AWS smokeと旧独立サービスcredentialの失効確認である。
 
 ## 全体制約
 
@@ -545,7 +547,7 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 
   コミット: `docs: switch curator and operations to Cloud Run`
 
-### タスク11: 完全受け入れ、切り替え、Vercel削除ゲート
+### タスク11: 完全受け入れ、切り替え、旧環境破棄ゲート
 
 **対象ファイル:**
 
@@ -572,25 +574,25 @@ Task 1〜10の主要実装、Task 9のfake targetによる冪等import/verify、
 
   `GET /api/health`が200を返し、image layerやlogにsecretがないことを確認する。
 
-- [ ] **手順3: 分離provider smokeを実行する。**
+- [ ] **手順3: 新規provider smokeを実行する。**
 
   専用smoke projectとFirebase user/PATを作成し、Cloud Run候補へ`scripts/cloud-run-smoke.ts`を実行する。initialize、16 tools/list、save/search/get/update/link/reindex/delete、shared read/write gate、cold start、redacted logを確認する。renameはMCP公開toolではないため、`CloudMemoryService`の回帰テストで確認する。
 
-- [ ] **手順4: Vercelをread-only化してexportする。**
+- [x] **手順4: 旧データを移行せず、旧Vercel Projectを削除する。**
 
-  旧deploymentをread-only/maintenanceへ変更し、新規writeを停止して`export-vercel.ts`を実行する。manifestとfinal S3 import reportはrepository外へ保存し、旧credentialはまだ削除しない。
+  ユーザー判断によりexport/import/rollbackを行わず、旧Vercel Projectは2026-09-20に画面から削除した。旧Turso、Blob、Clerk、Redisの独立リソースとcredentialは別途削除確認を行う。
 
-- [ ] **手順5: import、検証、client切り替えを行う。**
+- [ ] **手順5: 新規環境を初期化してclientを切り替える。**
 
-  `import-s3-firestore.ts`、`verify-migration.ts`の順に実行する。missing key、hash mismatch、parse failure、memory metadata/name index mismatchをゼロにし、membership/PAT/tombstone countを一致させる。Claude Code MCP設定、curator環境、ドキュメントリンク、DNS/aliasをCloud Runへ変更する。
+  Cloud Run、Firebase、S3、Firestoreを空の状態で構築し、Claude Code MCP設定、curator環境、ドキュメントリンク、DNS/aliasを新URLへ変更する。
 
-- [ ] **手順6: rollback期間と最終snapshotを確認する。**
+- [ ] **手順6: 初期データと運用手順を確認する。**
 
-  最終S3 snapshotを保存し、memory 1件の手動restoreを実行する。旧Vercel writeが拒否されることを確認し、合意したrollback期間だけ旧projectを保持する。判断を`docs/migration/cloud-run-cutover-checklist.md`へ記録する。
+  新環境でmemory 1件のwrite/readを確認し、以後のS3 snapshot、Firestore exportまたは復旧手順をrepository外へ保存する。旧環境へのrollbackは行わない。
 
-- [ ] **手順7: 最終確認後だけVercelを削除する。**
+- [ ] **手順7: 旧独立サービスとcredentialを整理する。**
 
-  Vercel integration、environment variable、GitHub Vercel secret、domain mappingを削除する。その後、管理者が認証済みVercel Console/CLIからVercel Projectを削除する。削除をGitHub Actionsで自動化しない。
+  Vercel外に残る旧Turso、Blob、Clerk、Redis resource、GitHub/Vercel secret、domain mappingを確認し、他用途で共有されていないものだけ削除する。
 
 - [ ] **手順8: 受け入れ記録をcommitして引き渡す。**
 

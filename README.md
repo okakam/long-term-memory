@@ -31,9 +31,9 @@ pnpm exec tsc --noEmit
 NODE_ENV=production pnpm build
 ```
 
-Cloud Runの実環境smoke、S3/Firestoreへの実データ移行、Vercel Project削除は外部資格情報が必要です。未実行の外部ゲートをローカルテスト成功だけで完了扱いにしません。ローカルではsmoke scriptの主要MCP経路を回帰検証し、renameはMCP公開toolではないため`CloudMemoryService`のテストで検証します。
+Cloud Runの実環境smokeは外部資格情報が必要です。ローカルテスト成功だけで外部provider接続済みとは扱いません。ローカルではsmoke scriptの主要MCP経路を回帰検証し、renameはMCP公開toolではないため`CloudMemoryService`のテストで検証します。
 
-## 移行
+## 初期セットアップ
 
 設計と手順は次を正本とします。
 
@@ -42,4 +42,4 @@ Cloud Runの実環境smoke、S3/Firestoreへの実データ移行、Vercel Proje
 - [実装計画](docs/superpowers/plans/2026-09-19-cloud-run-firebase-s3-firestore-migration.md)
 - [切り替えチェックリスト](docs/migration/cloud-run-cutover-checklist.md)
 
-旧Vercel/Turso/Blobからのexportは `scripts/migration/` に一時的に残しています。migration verify、Cloud Run smoke、rollback期間の終了を確認するまで、旧credentialとmigration専用依存を削除しません。
+旧Vercel/Turso/Blobのデータは移行せず破棄し、新しいCloud Run/Firebase/S3/Firestore環境を空の状態から開始します。旧providerのmigration専用スクリプトと依存は削除済みです。
