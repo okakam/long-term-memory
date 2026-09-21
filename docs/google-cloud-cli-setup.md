@@ -422,7 +422,7 @@ URL を取得します。
     export LTM_CLOUD_RUN_URL="$(gcloud run services describe long-term-memory --project="$LTM_PROJECT_ID" --region="$LTM_REGION" --format='value(status.url)')"
     printf '%s\n' "$LTM_CLOUD_RUN_URL"
 
-この URL を CLOUD_RUN_URL、MCP_PUBLIC_URL、MCP_ALLOWED_ORIGINS へ反映します。production Environment の値を揃えてから、develop → main の Release PR をマージします。main push で verify、deploy、Cloud Run smoke が実行されます。
+この URL はbootstrap直後の確認用です。独自ドメインの設定後は `https://ltm.okakam.net` を `CLOUD_RUN_URL`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`へ反映します。production Environment の値を揃えてから、develop → main の Release PR をマージします。main push で verify、deploy、Cloud Run smoke が実行されます。
 
 ## 15. Smoke 用 Firebase ユーザーと PAT
 
@@ -435,7 +435,7 @@ Cloud Run の base URL へ Firebase ユーザーでサインインし、smoke pr
 
 PAT は画面から発行します。
 
-1. $LTM_CLOUD_RUN_URL/settings/tokens を開く
+1. 独自ドメイン設定後は `https://ltm.okakam.net/settings/tokens`、設定前は `$LTM_CLOUD_RUN_URL/settings/tokens` を開く
 2. Firebase でサインインし、ラベルを入力して PATを発行 を押す
 3. 表示された PAT を PATをコピー でコピーする
 4. GitHub repository の Settings → Environments → production → LTM_MCP_TOKEN へ登録する
