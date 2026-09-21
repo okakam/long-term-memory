@@ -96,12 +96,12 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   expect(plist).not.toContain('Documents');
 
   const config = JSON.parse(read('docs/mcp-config.cloud-run.json')) as {
-    mcpServers: { 'ltm-shared': { url: string; headers: Record<string, string> } };
+    mcpServers: { 'long-term-memory': { url: string; headers: Record<string, string> } };
   };
-  expect(config.mcpServers['ltm-shared'].url).toContain('$' + '{MCP_PUBLIC_URL}');
-  expect(config.mcpServers['ltm-shared'].headers.Authorization).toContain('$' + '{LTM_MCP_TOKEN}');
-  expect(config.mcpServers['ltm-shared'].headers['X-LTM-Maintenance-Token']).toContain('$' + '{LTM_MAINTENANCE_TOKEN}');
-  expect(config.mcpServers['ltm-shared'].headers).not.toHaveProperty('X-Vercel-Protection-Bypass');
+  expect(config.mcpServers['long-term-memory'].url).toContain('$' + '{MCP_PUBLIC_URL}');
+  expect(config.mcpServers['long-term-memory'].headers.Authorization).toContain('$' + '{LTM_MCP_TOKEN}');
+  expect(config.mcpServers['long-term-memory'].headers['X-LTM-Maintenance-Token']).toContain('$' + '{LTM_MAINTENANCE_TOKEN}');
+  expect(config.mcpServers['long-term-memory'].headers).not.toHaveProperty('X-Vercel-Protection-Bypass');
   expect(existsSync(resolve(root, 'scripts/curator/install.sh'))).toBe(true);
 
   const workflow = read('.github/workflows/curator.yml');

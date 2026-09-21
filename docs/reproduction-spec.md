@@ -27,7 +27,7 @@ Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret 
 | Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hashの永続保存 |
 | GCS | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
 | `/tmp` SQLite | FTS5・KG・検索用の再構築可能cache。コンテナ再起動で消える前提 |
-| MCP | `POST /api/mcp?project_id=<slug>`。16 tools、PATは `Authorization: Bearer ltm_...` |
+| MCP | サーバー名は `long-term-memory`。`POST /api/mcp?project_id=<slug>`、16 tools、PATは `Authorization: Bearer ltm_...` |
 
 Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全文を永続保存しない。Firestoreのmemory metadataはGCS keyとhashを持ち、reindex時にGCS本文・hash・frontmatter・tombstoneを照合する。
 
