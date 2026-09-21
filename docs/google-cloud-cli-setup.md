@@ -24,6 +24,8 @@ GCS と Firestore の実行時認証は Cloud Run runtime service account の Ap
 | GCP / Firebase project ID | long-term-memory-prod |
 | project number | 751062990941 |
 | region | asia-northeast1 |
+| Artifact Registry repository | cloud-run-source-deploy |
+| Artifact Registry cleanup policy | タグなし・作成から3日後に削除（実削除モード） |
 | GCS bucket | long-term-memory-prod-751062990941 |
 | GCS object prefix | projects |
 | Firestore database | (default)、Firestore Native、Standard |
@@ -139,6 +141,32 @@ Firebase Auth Blocking Functions を deploy する前に、Functions の依存 A
     gcloud services list --enabled --project="$LTM_PROJECT_ID" --format='value(config.name)' | sort
 
 gcloud run deploy --source . を使うと Cloud Build と Artifact Registry が動作するため、API 有効化だけでなく Billing account の紐付けも必要です。ビルド回数、Artifact Registry 容量、Cloud Run、GCS、Firestore、Secret Manager の利用量は課金対象になり得ます。
+
+### Artifact Registry の不要イメージを自動削除する
+
+Cloud Run の source deploy が使用する Artifact Registry repository には、タグのないイメージを作成から 3 日後に削除する cleanup policy を設定します。タグ付きのイメージ（`latest` など）は対象外です。policy の正本は `docs/artifact-registry-cleanup-policy.json` です。
+
+今回の repository は `cloud-run-source-deploy` です。対象 repository を確認します。
+
+    export LTM_ARTIFACT_REPOSITORY='cloud-run-source-deploy'
+    gcloud artifacts repositories list --project="$LTM_PROJECT_ID" --location="$LTM_REGION"
+
+policy を設定します。`--no-dry-run` を明示して実削除を有効にします。既存の設定が dry-run の場合、`--policy` だけでは dry-run が維持されるため、必ず `--no-dry-run` を付けます。
+
+    gcloud artifacts repositories set-cleanup-policies "$LTM_ARTIFACT_REPOSITORY" \
+      --project="$LTM_PROJECT_ID" \
+      --location="$LTM_REGION" \
+      --policy=docs/artifact-registry-cleanup-policy.json \
+      --no-dry-run
+
+設定と dry-run 状態を確認します。
+
+    gcloud artifacts repositories list-cleanup-policies "$LTM_ARTIFACT_REPOSITORY" \
+      --project="$LTM_PROJECT_ID" \
+      --location="$LTM_REGION" \
+      --format='yaml'
+
+`Dry run is disabled.`、`tagState: UNTAGGED`、`olderThan: 259200s` が表示されることを確認します。cleanup は Artifact Registry の定期処理で実行されるため、作成から正確に 72 時間経過した瞬間に削除されるとは限りません。設定変更時点で 3 日を超えたタグなしイメージがあれば、次回の定期処理で削除対象になります。
 
 ## 5. GCS bucket を作成する
 
