@@ -45,7 +45,7 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 | `GCP_DEPLOY_SERVICE_ACCOUNT` | Cloud Run deploy用サービスアカウント |
 | `GCP_RUNTIME_SERVICE_ACCOUNT` | Cloud Run実行用サービスアカウント |
 | `CLOUD_RUN_URL` | deploy後smokeのCloud Run URL |
-| `LTM_MCP_TOKEN` | smoke専用MCP PAT |
+| `LTM_MCP_TOKEN` | `/settings/tokens`で発行したsmoke専用MCP PAT |
 
 ### Environment variables
 
@@ -64,6 +64,12 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 | `MCP_ALLOWED_ORIGINS` | MCP許可origin |
 | `LTM_CURATOR_USER_ID` | shared writeを許可するFirebase UID |
 | `GCP_SECRET_LTM_MAINTENANCE_TOKEN` | Secret Manager内のmaintenance token secret名 |
+
+### Smoke用PATの発行と更新
+
+Firebaseでサインインした状態で、`https://<Cloud RunのベースURL>/settings/tokens`を開きます。ラベル（例: `github-cloud-run-smoke`）を入力して`PATを発行`を押し、表示されたPATをコピーします。PATは発行直後に一度だけ表示され、再読み込み後には復元できません。コピーに失敗した場合は表示中のPAT本文を選択して手動でコピーしてください。
+
+コピーした値をGitHub repositoryの Settings → Environments → `production` → `LTM_MCP_TOKEN`へ登録します。PAT本文はchat、repository、workflowログへ貼り付けず、値の前後に空白や改行を追加しません。画面が使えない場合の同一Origin API手順は [Google Cloud CLI / Firebase 初期設定手順](google-cloud-cli-setup.md) の「Smoke用FirebaseユーザーとPAT」を参照してください。
 
 ## GCP側の前提
 

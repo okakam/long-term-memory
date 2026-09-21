@@ -37,6 +37,12 @@ textarea { min-height: 300px; font-family: ui-monospace, monospace; }
 .editor-form label { display: grid; gap: 6px; }
 .markdown-preview { background: #fff; border: 1px solid #e1e4e8; border-radius: 6px; padding: 16px; min-height: 300px; }
 .error-message { color: #b42318; font-size: 13px; }
+.token-form { display: grid; gap: 8px; max-width: 520px; }
+.token-output { border-color: #2ea44f; }
+.token-notice { color: #735c0f; background: #fff8c5; border-left: 3px solid #d4a72c; padding: 8px 10px; }
+.token-value { display: block; padding: 12px; overflow-wrap: anywhere; user-select: all; background: #f6f8fa; border: 1px solid #d1d5db; border-radius: 4px; }
+.token-list { padding-left: 24px; }
+.token-list li { margin: 8px 0; }
 .graph-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
 .tag-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tag.selected { background: #dbeafe; outline: 2px solid #93c5fd; }
