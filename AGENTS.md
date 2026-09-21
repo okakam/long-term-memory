@@ -39,6 +39,7 @@
 - production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote service、永続telemetry DBを削除した。旧Vercel Blob/Tursoのmigration専用スクリプト、テスト、devDependenciesも、旧データを移行せず空スタートする方針により削除済みである。
 - ローカル検証時点で全テスト、lint、型検査、`NODE_ENV=production pnpm build`を実行する。Cloud Run smoke scriptはinitialize、tools/list、save、get、update、link、reindex、search、deleteを実行し、renameは`CloudMemoryService`の回帰テストで検証する。Cloud Run/Firebase/GCSの実環境smokeは外部資格情報が必要な未完了ゲートであり、旧データのexport/import/verifyは対象外、旧Vercel Project削除はユーザー報告で完了している。
 - `main`へのPRマージ後は、`push`イベントでGitHub Actionsのverify完了後に`production` Environmentを使ってCloud Runへ自動deployする。手動dispatchもmainブランチだけを許可し、Production deployは同時実行しない。Environmentの設定値は`docs/cloud-run-production-deployment.md`に記録する。
+- Cloud Runの公開MCP URLは`https://ltm.okakam.net`へ統一する。DNS・Google-managed certificateの有効化後、Production Environmentの`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`CLOUD_RUN_URL`を揃えてから再デプロイする。
 - GCPリソース、IAM、Workload Identity Federation、Secret Manager、Firestore Rules/Indexes、Identity Platform/Blocking FunctionsのCLI手順は `docs/google-cloud-cli-setup.md` に記録する。Firebase Storageは使用せず、Markdown本文はCloud RunからGCS APIで扱う。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。

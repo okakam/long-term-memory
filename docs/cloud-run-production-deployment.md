@@ -74,9 +74,29 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 | `LTM_CURATOR_USER_ID` | shared writeを許可するFirebase UID |
 | `GCP_SECRET_LTM_MAINTENANCE_TOKEN` | Secret Manager内のmaintenance token secret名 |
 
+### カスタムドメイン `ltm.okakam.net`
+
+Cloud Runの公開MCP URLは `https://ltm.okakam.net` とする。ドメイン所有確認後、`asia-northeast1`の`long-term-memory`サービスへドメインマッピングを作成する。
+
+```bash
+gcloud domains verify okakam.net --project="$GCP_PROJECT_ID"
+gcloud beta run domain-mappings create \
+  --service=long-term-memory \
+  --domain=ltm.okakam.net \
+  --region=asia-northeast1 \
+  --project="$GCP_PROJECT_ID"
+gcloud beta run domain-mappings describe \
+  --domain=ltm.okakam.net \
+  --region=asia-northeast1 \
+  --project="$GCP_PROJECT_ID" \
+  --format='yaml(status.resourceRecords)'
+```
+
+表示された`resourceRecords`を、お名前.comで使用中のネームサーバーへ登録する。GitHub Environment `production`の`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`CLOUD_RUN_URL`は、DNSとGoogle-managed certificateの有効化後に`https://ltm.okakam.net`へ揃えてから再デプロイする。Cloud Runの直接ドメインマッピングはPreviewであるため、本番の安定性・TLS要件が必要な場合はGlobal External Application Load BalancerまたはFirebase Hostingを使用する。
+
 ### Smoke用PATの発行と更新
 
-Firebaseでサインインした状態で、`https://<Cloud RunのベースURL>/settings/tokens`を開きます。ラベル（例: `github-cloud-run-smoke`）を入力して`PATを発行`を押し、表示されたPATをコピーします。PATは発行直後に一度だけ表示され、再読み込み後には復元できません。コピーに失敗した場合は表示中のPAT本文を選択して手動でコピーしてください。
+Firebaseでサインインした状態で、`https://ltm.okakam.net/settings/tokens`を開きます。DNS・certificate設定前はCloud Runの`run.app` URLを使用します。ラベル（例: `github-cloud-run-smoke`）を入力して`PATを発行`を押し、表示されたPATをコピーします。PATは発行直後に一度だけ表示され、再読み込み後には復元できません。コピーに失敗した場合は表示中のPAT本文を選択して手動でコピーしてください。
 
 コピーした値をGitHub repositoryの Settings → Environments → `production` → `LTM_MCP_TOKEN`へ登録します。PAT本文はchat、repository、workflowログへ貼り付けず、値の前後に空白や改行を追加しません。画面が使えない場合の同一Origin API手順は [Google Cloud CLI / Firebase 初期設定手順](google-cloud-cli-setup.md) の「Smoke用FirebaseユーザーとPAT」を参照してください。
 
