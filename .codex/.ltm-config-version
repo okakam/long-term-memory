@@ -1,0 +1,12 @@
+installed_at=2026-09-21T09:44:05Z
+client=codex
+source=/workspace
+config_version=1
+skill_path=.agents/skills/long-term-memory/SKILL.md
+skill_sha256=83bd710a7bdd76a592c69bd061ab3848adb362ae23f009beff6171304a667501
+hook_path=claude-config/hooks/ltm-init-reminder.sh
+hook_sha256=e759d5abc1e4c983926acd23f28005e6a77c028e2af1c48949b024a436a65863
+rules_file=AGENTS.md
+rules_sha256=88f0f277969fb5627856947364fbf1e8d9b4531a795fa4c5b5dcb93fe77d9dd2
+hooks_config=.codex/hooks.json
+hooks_config_sha256=7afc0e510f86a6ec808609d0137f23c31d5583b8e727a1bbe4550e83eab335d4

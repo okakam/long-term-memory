@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/claude-config/hooks/ltm-init-reminder.sh\"",
+            "statusMessage": "Loading long-term memory reminder"
+          }
+        ]
+      }
+    ]
+  }
+}
