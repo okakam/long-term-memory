@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "ltm-shared": {
+    "long-term-memory": {
       "type": "http",
       "url": "${MCP_PUBLIC_URL}/api/mcp?project_id=__shared__",
       "headers": {

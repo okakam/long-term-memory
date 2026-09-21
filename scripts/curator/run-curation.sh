@@ -84,22 +84,22 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_FILE="$LOG_DIR/curation-$STAMP.log"
 
 READ_TOOLS=(
-  mcp__ltm-shared__list_memories_by_type
-  mcp__ltm-shared__search_by_tag
-  mcp__ltm-shared__find_related
-  mcp__ltm-shared__search_memories
-  mcp__ltm-shared__get_memory
-  mcp__ltm-shared__get_memory_index
-  mcp__ltm-shared__list_projects
+  mcp__long-term-memory__list_memories_by_type
+  mcp__long-term-memory__search_by_tag
+  mcp__long-term-memory__find_related
+  mcp__long-term-memory__search_memories
+  mcp__long-term-memory__get_memory
+  mcp__long-term-memory__get_memory_index
+  mcp__long-term-memory__list_projects
 )
 WRITE_TOOLS=(
-  mcp__ltm-shared__remember_user_fact
-  mcp__ltm-shared__remember_reference
-  mcp__ltm-shared__remember_feedback
-  mcp__ltm-shared__remember_project_fact
-  mcp__ltm-shared__update_memory
-  mcp__ltm-shared__forget_memory
-  mcp__ltm-shared__link_memories
+  mcp__long-term-memory__remember_user_fact
+  mcp__long-term-memory__remember_reference
+  mcp__long-term-memory__remember_feedback
+  mcp__long-term-memory__remember_project_fact
+  mcp__long-term-memory__update_memory
+  mcp__long-term-memory__forget_memory
+  mcp__long-term-memory__link_memories
 )
 DISALLOWED_TOOLS=(
   'Read(**/.env)'

@@ -9,6 +9,7 @@ Markdownを正本として扱う、MCP対応の長期記憶アプリケーショ
 - Firestore: project、membership、memory metadata、name index、tombstone、MCP PAT hash。
 - Google Cloud Storage (GCS): Markdown本文のimmutable object。Cloud RunからGCS APIでアクセスする。
 - `/tmp` SQLite: FTS5・KG・検索用の再構築可能cache。
+- MCP: サーバー名は `long-term-memory`。Cloud Run endpointは `POST /api/mcp?project_id=<slug>` とし、Codexの設定例は下記、Claude Codeのremote curatorは [Cloud Run curator用MCP設定例](docs/mcp-config.cloud-run.json) を使用する。
 
 Cloud SQL、Redis、Upstash、Firebase StorageのクライアントSDK、Cloud Scheduler、常駐workerは使用しません。Cloud Runのscale to zeroを使って常時起動費を抑えますが、GCS・Firestore・ログ・Artifact Registryには従量課金があり得るため、完全な金額ゼロは利用量に依存します。
 
@@ -67,33 +68,29 @@ export MCP_PUBLIC_URL='https://ltm.okakam.net'
 export LTM_MEMORY_PROJECT_ID='your-project-slug'
 export LTM_MCP_TOKEN='ltm_発行済みPAT'
 
-codex mcp add ltm-project \
+codex mcp add long-term-memory \
   --url "${MCP_PUBLIC_URL%/}/api/mcp?project_id=${LTM_MEMORY_PROJECT_ID}" \
   --bearer-token-env-var LTM_MCP_TOKEN
 ```
 
-このリポジトリの `docs/mcp-config.cloud-run.json` と同じ共有scopeへ接続する場合は、`project_id=__shared__`を使います。
-
-```bash
-codex mcp add ltm-shared \
-  --url "${MCP_PUBLIC_URL%/}/api/mcp?project_id=__shared__" \
-  --bearer-token-env-var LTM_MCP_TOKEN
-```
-
-`__shared__`は通常read-onlyです。共有scopeへ書き込むcuratorだけは、`LTM_MAINTENANCE_TOKEN`をシェルへ設定し、`~/.codex/config.toml`の生成された `[mcp_servers.ltm-shared]` に次の1行を追加します。maintenance tokenはPATとは別のSecret Manager管理値で、必要なcurator以外には渡しません。
-
-```toml
-env_http_headers = { "X-LTM-Maintenance-Token" = "LTM_MAINTENANCE_TOKEN" }
-```
+このリポジトリの `docs/mcp-config.cloud-run.json` は、GitHub ActionsのClaude Code remote curatorが `--mcp-config` で読み込む共有scope (`project_id=__shared__`) の設定例です。Codexの `~/.codex/config.toml` にそのまま追加する設定ではありません。curator用JSONにはPATとmaintenance tokenの環境変数参照を記載し、実際の値はGitHub Actions Secretから渡します。
 
 登録後は次で確認し、すでに起動中のCodexは再起動します。TUIでは `/mcp` でも接続中のサーバーを確認できます。
 
 ```bash
 codex mcp list
-codex mcp get ltm-project
+codex mcp get long-term-memory
 ```
 
-`docs/mcp-config.cloud-run.json`の`${MCP_PUBLIC_URL}`や`${LTM_MCP_TOKEN}`は説明用のプレースホルダーです。CodexのURLには実際のCloud Run URLを設定し、認証値は `bearer_token_env_var` と `env_http_headers` から環境変数名だけを参照させます。`~/.codex/config.toml`、PAT、maintenance tokenをrepositoryへコミットしないでください。詳細は[OpenAI公式のMCP設定手順](https://developers.openai.com/docs/extend/mcp)と[Cloud Run本番デプロイ手順](docs/cloud-run-production-deployment.md)を参照してください。
+`~/.codex/config.toml` を直接編集する場合は、次のサーバー名と環境変数参照にします。
+
+```toml
+[mcp_servers.long-term-memory]
+url = "https://ltm.okakam.net/api/mcp?project_id=your-project-slug"
+bearer_token_env_var = "LTM_MCP_TOKEN"
+```
+
+`docs/mcp-config.cloud-run.json`の`${MCP_PUBLIC_URL}`や`${LTM_MCP_TOKEN}`は説明用のプレースホルダーです。CodexのURLには実際のCloud Run URLを設定し、認証値は `bearer_token_env_var` から環境変数名だけを参照させます。`~/.codex/config.toml`、PAT、maintenance tokenをrepositoryへコミットしないでください。詳細は[OpenAI公式のMCP設定手順](https://developers.openai.com/docs/extend/mcp)と[Cloud Run本番デプロイ手順](docs/cloud-run-production-deployment.md)を参照してください。
 
 ## 検証
 
