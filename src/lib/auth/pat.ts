@@ -59,7 +59,7 @@ function bearerToken(req: Request): string {
   const header = req.headers.get('authorization');
   if (!header) throw new UnauthorizedMcpError();
   const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
-  if (!match || !match[1].startsWith('ltm_') || match[1].length <= 4) {
+  if (!match || !match[1].startsWith('ltm_') || match[1].startsWith('ltm_oat_') || match[1].length <= 4) {
     throw new UnauthorizedMcpError();
   }
   return match[1];
@@ -72,7 +72,7 @@ function usable(record: TokenRecord | null): record is TokenRecord {
   return !Number.isNaN(expires) && expires > Date.now();
 }
 
-export async function requireMcpPrincipal(
+export async function requirePatPrincipal(
   req: Request,
   store?: AuthStoreLike,
 ): Promise<{ userId: string; tokenId: string }> {
@@ -82,6 +82,13 @@ export async function requireMcpPrincipal(
   if (!usable(record)) throw new UnauthorizedMcpError();
   await authStore.touchToken(record.id, undefined, record.token_hash);
   return { userId: record.user_id, tokenId: record.id };
+}
+
+export async function requireMcpPrincipal(
+  req: Request,
+  store?: AuthStoreLike,
+): Promise<{ userId: string; tokenId: string }> {
+  return requirePatPrincipal(req, store);
 }
 
 export async function revokePat(userId: string, tokenId: string, store?: AuthStoreLike): Promise<void> {

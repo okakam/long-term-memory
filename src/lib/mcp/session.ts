@@ -150,7 +150,9 @@ export function getOrCreateSession(ctx: ToolContext): Promise<McpSession> {
   const key = JSON.stringify({
     projectId: ctx.projectId,
     sharedWrite: ctx.canWriteShared === true,
-    principal: ctx.principal ? [ctx.principal.userId, ctx.principal.tokenId ?? null] : null,
+    principal: ctx.principal
+      ? [ctx.principal.userId, ctx.principal.credentialId ?? null, ctx.principal.credentialKind ?? null]
+      : null,
   });
   const existing = sessions.get(key);
   if (existing) return existing;

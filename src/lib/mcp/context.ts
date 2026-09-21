@@ -5,7 +5,7 @@ export interface ToolContext {
   projectId: string;
   svc: MemoryServiceLike;
   canWriteShared?: boolean;
-  principal?: { userId: string; tokenId?: string };
+  principal?: { userId: string; credentialId?: string; credentialKind?: 'oauth' | 'pat' };
   sessionId?: string;
 }
 
