@@ -1,35 +1,21 @@
 {
-  "recorded_at": "2026-09-19",
-  "status": "未実行",
-  "reason": "Cloud Run URL、Firebaseユーザー、MCP PAT、GCP資格情報が未提供",
-  "target": {
-    "cloud_run_url": null,
-    "revision": null,
-    "commit": null,
-    "project_id": "smoke"
+  "recorded_at": "2026-09-21",
+  "commit_sha": "5d8875618bbdd72d00246b70e75de13edef892d2",
+  "cloud_run_url": null,
+  "pat_smoke": "not_run",
+  "oauth_metadata": "not_run",
+  "oauth_codex_login": "not_run",
+  "oauth_mcp_tools": "not_run",
+  "negative_authorization": "not_run",
+  "curator_pat_regression": "not_run",
+  "rollback_exercised": "not_run",
+  "local_verification": {
+    "focused_oauth_mcp_tests": "passed",
+    "full_test": "passed",
+    "lint": "passed",
+    "typecheck": "passed",
+    "production_build": "passed",
+    "compose_config": "not_run"
   },
-  "checks": {
-    "health": "未実行",
-    "firebase_login": "未実行",
-    "mcp_initialize": "未実行",
-    "tools_count": 16,
-    "tools_list": "未実行",
-    "save": "未実行",
-    "search": "未実行",
-    "get": "未実行",
-    "update": "未実行",
-    "rename": "MCP公開tool対象外（CloudMemoryService回帰テスト済み）",
-    "link": "未実行",
-    "reindex": "未実行",
-    "delete": "未実行",
-    "shared_read_gate": "未実行",
-    "shared_write_gate": "未実行",
-    "cold_start": "未実行",
-    "secret_redaction": "未実行"
-  },
-  "smoke_run_id": null,
-  "notes": [
-    "このファイルへ実環境のPAT、secret、個人情報、認証cookieを記録しない",
-    "成功後にCloud Run revision URL、commit SHA、実行日時、結果だけを更新する"
-  ]
+  "notes": "Production Cloud Run and browser/Codex gates require external credentials and were not run in this workspace. Compose validation was not run because the Docker CLI is unavailable in the workspace. No credential, token, email, cookie, authorization code, hash, or private project data is recorded."
 }
