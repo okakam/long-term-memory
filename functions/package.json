@@ -1,0 +1,21 @@
+{
+  "name": "long-term-memory-auth-functions",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run tests"
+  },
+  "dependencies": {
+    "firebase-functions": "7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.11"
+  }
+}
