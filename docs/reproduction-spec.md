@@ -16,7 +16,7 @@ Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret 
 
 旧Vercel/Turso/Blob/Redis/Clerkデータは移行せず破棄し、Cloud Run・Firebase Authentication・Google Cloud Storage (GCS)・Cloud Firestoreを空の状態から構築する。Cloud SQL、Redis、Firebase StorageクライアントSDK、常駐worker、Cloud Schedulerは使わない。
 
-運用費は「常時起動サービスの費用を発生させない」ことを目標にする。Cloud Runはscale to zero、FirestoreはStandard、GCSは従量課金のため、アクセス量・保存量・ログ量が増えれば完全な金額ゼロにはならない。予算アラートと利用上限を必ず設定する。
+運用費は「常時起動サービスの費用を発生させない」ことを目標にする。Cloud Runはscale to zero、FirestoreはStandard、GCSは従量課金のため、アクセス量・保存量・ログ量が増えれば完全な金額ゼロにはならない。Artifact Registryはタグなしイメージを作成から3日後に自動削除し、不要なビルド成果物の蓄積を抑える。予算アラートと利用上限を必ず設定する。
 
 ## 2. 実行構成
 

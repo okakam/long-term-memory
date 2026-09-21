@@ -1,0 +1,12 @@
+[
+  {
+    "name": "delete-untagged-after-3-days",
+    "action": {
+      "type": "Delete"
+    },
+    "condition": {
+      "tagState": "untagged",
+      "olderThan": "3d"
+    }
+  }
+]
