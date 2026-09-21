@@ -1,6 +1,8 @@
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
+import { isAllowedEmailDomain } from './email-domain';
+
 export interface FirebaseDecodedToken {
   uid: string;
   email?: string;
@@ -29,6 +31,15 @@ export class UnauthorizedFirebaseError extends Error {
   }
 }
 
+export class ForbiddenFirebaseError extends Error {
+  readonly status = 403;
+
+  constructor() {
+    super('email domain is not allowed');
+    this.name = 'ForbiddenFirebaseError';
+  }
+}
+
 let testAuth: FirebaseAdminAuth | null = null;
 
 export function getFirebaseAdminApp() {
@@ -45,6 +56,7 @@ function adminAuth(): FirebaseAdminAuth {
 
 function principal(decoded: FirebaseDecodedToken): FirebasePrincipal {
   if (!decoded.uid) throw new UnauthorizedFirebaseError();
+  if (!isAllowedEmailDomain(decoded.email)) throw new ForbiddenFirebaseError();
   return {
     userId: decoded.uid,
     email: decoded.email,

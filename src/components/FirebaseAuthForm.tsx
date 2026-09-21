@@ -9,6 +9,7 @@ import {
   signInWithPassword,
   signUpWithPassword,
 } from '@/lib/auth/firebase-client';
+import { getFirebaseAuthErrorMessage } from '@/lib/auth/auth-error';
 
 export function FirebaseAuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const router = useRouter();
@@ -32,7 +33,7 @@ export function FirebaseAuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         ? await signInWithPassword(email, password)
         : await signUpWithPassword(email, password));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '認証に失敗しました');
+      setError(getFirebaseAuthErrorMessage(cause, '認証に失敗しました'));
     } finally {
       setPending(false);
     }
@@ -44,7 +45,7 @@ export function FirebaseAuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
     try {
       await complete(await signInWithGoogle());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Google認証に失敗しました');
+      setError(getFirebaseAuthErrorMessage(cause, 'Google認証に失敗しました'));
     } finally {
       setPending(false);
     }

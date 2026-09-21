@@ -1,6 +1,9 @@
 # 依存関係・パッケージマネージャのキャッシュ
 /node_modules/
 /.pnpm-store/
+/functions/node_modules/
+/functions/lib/
+/functions/.firebase/
 
 # Next.js・TypeScript・テストの生成物
 /.next/
