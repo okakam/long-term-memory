@@ -22,7 +22,13 @@ class FakeFirestore implements FirestoreGateway {
   async update(path: string, data: Record<string, unknown>): Promise<void> { await this.set(path, data, true); }
   async delete(path: string): Promise<void> { this.documents.delete(path); }
   async runTransaction<T>(fn: (transaction: FirestoreTransaction) => Promise<T>): Promise<T> {
-    return fn({ get: (path) => this.get(path), set: (path, data, merge) => this.set(path, data, merge), update: (path, data) => this.update(path, data), delete: (path) => this.delete(path) });
+    return fn({
+      get: (path) => this.get(path),
+      list: (collectionPath) => this.list(collectionPath),
+      set: (path, data, merge) => this.set(path, data, merge),
+      update: (path, data) => this.update(path, data),
+      delete: (path) => this.delete(path),
+    });
   }
   private snapshot(path: string): FirestoreDocument {
     const data = this.documents.get(path);

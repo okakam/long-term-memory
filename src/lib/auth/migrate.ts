@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { IndexStore } from '@/lib/storage/contracts';
 
-export const CURRENT_AUTH_VERSION = 1;
+export const CURRENT_AUTH_VERSION = 2;
 
 function statements(): string[] {
   const path = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql');

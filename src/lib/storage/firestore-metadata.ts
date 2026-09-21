@@ -16,6 +16,7 @@ export interface FirestoreDocument {
 
 export interface FirestoreTransaction {
   get(path: string): Promise<FirestoreDocument>;
+  list(collectionPath: string): Promise<FirestoreDocument[]>;
   set(path: string, data: Record<string, unknown>, merge?: boolean): void | Promise<void>;
   update(path: string, data: Record<string, unknown>): void | Promise<void>;
   delete(path: string): void | Promise<void>;
@@ -73,7 +74,7 @@ export class FirestoreDataError extends Error {
   }
 }
 
-class AdminFirestoreGateway implements FirestoreGateway {
+export class AdminFirestoreGateway implements FirestoreGateway {
   constructor(private readonly firestore: Firestore) {}
 
   async get(path: string): Promise<FirestoreDocument> {
@@ -122,6 +123,16 @@ class AdminFirestoreTransaction implements FirestoreTransaction {
       exists: document.exists,
       data: () => document.data(),
     };
+  }
+
+  async list(collectionPath: string): Promise<FirestoreDocument[]> {
+    const snapshot = await this.transaction.get(this.firestore.collection(collectionPath));
+    return snapshot.docs.map((document) => ({
+      id: document.id,
+      path: document.ref.path,
+      exists: document.exists,
+      data: () => document.data(),
+    }));
   }
 
   set(path: string, data: Record<string, unknown>, merge = false): void {
@@ -727,5 +738,9 @@ export class FirestoreMetadataStore {
 }
 
 export function createFirestoreMetadataStore(firestore: Firestore = getFirestore(getFirebaseAdminApp())): FirestoreMetadataStore {
-  return new FirestoreMetadataStore(new AdminFirestoreGateway(firestore));
+  return new FirestoreMetadataStore(createFirestoreGateway(firestore));
+}
+
+export function createFirestoreGateway(firestore: Firestore = getFirestore(getFirebaseAdminApp())): FirestoreGateway {
+  return new AdminFirestoreGateway(firestore);
 }
