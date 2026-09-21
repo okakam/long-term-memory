@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { createSessionCookie, verifyFirebaseIdToken } from '@/lib/auth/firebase';
+import {
+  createSessionCookie,
+  ForbiddenFirebaseError,
+  verifyFirebaseIdToken,
+} from '@/lib/auth/firebase';
 import {
   SESSION_COOKIE_MAX_AGE,
   SESSION_COOKIE_NAME,
@@ -28,7 +32,10 @@ export async function POST(request: Request): Promise<Response> {
     await verifyFirebaseIdToken(input.idToken);
     const session = await createSessionCookie(input.idToken);
     return new Response(null, { status: 204, headers: { 'set-cookie': cookie(session, SESSION_COOKIE_MAX_AGE) } });
-  } catch {
+  } catch (cause) {
+    if (cause instanceof ForbiddenFirebaseError) {
+      return new Response(cause.message, { status: cause.status });
+    }
     return new Response('authentication required', { status: 401 });
   }
 }

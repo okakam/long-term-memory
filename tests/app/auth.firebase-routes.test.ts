@@ -7,9 +7,9 @@ import { setFirebaseAuthForTests, type FirebaseAdminAuth } from '@/lib/auth/fire
 const auth = {
   verifyIdToken: vi.fn(async (token: string) => {
     if (token !== 'id-token') throw new Error('invalid token');
-    return { uid: 'firebase-user' };
+    return { uid: 'firebase-user', email: 'user@okakam.net', email_verified: true };
   }),
-  verifySessionCookie: vi.fn(async () => ({ uid: 'firebase-user' })),
+  verifySessionCookie: vi.fn(async () => ({ uid: 'firebase-user', email: 'user@okakam.net', email_verified: true })),
   createSessionCookie: vi.fn(async () => 'session-cookie'),
 } satisfies FirebaseAdminAuth;
 
@@ -46,6 +46,26 @@ test('session endpointはqueryと不正tokenを受け付けない', async () => 
     body: JSON.stringify({ idToken: 'bad-token' }),
   }));
   expect(invalidResponse.status).toBe(401);
+});
+
+test('session endpointは許可外メールへcookieを発行しない', async () => {
+  const createSessionCookie = vi.fn(async () => 'must-not-be-issued');
+  setFirebaseAuthForTests({
+    ...auth,
+    verifyIdToken: vi.fn(async () => ({ uid: 'external-user', email: 'user@example.com' })),
+    createSessionCookie,
+  });
+
+  const response = await POST(new Request('https://example.test/api/auth/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ idToken: 'external-token' }),
+  }));
+
+  expect(response.status).toBe(403);
+  expect(await response.text()).toBe('email domain is not allowed');
+  expect(response.headers.get('set-cookie')).toBeNull();
+  expect(createSessionCookie).not.toHaveBeenCalled();
 });
 
 test('DELETEでsession cookieを消去する', async () => {
