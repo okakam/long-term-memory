@@ -24,23 +24,25 @@ Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret 
 |---|---|
 | Cloud Run | Next.js単一コンテナ。Invokerは公開、アプリ層で`AUTH_REQUIRED=1`を強制する。Node.js 22、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
 | Firebase Authentication with Identity Platform | Webのemail/password・Google認証。`@okakam.net`だけを許可するBlocking FunctionsとCloud Run側の二重検証を使う |
-| Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hashの永続保存 |
+| Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hash、OAuth client/grant/token hashの永続保存 |
 | GCS | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
 | `/tmp` SQLite | FTS5・KG・検索用の再構築可能cache。コンテナ再起動で消える前提 |
-| MCP | サーバー名は `long-term-memory`。`POST /api/mcp?project_id=<slug>`、16 tools、PATは `Authorization: Bearer ltm_...` |
+| MCP | サーバー名は `long-term-memory`。`POST /api/mcp?project_id=<slug>`、16 tools、OAuth access tokenまたはPATを `Authorization: Bearer` で受け付ける |
 
 Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全文を永続保存しない。Firestoreのmemory metadataはGCS keyとhashを持ち、reindex時にGCS本文・hash・frontmatter・tombstoneを照合する。
 
 ## 3. 認証・認可
 
 - ローカルは `AUTH_REQUIRED=0` で匿名開発を許可する。
+- ローカルは `MCP_OAUTH_ENABLED=0` を既定とし、Firebase/Cloud Runのbrowser loginを要求せず再現テストできるようにする。本番OAuthをlocalへ持ち込まないことで、issuer、cookie、外部Identity Providerの設定混同を防ぐ。
 - 本番は `AUTH_REQUIRED=1` とし、Firebase session cookieをHttpOnly・SameSite=Lax・Path=/で発行する。
 - 本番のEmail/Password・Google認証は`@okakam.net`だけを許可する。Firebaseの`beforeUserCreated`・`beforeUserSignedIn`とCloud RunのFirebase Admin SDK principal検証で拒否する。
 - Google OAuthの`hd=okakam.net`は表示上のヒントであり、認可判定には使わない。`user@sub.okakam.net`、類似ドメイン、メールアドレスなしは拒否する。
-- Cloud RunのInvoker IAMは公開にし、Firebase session、Firebase ID token、MCP PATによるアプリ層認証を必須にする。Cloud Run IAM認証を重ねるとブラウザのFirebase認証フローを遮断するため採用しない。
-- API routeへ直接ID tokenを送る場合だけ `Authorization: Bearer <Firebase ID token>` を許可する。MCPはFirebase ID tokenではなくMCP PATを使う。
-- PAT本文は発行レスポンスで一度だけ返し、FirestoreにはSHA-256 hash、prefix、所有UID、期限、失効日時だけを保存する。
-- project accessはFirestore membershipで判定する。`__shared__` はread-onlyで、writeはFirebase UIDと `LTM_MAINTENANCE_TOKEN` の二重条件を満たすcuratorだけに限定する。
+- Cloud RunのInvoker IAMは公開にし、Firebase session、OAuth access token、既存MCP PATによるアプリ層認証を必須にする。Cloud Run IAM認証を重ねるとブラウザのFirebase認証フローを遮断するため採用しない。
+- API routeへ直接ID tokenを送る場合だけ `Authorization: Bearer <Firebase ID token>` を許可する。MCPはFirebase ID tokenではなくOAuth access tokenまたはMCP PATを使う。
+- MCP OAuthはDCR、authorization code、PKCE S256、15分access token、30日refresh tokenを使い、Firebase sessionで本人確認した同意画面から発行する。OAuthは `mcp:access` scopeだけを持ち、project roleをtokenへ複製しない。
+- PAT本文は発行レスポンスで一度だけ返し、FirestoreにはSHA-256 hash、prefix、所有UID、期限、失効日時だけを保存する。OAuth client、authorization code、access/refresh tokenも本文を保存せずhashとprefixだけを保存する。
+- project accessはrequestごとにFirestore membershipで判定する。`__shared__` はread-onlyで、writeはPAT、Firebase UID、`LTM_MAINTENANCE_TOKEN`の三条件を満たすcuratorだけに限定し、OAuth credentialでは許可しない。
 - Firestore client SDKからの直接read/writeは `firestore.rules` で全拒否し、Admin SDK経由だけでアクセスする。
 
 ## 4. 環境変数
@@ -49,13 +51,13 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 
 ### Cloud Run runtime
 
-`LTM_STORAGE_DRIVER=cloud`、`AUTH_REQUIRED=1`、`PORT`、`LTM_GCS_BUCKET`、`LTM_GCS_PREFIX`、`FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、`NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`LTM_CURATOR_USER_ID`、`LTM_MAINTENANCE_TOKEN` を設定する。
+`LTM_STORAGE_DRIVER=cloud`、`AUTH_REQUIRED=1`、`MCP_OAUTH_ENABLED`、`PORT`、`LTM_GCS_BUCKET`、`LTM_GCS_PREFIX`、`FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、`NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`LTM_CURATOR_USER_ID`、`LTM_MAINTENANCE_TOKEN` を設定する。OAuth有効時は `MCP_OAUTH_ENABLED=1`、`AUTH_REQUIRED=1`、HTTPSの `MCP_PUBLIC_URL` を必須とする。
 
 GCSとFirestoreへのアクセスはCloud RunランタイムサービスアカウントのIAMとApplication Default Credentialsを使う。Firebase Adminのservice account JSONをrepositoryやコンテナへコピーしない。
 
 ### ローカル
 
-`LTM_STORAGE_DRIVER=local`、`AUTH_REQUIRED=0`、`LTM_LOCAL_USER_ID=local-user`、`PORT=3939`、`LTM_HOME=.long-term-memory` を使う。localのWeb/APIはこの合成UIDへ紐付け、Firebaseへ接続しない。Dev Containerは `.devcontainer/compose.yaml` を使用し、開発用のnamed volumeへNode.js依存関係・Codex・gcloud/Firebase CLI設定を保存する。
+`LTM_STORAGE_DRIVER=local`、`AUTH_REQUIRED=0`、`MCP_OAUTH_ENABLED=0`、`LTM_LOCAL_USER_ID=local-user`、`PORT=3939`、`LTM_HOME=.long-term-memory` を使う。localのWeb/APIはこの合成UIDへ紐付け、Firebaseへ接続しない。Dev Containerは `.devcontainer/compose.yaml` を使用し、開発用のnamed volumeへNode.js依存関係・Codex・gcloud/Firebase CLI設定を保存する。
 
 ## 5. データ保存契約
 
@@ -65,7 +67,7 @@ GCS objectはcontent hashを含むためimmutable writeを基本とする。adap
 
 ### Firestore
 
-project document配下にmembers、memories、names、tombstonesを持ち、PATは`mcpTokens/<token_hash>`に保存する。memory/name/tombstoneの変更はtransactionで行う。document size、transaction size、batch write上限を超える移行対象はimport前に拒否する。
+project document配下にmembers、memories、names、tombstonesを持つ。PATは`mcpTokens/<token_hash>`、OAuth client/grant/authorization code/access/refresh tokenはhashをdocument IDとしたOAuth collectionへ保存する。OAuth rate counterは固定windowとTTL metadataを持つが、TTL削除の遅延を認可やrate limitの正本にしない。memory/name/tombstoneとcredential失効の変更はtransactionで行う。document size、transaction size、batch write上限を超える移行対象はimport前に拒否する。
 
 ### SQLite
 
@@ -76,7 +78,9 @@ SQLiteは `/tmp/long-term-memory/index.db` に作成し、WAL、foreign key、FT
 - `GET /api/health`: 認証不要のCloud Run health check。
 - `/api/auth/session`: Firebase ID tokenを短期session cookieへ交換。余計なquery parameterは拒否。
 - `/api/projects`、`/api/projects/:id/members`、`/api/auth/tokens`、`/api/memories/:id`: Firebase principalとFirestore membershipをservice呼び出し前に検証する。
-- `/api/mcp`: requestごとにPAT、project access、shared maintenance条件を検証する。認証主体やproject stateをmodule globalへ保存しない。
+- `/.well-known/oauth-protected-resource/api/mcp`、`/.well-known/oauth-authorization-server`、`/oauth/register`、`/oauth/authorize`、`/oauth/token`、`/oauth/revoke`: Codex向けDCR/PKCE OAuth endpoint。metadataとOAuth endpointは`Cache-Control: no-store`を返す。
+- `/api/mcp`: requestごとにOAuth access tokenまたはPAT、project access、shared maintenance条件を検証する。OAuthはmembershipを再評価し、失効済みgrantを拒否する。認証主体やproject stateをmodule globalへ保存しない。
+- `/api/auth/oauth-grants`: Firebase session本人のOAuth接続一覧と失効だけを許可し、token本文・hash・refresh familyは返さない。
 - Web UIは `/sign-in` と `/sign-up` をpublicにし、Firebase client SDKのemail/password・Google providerを使う。Firebase公開設定は `/api/auth/config` からno-storeで取得でき、client bundleへ秘密値を埋め込まない。共有scopeでは編集・削除を表示しない。
 
 MCP toolsは次の16個を維持する。
@@ -94,9 +98,9 @@ MCP toolsは次の16個を維持する。
 
 ## 8. CI/CD
 
-`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にrootのtest・lint・production build・Docker buildに加えてFunctions専用のinstall・test・buildを実行し、runtime secretを渡さない。Firebase Functionsの本番デプロイはFirebase CLIの認証済み操作としてCloud Run deployとは分離する。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS設定はEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
+`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にrootのtest・lint・production build・Docker buildに加えてFunctions専用のinstall・test・buildを実行し、runtime secretを渡さない。Firebase Functionsの本番デプロイはFirebase CLIの認証済み操作としてCloud Run deployとは分離する。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS/OAuth flagはEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
 
-deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase設定はproduction environmentからsmokeへ渡し、ログへ出力しない。
+deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase設定はproduction environmentからsmokeへ渡し、OAuth tokenはCodex CLIのlogin storeで扱い、ログへ出力しない。flag offのPAT smoke後にだけOAuth flagをonへ切り替え、失敗時はoffへ戻してPAT経路を確認する。
 
 ## 9. 検証コマンド
 

@@ -1,14 +1,15 @@
 # Claude Code / Codex で long-term-memory MCP を使う
 
-この文書は、Cloud Run の `long-term-memory` MCPをClaude CodeまたはCodex CLIから利用するための、クライアント別の追加設定です。MCPサーバー名、URL、PATの扱いは共通ですが、設定ファイルと自動リマインダーの仕組みはクライアントごとに異なります。Claude Codeの`settings.json`/`CLAUDE.md`形式と、Codexの`hooks.json`/`AGENTS.md`形式を混同しないでください。
+この文書は、Cloud Run の `long-term-memory` MCPをClaude CodeまたはCodex CLIから利用するための、クライアント別の追加設定です。一般のCodex CLI利用者はOAuth認証、Claude Code curator・CI・Cloud Run smokeはPATを使います。設定ファイルと自動リマインダーの仕組みはクライアントごとに異なるため、Claude Codeの`settings.json`/`CLAUDE.md`形式と、Codexの`hooks.json`/`AGENTS.md`形式を混同しないでください。
 
 ## 共通の前提
 
 - MCPサーバー名は `long-term-memory`、エンドポイントは `https://<Cloud RunのベースURL>/api/mcp?project_id=<project slug>` です。
 - 通常の利用では、所属するproject slugを`project_id`へ指定します。`__shared__`はcurator向けのread-only scopeであり、通常のクライアント設定には使いません。
-- PATは`/settings/tokens`で発行します。本文は発行直後に一度だけ表示されるため、チャット、repository、ログへ貼り付けず、`LTM_MCP_TOKEN`などの環境変数を通じて渡します。
-- PAT本文とmaintenance tokenを`~/.codex/config.toml`、Claude Codeの設定、repositoryへ書き込まないでください。登録後はクライアントを再起動します。
-- `docs/mcp-config.cloud-run.json`はGitHub ActionsのClaude Code remote curatorが読むJSON形式の設定例です。Codexの`~/.codex/config.toml`へそのまま追加するファイルではありません。
+- Codexの通常利用はDCR/PKCE OAuthで行い、PAT本文を入力・環境変数へ保存しません。ブラウザのFirebaseログインと同意画面を完了すると、Codexがaccess/refresh tokenを管理します。
+- PATは`/settings/tokens`で発行します。本文は発行直後に一度だけ表示され、Claude Code curator・CI・Cloud Run smokeの機械接続だけで使います。チャット、repository、ログへ貼り付けません。
+- OAuth接続は`/settings/tokens`の`Codex / OAuth 接続`から失効できます。失効後はOAuth grantのaccess tokenとrefresh tokenが使えなくなります。
+- `docs/mcp-config.cloud-run.json`はGitHub ActionsのClaude Code remote curatorが読むPAT設定例です。Codexの`~/.codex/config.toml`へそのまま追加するファイルではありません。
 
 ## Codex CLIの設定
 
@@ -16,18 +17,18 @@ Codex CLIは通常`~/.codex/config.toml`（`CODEX_HOME`を設定している場�
 
 ### MCPサーバーを登録する
 
-次の例は、PATをシェル履歴へ直接書かずに環境変数へ読み込み、通常のproject scopeへ登録します。`MCP_PUBLIC_URL`は末尾の`/`を除いたCloud RunベースURLです。
+次の例は、OAuth認証で通常のproject scopeへ登録します。`MCP_PUBLIC_URL`は末尾の`/`を除いたCloud RunベースURL、`project_id`は利用者がアクセスできるproject slugです。
 
 ```bash
 export MCP_PUBLIC_URL='https://ltm.okakam.net'
 export LTM_MEMORY_PROJECT_ID='your-project-slug'
-read -rsp 'LTM_MCP_TOKEN: ' LTM_MCP_TOKEN
-printf '\n'
-export LTM_MCP_TOKEN
+
+codex mcp remove long-term-memory
 
 codex mcp add long-term-memory \
-  --url "${MCP_PUBLIC_URL%/}/api/mcp?project_id=${LTM_MEMORY_PROJECT_ID}" \
-  --bearer-token-env-var LTM_MCP_TOKEN
+  --url "${MCP_PUBLIC_URL%/}/api/mcp?project_id=${LTM_MEMORY_PROJECT_ID}"
+
+codex mcp login long-term-memory
 ```
 
 すでに`long-term-memory`が登録済みなら、別名で二重登録せず、`codex mcp get long-term-memory`で既存のURLと環境変数名を確認してください。登録後は次で確認し、起動中のCodexを再起動します。TUIでは`/mcp`でも確認できます。
@@ -37,13 +38,9 @@ codex mcp list
 codex mcp get long-term-memory
 ```
 
-`~/.codex/config.toml`を直接編集する場合も、PAT本文ではなく環境変数名だけを保存します。
+`codex mcp login`が開くブラウザで許可済み`@okakam.net`アカウントを使ってFirebaseへログインし、同意画面でMCP接続を許可します。OAuth access token、refresh token、authorization code、Firebase ID tokenを環境変数、repository、ログへコピーしないでください。
 
-```toml
-[mcp_servers.long-term-memory]
-url = "https://ltm.okakam.net/api/mcp?project_id=your-project-slug"
-bearer_token_env_var = "LTM_MCP_TOKEN"
-```
+登録後は次で確認し、起動中のCodexを再起動します。TUIでは`/mcp`でも確認できます。
 
 ### Codexでskillを使う場合
 
@@ -86,6 +83,18 @@ statusMessage = "Loading long-term memory reminder"
 Codexのhookは新規または定義変更後に信頼確認が必要です。Codexを再起動して`/hooks`を開き、対象hookをレビューしてtrustしてください。trustはcommand定義のhashに対して行われるため、定義が同じでも呼び出し先の`ltm-init-reminder.sh`を変更した場合は自動でtrust要求が再発生しません。記録済みのscript hashと差分を確認し、手動レビューが完了するまで実行しないでください。command定義も変わった場合は`/hooks`で新しい定義をtrustします。hookはMCP URLやPATを受け取らず、`UserPromptSubmit`のJSON入力から作業ターンだけに`search_memories`のリマインダーを追加します。`hooks`は現行Codexでは既定で有効ですが、設定に`[features] hooks = false`がある場合は削除または`true`へ戻します。詳細は[Codex公式のAGENTS.md手順](https://developers.openai.com/codex/agent-configuration/agents-md)と[Hooks手順](https://developers.openai.com/codex/hooks)を参照してください。
 
 CodexではClaude Codeの`settings.json`と`CLAUDE.md`を配置・編集しません。Codexのproject rulesは`AGENTS.md`、hookは`.codex/hooks.json`で管理します。
+
+## Claude Code curator・CI・Cloud Run smokeのPAT設定
+
+Claude Codeのremote curator、GitHub Actions、Cloud Run smokeはOAuth browser loginを使わず、既存のPATと`LTM_MAINTENANCE_TOKEN`を維持します。PATは`LTM_MCP_TOKEN`という環境変数からだけ渡し、maintenance tokenはSecret Managerから注入します。一般のCodex CLI利用者へこの設定を案内しないでください。
+
+```bash
+codex mcp add long-term-memory \
+  --url "${MCP_PUBLIC_URL%/}/api/mcp?project_id=${LTM_MEMORY_PROJECT_ID}" \
+  --bearer-token-env-var LTM_MCP_TOKEN
+```
+
+このPAT設定例は機械接続・curator専用です。`docs/mcp-config.cloud-run.json`の`Authorization`と`X-LTM-Maintenance-Token`も同じ用途に限り、OAuth tokenを環境変数やrepositoryへ貼り付ける用途には使いません。
 
 ## クライアント別の補助資産
 

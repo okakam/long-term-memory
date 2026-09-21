@@ -45,7 +45,7 @@ test('設置手順はClaude CodeとCodexの冪等配置と自己検証を定義�
     'Codex CLI',
     '.agents/skills/long-term-memory/SKILL.md',
     'codex mcp add long-term-memory',
-    '--bearer-token-env-var LTM_MCP_TOKEN',
+    'codex mcp login long-term-memory',
     '~/.codex/config.toml',
     'AGENTS.md',
     'AGENTS.override.md',
@@ -75,6 +75,10 @@ test('設置手順はClaude CodeとCodexの冪等配置と自己検証を定義�
     expect(setup).toContain(requirement);
   }
   expect(setup).not.toContain('claude-config/install.sh');
+  const codexSetup = setup.split('### Codexでskillを使う場合', 1)[0];
+  expect(codexSetup).not.toContain('--bearer-token-env-var LTM_MCP_TOKEN');
+  expect(setup).toContain('--bearer-token-env-var LTM_MCP_TOKEN');
+  expect(setup).toContain('LTM_MAINTENANCE_TOKEN');
 
   const jsonFence = setup.match(/```json\n([\s\S]*?)\n```/);
   expect(jsonFence).not.toBeNull();
