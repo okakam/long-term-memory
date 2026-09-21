@@ -17,6 +17,13 @@ export function oauthErrorResponse(error: unknown): Response {
   });
 }
 
+export function oauthConfigurationErrorResponse(): Response {
+  return new Response('OAuth configuration is invalid', {
+    status: 500,
+    headers: { 'cache-control': 'no-store' },
+  });
+}
+
 export function oauthUnauthorizedResponse(metadataUrl: URL): Response {
   return new Response('authentication required', {
     status: 401,

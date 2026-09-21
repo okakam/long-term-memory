@@ -255,6 +255,18 @@ export class OAuthService {
     return { transactionId, csrfToken, clientName: client.client_name, scope: MCP_OAUTH_SCOPE };
   }
 
+  async resumeAuthorization(transactionId: string, csrfToken: string): Promise<OAuthAuthorizationStart> {
+    const store = await this.store();
+    const transaction = await store.getAuthorizationTransaction(transactionId);
+    if (!transaction || transaction.revoked_at || transaction.consumed_at || Date.parse(transaction.expires_at) <= this.now().getTime()
+      || !constantTimeEqual(transaction.csrf_hash, hashOpaqueSecret(csrfToken))) {
+      throw new OAuthProtocolError('invalid_grant', 'authorization transaction is invalid');
+    }
+    const client = await store.getClient(transaction.client_id);
+    if (!client) throw new OAuthProtocolError('invalid_client', 'client is invalid');
+    return { transactionId, csrfToken, clientName: client.client_name, scope: transaction.scope };
+  }
+
   async approveAuthorization(input: { transactionId: string; csrfToken: string; userId: string; approved: boolean }): Promise<OAuthAuthorizationApproval> {
     const store = await this.store();
     const transaction = await store.consumeAuthorizationTransaction({

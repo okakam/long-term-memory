@@ -31,7 +31,7 @@ function parseIssuer(raw: string, enabled: boolean): URL {
   if (issuer.pathname !== '/' && issuer.pathname !== '') {
     throw new Error('MCP_PUBLIC_URL must not contain a path');
   }
-  if (issuer.username || issuer.password || issuer.port) {
+  if (issuer.username || issuer.password || (enabled && issuer.port)) {
     throw new Error('MCP_PUBLIC_URL must not contain credentials or a port');
   }
   if (enabled && issuer.protocol !== 'https:') {
