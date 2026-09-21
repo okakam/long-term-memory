@@ -147,8 +147,12 @@ test('同意POST時にFirebase sessionが消えた場合はcodeを発行せずsi
   const client = await registerClient();
   const authorization = await authorizeGet(new Request(authorizeUrl(client.client_id), { headers: { cookie: 'ltm_session=session' } }));
   const html = await authorization.text();
-  const transactionId = html.match(/name="transaction_id" value="([^"]+)"/)?.[1]!;
-  const csrfToken = html.match(/name="csrf_token" value="([^"]+)"/)?.[1]!;
+  const transactionMatch = html.match(/name="transaction_id" value="([^"]+)"/);
+  const csrfMatch = html.match(/name="csrf_token" value="([^"]+)"/);
+  expect(transactionMatch).not.toBeNull();
+  expect(csrfMatch).not.toBeNull();
+  const transactionId = transactionMatch?.[1] ?? '';
+  const csrfToken = csrfMatch?.[1] ?? '';
   setFirebaseAuthForTests(null);
 
   const response = await authorizePost(new Request('https://ltm.okakam.net/oauth/authorize', {

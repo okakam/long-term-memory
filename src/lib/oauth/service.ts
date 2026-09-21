@@ -7,7 +7,7 @@ import { constantTimeEqual, hashOpaqueSecret, newOpaqueSecret, secretPrefix } fr
 import { redirectUriMatches, validateDcrRedirectUri } from './redirect';
 import { FirebaseOAuthIdentityProvider, type OAuthIdentityProvider } from './identity';
 import { getOAuthStore, type OAuthStoreLike } from './store';
-import { MCP_OAUTH_SCOPE, type OAuthAuthorizationCode, type OAuthClient, type OAuthCredentialPrincipal, type OAuthGrantSummary, type OAuthTokenSet } from './types';
+import { MCP_OAUTH_SCOPE, type OAuthClient, type OAuthCredentialPrincipal, type OAuthGrantSummary, type OAuthTokenSet } from './types';
 
 export type OAuthErrorCode =
   | 'invalid_request'

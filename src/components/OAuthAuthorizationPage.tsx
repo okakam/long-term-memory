@@ -7,6 +7,20 @@ export type OAuthAuthorizationPageProps = {
   scope: string;
 };
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  })[character] ?? character);
+}
+
+export function renderOAuthAuthorizationPage({ transactionId, csrfToken, clientName, scope }: OAuthAuthorizationPageProps): string {
+  return `<main><h1>MCP接続を許可</h1><p><strong>${escapeHtml(clientName)}</strong> が long-term-memory MCP への接続を要求しています。</p><p>付与される範囲: <code>${escapeHtml(scope)}</code></p><p>project membershipとtool権限は、MCPリクエストごとに再確認されます。</p><form method="post" action="/oauth/authorize"><input type="hidden" name="transaction_id" value="${escapeHtml(transactionId)}"/><input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}"/><button type="submit" name="decision" value="approve">許可</button><button type="submit" name="decision" value="deny">拒否</button></form></main>`;
+}
+
 export function OAuthAuthorizationPage({ transactionId, csrfToken, clientName, scope }: OAuthAuthorizationPageProps): ReactElement {
   return (
     <main>

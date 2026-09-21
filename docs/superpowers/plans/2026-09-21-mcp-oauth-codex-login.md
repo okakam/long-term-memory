@@ -348,7 +348,7 @@ git commit -m "feat: add OAuth authorization service"
 **Interfaces:**
 
 - Consumes: `OAuthService`、`OAuthIdentityProvider`、HTTP helpers（Task 3）。
-- Produces: spec記載のOAuth HTTP endpoints。`/oauth/authorize`はpageを同居させず、route handlerから`renderToStaticMarkup`を使う。
+- Produces: spec記載のOAuth HTTP endpoints。`/oauth/authorize`はpageを同居させず、Next.js 16のRoute Handler制約に従い、`react-dom/server`を直接importしないescaped server HTML helperを返す。
 - Produces: `OAuthAuthorizationPage({ transactionId, csrfToken, clientName, scope }: Props): ReactElement`。
 
 - [ ] **Step 1: metadata/DCR/token endpointの失敗テストを書く**
@@ -408,7 +408,7 @@ git commit -m "feat: expose OAuth endpoints for MCP"
 - Modify: `src/app/sign-up/[[...sign-up]]/page.tsx`
 - Modify: `src/components/FirebaseAuthForm.tsx`
 - Test: `tests/app/oauth-login-continuation.test.ts`
-- Test: `tests/components/firebase-auth-form.test.tsx`
+- Test: `tests/components/firebase-auth-form.test.ts`
 
 **Interfaces:**
 
@@ -432,7 +432,7 @@ component testでは`establishSession`成功後に`router.push('/oauth/authorize
 
 - [ ] **Step 2: 失敗を確認する**
 
-Run: `pnpm exec vitest run tests/app/oauth-login-continuation.test.ts tests/components/firebase-auth-form.test.tsx`
+Run: `pnpm exec vitest run tests/app/oauth-login-continuation.test.ts tests/components/firebase-auth-form.test.ts`
 
 Expected: FAIL。page propsと`FirebaseAuthForm`のcontinuation contractが未実装である。
 
@@ -454,14 +454,14 @@ async function complete(credential: Awaited<ReturnType<typeof signInWithPassword
 
 - [ ] **Step 5: focused testを成功させる**
 
-Run: `pnpm exec vitest run tests/app/oauth-login-continuation.test.ts tests/components/firebase-auth-form.test.tsx tests/lib/auth/firebase-client.test.ts`
+Run: `pnpm exec vitest run tests/app/oauth-login-continuation.test.ts tests/components/firebase-auth-form.test.ts tests/lib/auth/firebase-client.test.ts`
 
 Expected: PASS。通常ログインとOAuthログイン復帰の両方が維持される。
 
 - [ ] **Step 6: commitする**
 
 ```bash
-git add src/app/sign-in src/app/sign-up src/components/FirebaseAuthForm.tsx tests/app/oauth-login-continuation.test.ts tests/components/firebase-auth-form.test.tsx
+git add src/app/sign-in src/app/sign-up src/components/FirebaseAuthForm.tsx tests/app/oauth-login-continuation.test.ts tests/components/firebase-auth-form.test.ts
 git commit -m "feat: resume OAuth authorization after Firebase login"
 ```
 
@@ -547,7 +547,7 @@ git commit -m "feat: accept OAuth credentials for MCP requests"
 - Modify: `src/app/settings/tokens/page.tsx`
 - Modify: `tests/app/auth.routes.test.ts`
 - Modify: `tests/app/token-settings-page.test.ts`
-- Create: `tests/components/oauth-grant-settings.test.tsx`
+- Create: `tests/components/oauth-grant-settings.test.ts`
 
 **Interfaces:**
 
@@ -573,7 +573,7 @@ component testではclient名、scope、作成/最終利用日時、失効ボタ
 
 - [ ] **Step 2: 失敗を確認する**
 
-Run: `pnpm exec vitest run tests/app/auth.routes.test.ts tests/app/token-settings-page.test.ts tests/components/oauth-grant-settings.test.tsx`
+Run: `pnpm exec vitest run tests/app/auth.routes.test.ts tests/app/token-settings-page.test.ts tests/components/oauth-grant-settings.test.ts`
 
 Expected: FAIL。OAuth grants APIとcomponentが存在しない。
 
@@ -585,7 +585,7 @@ GETは`requireWebPrincipal(req)`で利用者を解決し、その`userId`のgran
 
 - [ ] **Step 4: focused testを成功させる**
 
-Run: `pnpm exec vitest run tests/app/auth.routes.test.ts tests/app/token-settings-page.test.ts tests/components/oauth-grant-settings.test.tsx`
+Run: `pnpm exec vitest run tests/app/auth.routes.test.ts tests/app/token-settings-page.test.ts tests/components/oauth-grant-settings.test.ts`
 
 Expected: PASS。PAT発行UIの既存回帰とOAuth grant revokeが両立する。
 
@@ -714,12 +714,12 @@ pnpm exec vitest run \
   tests/app/oauth-metadata-routes.test.ts \
   tests/app/oauth-protocol-routes.test.ts \
   tests/app/oauth-login-continuation.test.ts \
-  tests/components/firebase-auth-form.test.tsx \
+  tests/components/firebase-auth-form.test.ts \
   tests/lib/mcp/oauth-auth-required.test.ts \
   tests/lib/mcp/auth-required.test.ts \
   tests/lib/mcp/stateless.test.ts \
   tests/app/auth.routes.test.ts \
-  tests/components/oauth-grant-settings.test.tsx
+  tests/components/oauth-grant-settings.test.ts
 ```
 
 Expected: PASS。OAuth codeのsingle use、refresh replay revoke、DCR/PKCE、Firebaseログイン復帰、MCP membership、PAT/curator互換、grant失効が通る。

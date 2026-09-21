@@ -1,10 +1,7 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { createElement } from 'react';
-
 import { getOAuthConfiguration } from '@/lib/oauth/config';
 import { oauthConfigurationErrorResponse, oauthErrorResponse } from '@/lib/oauth/http';
 import { OAuthProtocolError, type OAuthAuthorizationRequest, OAuthService } from '@/lib/oauth/service';
-import { OAuthAuthorizationPage } from '@/components/OAuthAuthorizationPage';
+import { renderOAuthAuthorizationPage } from '@/components/OAuthAuthorizationPage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,7 +70,7 @@ function authorizationInput(request: Request): OAuthAuthorizationRequest {
 }
 
 function renderAuthorizationPage(start: { transactionId: string; csrfToken: string; clientName: string; scope: string }): Response {
-  const markup = renderToStaticMarkup(createElement(OAuthAuthorizationPage, start));
+  const markup = renderOAuthAuthorizationPage(start);
   return new Response(`<!doctype html>${markup}`, {
     status: 200,
     headers: { 'cache-control': 'no-store', 'content-type': 'text/html; charset=utf-8' },
