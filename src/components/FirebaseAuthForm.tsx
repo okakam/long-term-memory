@@ -10,8 +10,26 @@ import {
   signUpWithPassword,
 } from '@/lib/auth/firebase-client';
 import { getFirebaseAuthErrorMessage } from '@/lib/auth/auth-error';
+import { authSwitchHref } from '@/lib/oauth/continuation';
 
-export function FirebaseAuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+export type FirebaseAuthFormProps = {
+  mode: 'sign-in' | 'sign-up';
+  continuation?: string | null;
+};
+
+type AuthRouter = Pick<ReturnType<typeof useRouter>, 'push' | 'refresh'>;
+
+export async function completeFirebaseAuth(
+  credential: Awaited<ReturnType<typeof signInWithPassword>>,
+  continuation: string | null | undefined,
+  router: AuthRouter,
+): Promise<void> {
+  await establishSession(credential);
+  router.push(continuation ?? '/');
+  router.refresh();
+}
+
+export function FirebaseAuthForm({ mode, continuation = null }: FirebaseAuthFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,9 +37,7 @@ export function FirebaseAuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const [pending, setPending] = useState(false);
 
   async function complete(credential: Awaited<ReturnType<typeof signInWithPassword>>) {
-    await establishSession(credential);
-    router.push('/');
-    router.refresh();
+    await completeFirebaseAuth(credential, continuation, router);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -60,6 +76,12 @@ export function FirebaseAuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         <button type="submit" disabled={pending}>{pending ? '処理中…' : mode === 'sign-in' ? 'ログイン' : '登録'}</button>
       </form>
       <button type="button" onClick={google} disabled={pending}>Googleで続行</button>
+      <p>
+        {mode === 'sign-in' ? 'アカウントをお持ちでない場合は' : 'すでにアカウントをお持ちの場合は'}{' '}
+        <a href={authSwitchHref(mode === 'sign-in' ? '/sign-up' : '/sign-in', continuation)}>
+          {mode === 'sign-in' ? '登録' : 'ログイン'}
+        </a>
+      </p>
       {error ? <p className="error-message">{error}</p> : null}
     </section>
   );
