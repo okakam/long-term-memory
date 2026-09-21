@@ -323,7 +323,7 @@ GitHub Actionsのgoogle-github-actions/authはサービスアカウントキー�
 
 ## 12. Smoke用FirebaseユーザーとPAT
 
-Cloud RunへFirebaseユーザーでサインインし、smokeプロジェクトを作成します。現状のAPIをブラウザの同一Originから呼ぶ場合は、次のように実行できます。
+Cloud RunのベースURLへFirebaseユーザーでサインインし、smokeプロジェクトを作成します。プロジェクト作成は、アプリの同一Originから次のように実行できます。
 
     await fetch('/api/projects', {
       method: 'POST',
@@ -331,15 +331,26 @@ Cloud RunへFirebaseユーザーでサインインし、smokeプロジェクト�
       body: JSON.stringify({project_id: 'smoke'})
     }).then((response) => response.json())
 
-同じユーザーでSmoke用PATを発行します。
+同じユーザーでSmoke用PATを発行します。通常は画面から発行してください。
 
-    await fetch('/api/auth/tokens', {
+1. `https://<Cloud RunのベースURL>/settings/tokens` を開きます。
+2. Firebaseでサインインした状態で、ラベル（例: `github-cloud-run-smoke`）を入力し、`PATを発行`を押します。
+3. 表示されたPATを`PATをコピー`でコピーします。ブラウザの権限でコピーできない場合は、表示されたPAT本文を選択して手動でコピーします。
+4. GitHub repositoryの Settings → Environments → `production` → `LTM_MCP_TOKEN` の Secretを更新します。値の前後に空白や改行を追加しません。
+
+PAT本文は発行直後の画面で一度だけ表示され、再読み込みや画面遷移後には復元できません。PAT本文をチャット、repository、GitHub Actionsログ、ブラウザの共有ログへ貼り付けないでください。FirestoreにはPATのhashだけが保存されます。
+
+画面が使えない場合だけ、同じCloud Run Originのブラウザ開発者コンソールでAPIを直接呼べます。`copy`はChrome DevToolsの組み込み関数です。自動コピーに失敗した場合は画面の手順を使い、PAT本文をログへ出力しないでください。
+
+    const response = await fetch('/api/auth/tokens', {
       method: 'POST',
       headers: {'content-type': 'application/json'},
       body: JSON.stringify({label: 'github-cloud-run-smoke'})
-    }).then((response) => response.json())
-
-レスポンスのtokenをGitHub Environment secretの LTM_MCP_TOKEN に登録します。PATは作成時に一度だけ表示され、Firestoreにはhashだけが保存されます。PAT本文をチャット、リポジトリ、ログへ貼り付けません。
+    });
+    const body = await response.json();
+    if (!response.ok || typeof body.token !== 'string') throw new Error(JSON.stringify(body));
+    copy(body.token);
+    console.log('PAT発行成功。クリップボードへコピーしました。token_id:', body.token_id);
 
 Firebase ConsoleのAuthentication → Usersからcurator用ユーザーのUIDを取得し、GitHub Environment variableの LTM_CURATOR_USER_ID に設定します。メールアドレスではなくFirebase UIDを使います。
 
