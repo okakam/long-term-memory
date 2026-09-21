@@ -1,7 +1,7 @@
 {
   "functions": {
     "source": "functions",
-    "predeploy": ["pnpm --dir $RESOURCE_DIR --ignore-workspace build"]
+    "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
   },
   "firestore": {
     "rules": "firestore.rules",
