@@ -43,17 +43,21 @@ test('設置手順はClaude CodeとCodexの冪等配置と自己検証を定義�
   for (const requirement of [
     '# Claude Code / Codex',
     'Codex CLI',
-    'CODEX_HOME',
+    '.agents/skills/long-term-memory/SKILL.md',
     'codex mcp add long-term-memory',
     '--bearer-token-env-var LTM_MCP_TOKEN',
     '~/.codex/config.toml',
     'AGENTS.md',
+    'AGENTS.override.md',
     '.codex/hooks.json',
     'UserPromptSubmit',
     'git rev-parse --show-toplevel',
     '/hooks',
-    'hooks.jsonの妥当性',
-    'AGENTS.mdの各マーカー',
+    'hooks.jsonまたはinline configの妥当性',
+    'RULES_FILEの各マーカー',
+    'canonical UserPromptSubmit commandが正確に1個',
+    'script hash',
+    'inlineの`[hooks]`',
     'claude-config/claude-md-block.md',
     'CodexではClaude Codeの`settings.json`と`CLAUDE.md`を配置・編集しません。',
     'jq',
@@ -71,6 +75,24 @@ test('設置手順はClaude CodeとCodexの冪等配置と自己検証を定義�
     expect(setup).toContain(requirement);
   }
   expect(setup).not.toContain('claude-config/install.sh');
+
+  const jsonFence = setup.match(/```json\n([\s\S]*?)\n```/);
+  expect(jsonFence).not.toBeNull();
+  const hookConfig = JSON.parse(jsonFence?.[1] ?? '') as {
+    hooks?: {
+      UserPromptSubmit?: Array<{
+        hooks?: Array<{ type?: string; command?: string }>;
+      }>;
+    };
+  };
+  const commands = (hookConfig.hooks?.UserPromptSubmit ?? [])
+    .flatMap((group) => group.hooks ?? [])
+    .filter((hook) => hook.type === 'command')
+    .map((hook) => hook.command);
+  expect(commands).toEqual([
+    'bash "$(git rev-parse --show-toplevel)/claude-config/hooks/ltm-init-reminder.sh"',
+  ]);
+  expect(setup).toContain('[[hooks.UserPromptSubmit]]');
 
   const embeds = setup.match(/<!-- ltm:embed src=/g) ?? [];
   expect(embeds).toHaveLength(3);

@@ -47,13 +47,13 @@ bearer_token_env_var = "LTM_MCP_TOKEN"
 
 ### Codexでskillを使う場合
 
-MCP登録だけでも、Codexから`mcp__long-term-memory__*`ツールを利用できます。作業前の検索や保存ルールをskillとして自動適用したい場合は、repositoryの正本`skills/long-term-memory/SKILL.md`を`$CODEX_HOME/skills/long-term-memory/SKILL.md`（未設定なら`$HOME/.codex/skills/long-term-memory/SKILL.md`）へ配置し、Codexを再起動します。配置時は既存ファイルを確認し、異なる内容を上書きする場合はバックアップを作成してください。
+MCP登録だけでも、Codexから`mcp__long-term-memory__*`ツールを利用できます。作業前の検索や保存ルールをskillとして自動適用したい場合、Codexのrepository向け探索先は`$REPO_ROOT/.agents/skills/long-term-memory/SKILL.md`、全repository向けは`$HOME/.agents/skills/long-term-memory/SKILL.md`です。この手順ではrepositoryの正本`skills/long-term-memory/SKILL.md`を前者へ配置し、Codexを再起動します。`CODEX_HOME`はAGENTS.mdのglobal scopeを変更しますが、skillの探索先は`.agents/skills`です。配置時は既存ファイルを確認し、異なる内容を上書きする場合はバックアップを作成してください。
 
 ### CodexのAGENTS.mdとhookを設定する
 
-Codexは、全repositoryへ適用する`$CODEX_HOME/AGENTS.md`と、repository rootから現在の作業ディレクトリまでにある`AGENTS.md`を読み込みます。この手順では、long-term-memoryのルールをrepository rootの`AGENTS.md`へ追加します。全repositoryへ適用する場合は、同じマーカー付きブロックを`$CODEX_HOME/AGENTS.md`へ配置してください。
+Codexは、global scopeでは`$CODEX_HOME/AGENTS.override.md`があればそれを、なければ`$CODEX_HOME/AGENTS.md`を読み込みます。project scopeではrepository rootから現在の作業ディレクトリまで各階層の`AGENTS.override.md`を`AGENTS.md`より優先します。この手順はrepository rootを対象とし、rootに`AGENTS.override.md`がある場合はそちらを更新し、無い場合だけ`AGENTS.md`を更新します。inactiveな`AGENTS.md`を同時に変更しません。全repositoryへ適用する場合は、同じマーカー付きブロックをglobal scopeのactiveなファイルへ配置してください。
 
-repository単位のhookは`.codex/hooks.json`へ設定します。既存のhookを保持したまま、`UserPromptSubmit`へcommandを1個だけ登録します。MCP hookの登録例は次のとおりです。`matcher`は`UserPromptSubmit`では使われないため指定しません。
+repository単位のcommand hookは`.codex/hooks.json`へ設定します。同じ`.codex` layerの`config.toml`にinlineの`[hooks]`が既にある場合は、`hooks.json`を追加せず、既存のinline形式へcanonical commandを追加してください。`hooks.json`とinline hooksを同じlayerで混在させるとCodexがmergeして警告するため、この手順では既存のinline hooksを保持し、どちらか一方の形式を使います。既存のhookを保持したまま、`UserPromptSubmit`へcanonical commandを正確に1個だけ登録します。`matcher`は`UserPromptSubmit`では使われないため指定しません。
 
 ```json
 {
@@ -73,7 +73,17 @@ repository単位のhookは`.codex/hooks.json`へ設定します。既存のhook�
 }
 ```
 
-Codexのhookは新規または変更後に信頼確認が必要です。Codexを再起動して`/hooks`を開き、対象hookをレビューしてtrustしてください。hookはMCP URLやPATを受け取らず、`UserPromptSubmit`のJSON入力から作業ターンだけに`search_memories`のリマインダーを追加します。`hooks`は現行Codexでは既定で有効ですが、設定に`[features] hooks = false`がある場合は削除または`true`へ戻します。詳細は[Codex公式のAGENTS.md手順](https://developers.openai.com/codex/agent-configuration/agents-md)と[Hooks手順](https://developers.openai.com/codex/hooks)を参照してください。
+同じlayerの`config.toml`にinline hooksをすでに持つ場合は、次の形式へcanonical commandを追加し、`hooks.json`は作成しません。他のinline hookと設定は保持します。
+
+```toml
+[[hooks.UserPromptSubmit]]
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = 'bash "$(git rev-parse --show-toplevel)/claude-config/hooks/ltm-init-reminder.sh"'
+statusMessage = "Loading long-term memory reminder"
+```
+
+Codexのhookは新規または定義変更後に信頼確認が必要です。Codexを再起動して`/hooks`を開き、対象hookをレビューしてtrustしてください。trustはcommand定義のhashに対して行われるため、定義が同じでも呼び出し先の`ltm-init-reminder.sh`を変更した場合は自動でtrust要求が再発生しません。記録済みのscript hashと差分を確認し、手動レビューが完了するまで実行しないでください。command定義も変わった場合は`/hooks`で新しい定義をtrustします。hookはMCP URLやPATを受け取らず、`UserPromptSubmit`のJSON入力から作業ターンだけに`search_memories`のリマインダーを追加します。`hooks`は現行Codexでは既定で有効ですが、設定に`[features] hooks = false`がある場合は削除または`true`へ戻します。詳細は[Codex公式のAGENTS.md手順](https://developers.openai.com/codex/agent-configuration/agents-md)と[Hooks手順](https://developers.openai.com/codex/hooks)を参照してください。
 
 CodexではClaude Codeの`settings.json`と`CLAUDE.md`を配置・編集しません。Codexのproject rulesは`AGENTS.md`、hookは`.codex/hooks.json`で管理します。
 
@@ -87,13 +97,13 @@ long-term-memory MCPの補助資産を、現在のクライアントに対応す
 1. 実行中のクライアントを確認する。Claude Codeなら CLIENT=claude、Codex CLIなら CLIENT=codex とし、判定できない場合は変更せず中断する。
 2. `jq` と `bash` が PATH にあることを確認する。どちらかが無ければ案内だけ表示して中断する。コピー元はこのrepositoryの正本（`skills/long-term-memory/SKILL.md`、`claude-config/hooks/ltm-init-reminder.sh`、`claude-config/claude-md-block.md`）だけにする。内容が同一なら unchanged と表示して触らない。異なる既存ファイルを置き換える場合だけ *.bak-<timestamp> のバックアップを先に作る。
 3. CLIENT=claude の場合は、CONFIG_DIR は CLAUDE_CONFIG_DIR があればそれ、無ければ $HOME/.claude とする。必要な親ディレクトリを作成し、正本のskillとhookを CONFIG_DIR/skills/long-term-memory/SKILL.md と CONFIG_DIR/hooks/ltm-init-reminder.sh に設置し、hookは chmod +x と bash -n を実行する。
-4. CLIENT=claude の場合だけ、CONFIG_DIR/settings.json が無ければ空の JSON object として扱う。壊れた JSON は勝手に直さず中断する。hooks.UserPromptSubmit の配列へhook commandを登録するが、同じcommandがあれば二重登録しない。他の設定は保持する。
+4. CLIENT=claude の場合だけ、CONFIG_DIR/settings.json が無ければ空の JSON object として扱う。壊れた JSON は勝手に直さず中断する。hooks.UserPromptSubmit の配列へcanonical hook commandを登録するが、同じcommandがあれば二重登録しない。他の設定と既存hookは保持する。
 5. CLIENT=claude の場合だけ、`claude-config/claude-md-block.md`の内容で CONFIG_DIR/CLAUDE.mdを更新する。ltm:begin と ltm:end のマーカーが両方1個ずつあれば replace-markers、旧形式の見出し ## long-term-memory MCP があれば次の ## までを replace-legacy、どちらも無ければ append とする。他の節を削除しない。片方だけ、複数、または壊れたマーカーなら中断する。
-6. CLIENT=codex の場合は、CODEX_HOME があればそれ、無ければ $HOME/.codex をCODEX_HOME_DIRとする。必要な親ディレクトリを作成し、正本のskillを CODEX_HOME_DIR/skills/long-term-memory/SKILL.md に設置する。repository rootを `git rev-parse --show-toplevel` で求め、REPO_ROOTとする。`claude-config/claude-md-block.md`の内容で`$REPO_ROOT/AGENTS.md`を更新し、AGENTS.mdは、ltm:begin と ltm:end のマーカーが両方1個ずつあれば replace-markers、旧形式の見出し ## long-term-memory MCP があれば次の ## までを replace-legacy、どちらも無ければ append とする。他の節を削除せず、片方だけ、複数、または壊れたマーカーなら中断する。
-7. CLIENT=codex の場合は、`$REPO_ROOT/.codex`を作成し、`$REPO_ROOT/.codex/hooks.json`が無ければ `{"hooks":{}}` として扱う。壊れたJSONは勝手に直さず中断する。`hooks.UserPromptSubmit`の配列を保持したまま、command `bash "$(git rev-parse --show-toplevel)/claude-config/hooks/ltm-init-reminder.sh"` を1個だけ登録する。同じcommandがあれば二重登録しない。他のhookを保持し、`config.toml`へMCP URLやPATを書き込まない。project-local hookを使用するため、登録後にCodexの `/hooks` でレビュー・trustする。
-8. CLIENT=claude の場合は CONFIG_DIR/.ltm-config-version、CLIENT=codex の場合は `$REPO_ROOT/.codex/.ltm-config-version` に installed_at、client、source、config_version、skillのsha256を書き、CLIENT=claudeの場合はhook / CLAUDE.md、CLIENT=codexの場合はhook / AGENTS.md / hooks.jsonのsha256も書く。既存スタンプがあれば旧 → 新を報告する。
-9. 自己検証する。共通のskillの存在とsha256を確認する。CLIENT=claudeの場合はhookのbash -n、実行権限、settings.jsonの妥当性、hook登録が1個、CLAUDE.mdの各マーカーが1個であることを確認する。CLIENT=codexの場合はhookのbash -n、実行権限、hooks.jsonの妥当性、UserPromptSubmitのcommand登録が1個、AGENTS.mdの各マーカーが1個であることを確認する。両クライアントとも入力を変えた 3 ターンを実際にhookへ渡し、雑談は無反応、作業ターンは search_memories の提醒、同じ session_id の再実行は無反応であることを確認する。
-10. 実行結果を変更、unchanged、自己検証、ロールバック用バックアップに分けて報告する。最後にCLIENT=claudeなら「Claude Code を再起動せよ」、CLIENT=codexなら「Codex CLI を再起動し、/hooksで新しいhookをtrustせよ」と表示する。skill、hook、MCPツール定義は起動時に読まれるため、起動中セッションには反映されない。二重管理になる別のインストーラは作らない。
+6. CLIENT=codex の場合は、repository rootを `git rev-parse --show-toplevel` で求め、REPO_ROOTとする。必要な親ディレクトリを作成し、正本のskillを `$REPO_ROOT/.agents/skills/long-term-memory/SKILL.md` に設置する。`$REPO_ROOT/AGENTS.override.md`があればRULES_FILEをそれに、無ければ`$REPO_ROOT/AGENTS.md`にする。`claude-config/claude-md-block.md`の内容でRULES_FILEを更新し、RULES_FILEは、ltm:begin と ltm:end のマーカーが両方1個ずつあれば replace-markers、旧形式の見出し ## long-term-memory MCP があれば次の ## までを replace-legacy、どちらも無ければ append とする。他の節を削除せず、activeでない`AGENTS.md`を同時に変更しない。片方だけ、複数、または壊れたマーカーなら中断する。
+7. CLIENT=codex の場合は、`$REPO_ROOT/.codex`を作成する。`$REPO_ROOT/.codex/config.toml`にinlineの`[hooks]`が既にある場合は`hooks.json`を作成せず、既存のinline形式を保持したままcanonical commandを追加する。inline形式が無い場合は`$REPO_ROOT/.codex/hooks.json`が無ければ `{"hooks":{}}` として扱い、壊れたJSONは勝手に直さず中断する。`hooks.UserPromptSubmit`の配列を保持したまま、command `bash "$(git rev-parse --show-toplevel)/claude-config/hooks/ltm-init-reminder.sh"` を正確に1個だけ登録する。同じcommandがあれば二重登録しない。他のhookを保持し、`config.toml`へMCP URLやPATを書き込まない。project-local hookを使用するため、登録後にCodexの `/hooks` でレビュー・trustする。
+8. CLIENT=claude の場合は CONFIG_DIR/.ltm-config-version、CLIENT=codex の場合は `$REPO_ROOT/.codex/.ltm-config-version` に installed_at、client、source、config_version、skillのsha256を書き、CLIENT=claudeの場合はhook / CLAUDE.md、CLIENT=codexの場合はhook / RULES_FILE / hooks.jsonまたはconfig.tomlのsha256も書く。既存スタンプがあれば旧 → 新を報告する。script hashが変わった場合は、hook定義のtrustだけでは不十分なので、source差分の手動レビューが完了するまで実行しないと報告する。
+9. 自己検証する。共通のskillの存在とsha256を確認する。CLIENT=claudeの場合はhookのbash -n、実行権限、settings.jsonの妥当性、canonical hook commandが正確に1個、既存の他のhook/設定が変更されていないこと、CLAUDE.mdの各マーカーが1個であることを確認する。CLIENT=codexの場合はhookのbash -n、実行権限、hooks.jsonまたはinline configの妥当性、canonical UserPromptSubmit commandが正確に1個、既存の他のhookが変更されていないこと、RULES_FILEの各マーカーが1個であることを確認する。両クライアントとも入力を変えた 3 ターンを実際にhookへ渡し、雑談は無反応、作業ターンは search_memories の提醒、同じ session_id の再実行は無反応であることを確認する。
+10. 実行結果を変更、unchanged、自己検証、ロールバック用バックアップに分けて報告する。最後にCLIENT=claudeなら「Claude Code を再起動せよ」、CLIENT=codexなら「Codex CLI を再起動し、/hooksで新しいhookをtrustせよ」と表示する。script hashが変わった場合は、定義変更が無くてもsource差分の手動レビューが完了するまで実行しない。command定義も変わった場合は`/hooks`で新しい定義をtrustする。skill、hook、MCPツール定義は起動時に読まれるため、起動中セッションには反映されない。二重管理になる別のインストーラは作らない。
 ~~~
 
 ## 正本の埋め込み
