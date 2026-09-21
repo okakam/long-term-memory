@@ -34,10 +34,11 @@
 - 完了を報告する前に、変更内容に応じたテストまたはビルドを実行し、結果を記録する。
 
 - Cloud Run/Firebase/GCS/Firestore構成の設計・実装計画は `docs/superpowers/specs/2026-09-19-cloud-run-firebase-gcs-firestore-design.md` と `docs/superpowers/plans/2026-09-20-cloud-run-gcs-storage.md` を正本とする。
+- Firebase Authentication with Identity PlatformではEmail/Password・Googleを`@okakam.net`だけに限定する。`functions/`の`beforeUserCreated`・`beforeUserSignedIn`とCloud RunのFirebase Admin SDK principal検証を正本とし、Functions deployはCloud Run deployとは別のFirebase CLI操作で行う。詳細は `docs/superpowers/specs/2026-09-21-auth-email-domain-restriction-design.md`、`docs/superpowers/plans/2026-09-21-auth-email-domain-restriction.md`、`docs/google-cloud-cli-setup.md` に記録する。
 - Cloud Run用GCS Markdown adapter、Firestore metadata/auth store、`/tmp` SQLite cache、Firebase ID token/session cookie、API認可、Invoker公開・アプリ層認証のCloud Run workflow/smoke、認証必須のimage既定値、Firestore memory/name indexを実装する。旧データのexport/import/verifyはfresh start方針のため対象外とする。
 - production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote service、永続telemetry DBを削除した。旧Vercel Blob/Tursoのmigration専用スクリプト、テスト、devDependenciesも、旧データを移行せず空スタートする方針により削除済みである。
 - ローカル検証時点で全テスト、lint、型検査、`NODE_ENV=production pnpm build`を実行する。Cloud Run smoke scriptはinitialize、tools/list、save、get、update、link、reindex、search、deleteを実行し、renameは`CloudMemoryService`の回帰テストで検証する。Cloud Run/Firebase/GCSの実環境smokeは外部資格情報が必要な未完了ゲートであり、旧データのexport/import/verifyは対象外、旧Vercel Project削除はユーザー報告で完了している。
 - `main`へのPRマージ後は、`push`イベントでGitHub Actionsのverify完了後に`production` Environmentを使ってCloud Runへ自動deployする。手動dispatchもmainブランチだけを許可し、Production deployは同時実行しない。Environmentの設定値は`docs/cloud-run-production-deployment.md`に記録する。
-- GCPリソース、IAM、Workload Identity Federation、Secret Manager、Firestore Rules/IndexesのCLI手順は `docs/google-cloud-cli-setup.md` に記録する。Firebase Storageは使用せず、Markdown本文はCloud RunからGCS APIで扱う。
+- GCPリソース、IAM、Workload Identity Federation、Secret Manager、Firestore Rules/Indexes、Identity Platform/Blocking FunctionsのCLI手順は `docs/google-cloud-cli-setup.md` に記録する。Firebase Storageは使用せず、Markdown本文はCloud RunからGCS APIで扱う。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。

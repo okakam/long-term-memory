@@ -23,7 +23,7 @@ Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret 
 | 層 | 正本・役割 |
 |---|---|
 | Cloud Run | Next.js単一コンテナ。Invokerは公開、アプリ層で`AUTH_REQUIRED=1`を強制する。Node.js 22、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
-| Firebase Authentication | Webのemail/password・Google認証。サーバはFirebase Admin SDKでID token/session cookieを検証 |
+| Firebase Authentication with Identity Platform | Webのemail/password・Google認証。`@okakam.net`だけを許可するBlocking FunctionsとCloud Run側の二重検証を使う |
 | Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hashの永続保存 |
 | GCS | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
 | `/tmp` SQLite | FTS5・KG・検索用の再構築可能cache。コンテナ再起動で消える前提 |
@@ -35,6 +35,8 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 
 - ローカルは `AUTH_REQUIRED=0` で匿名開発を許可する。
 - 本番は `AUTH_REQUIRED=1` とし、Firebase session cookieをHttpOnly・SameSite=Lax・Path=/で発行する。
+- 本番のEmail/Password・Google認証は`@okakam.net`だけを許可する。Firebaseの`beforeUserCreated`・`beforeUserSignedIn`とCloud RunのFirebase Admin SDK principal検証で拒否する。
+- Google OAuthの`hd=okakam.net`は表示上のヒントであり、認可判定には使わない。`user@sub.okakam.net`、類似ドメイン、メールアドレスなしは拒否する。
 - Cloud RunのInvoker IAMは公開にし、Firebase session、Firebase ID token、MCP PATによるアプリ層認証を必須にする。Cloud Run IAM認証を重ねるとブラウザのFirebase認証フローを遮断するため採用しない。
 - API routeへ直接ID tokenを送る場合だけ `Authorization: Bearer <Firebase ID token>` を許可する。MCPはFirebase ID tokenではなくMCP PATを使う。
 - PAT本文は発行レスポンスで一度だけ返し、FirestoreにはSHA-256 hash、prefix、所有UID、期限、失効日時だけを保存する。
@@ -85,13 +87,14 @@ MCP toolsは次の16個を維持する。
 
 1. 旧Vercel Project、Blob、Turso、Clerk、Redisのデータは移行せず破棄する。
 2. 旧providerのcredential、環境変数、GitHub連携を削除する。新しいCloud Run/Firebase/GCS/Firestoreの設定と混同しない。
-3. Cloud Run、Firebase Authentication、Firestore、GCSを新規作成し、空のプロジェクトとsmoke用ユーザーを用意する。
-4. Cloud Run smokeでhealth、initialize、tools/list 16件、save、search、get、update、link、reindex、deleteを確認する。renameはMCP公開tool対象外のため`CloudMemoryService`の回帰テストで確認する。
-5. 初期データは新環境で作成し、以後のバックアップ・復旧手順をrepository外へ保存する。
+3. Cloud Run、Firebase Authentication with Identity Platform、Firestore、GCSを新規作成し、空のプロジェクトと`@okakam.net`のsmoke用ユーザーを用意する。
+4. `firebase deploy --project="$LTM_PROJECT_ID" --only functions`でAuth Blocking Functionsをデプロイし、Firebase Consoleでbefore user created / before user signed inの登録を確認する。
+5. Cloud Run smokeでhealth、initialize、tools/list 16件、save、search、get、update、link、reindex、deleteを確認する。renameはMCP公開tool対象外のため`CloudMemoryService`の回帰テストで確認する。
+6. 初期データは新環境で作成し、以後のバックアップ・復旧手順をrepository外へ保存する。
 
 ## 8. CI/CD
 
-`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にtest・lint・production build・Docker buildだけを実行し、runtime secretを渡さない。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS設定はEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
+`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にrootのtest・lint・production build・Docker buildに加えてFunctions専用のinstall・test・buildを実行し、runtime secretを渡さない。Firebase Functionsの本番デプロイはFirebase CLIの認証済み操作としてCloud Run deployとは分離する。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS設定はEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
 
 deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase設定はproduction environmentからsmokeへ渡し、ログへ出力しない。
 
