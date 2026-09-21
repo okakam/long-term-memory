@@ -5,7 +5,8 @@
 アプリケーションの構成は次のとおりです。
 
 - Cloud Run: Next.jsアプリケーションを実行する唯一の実行基盤
-- Firebase Authentication: Webユーザーの認証
+- Firebase Authentication with Identity Platform: Webユーザーの認証とメールドメイン制限
+- Firebase Auth Blocking Functions: 新規登録・既存ユーザーのログイン前の認証制御
 - Firestore: project、membership、metadata、name index、tombstone、MCP PAT hash
 - GCS: Markdown本文のimmutableな正本
 - /tmp SQLite: Cloud Run内で再構築する検索cache
@@ -54,6 +55,10 @@ Node.jsアプリをローカルからGoogle APIへ接続して確認する必要
       sts.googleapis.com \
       firebase.googleapis.com \
       identitytoolkit.googleapis.com \
+      cloudfunctions.googleapis.com \
+      eventarc.googleapis.com \
+      eventarcpublishing.googleapis.com \
+      pubsub.googleapis.com \
       --project="$LTM_PROJECT_ID"
 
 課金アカウントがプロジェクトに紐付いていることも確認します。Cloud Run、Firestore、GCS、Artifact Registryは利用量に応じて課金される可能性があります。
@@ -100,7 +105,7 @@ Firestoreのロケーションは後から変更できないため、Cloud Run�
 
 Firebase Consoleで、LTM_PROJECT_IDと同じGoogle CloudプロジェクトにFirebaseを追加します。
 
-Firebase Consoleで次を設定します。
+Firebase ConsoleでFirebase Authentication with Identity Platformへアップグレードしたうえで、次を設定します。
 
 1. Authentication → Sign-in method → Email/Passwordを有効化
 2. Authentication → Sign-in method → Googleを有効化
@@ -109,6 +114,17 @@ Firebase Consoleで次を設定します。
 5. Webアプリの設定から apiKey、authDomain、projectId、appId を控える
 
 Firebase Web設定値はクライアント用の公開識別子です。ただし、GitHub Environmentの環境差分を管理するため、リポジトリへ直書きせずEnvironment variableへ登録します。[Firebase Web setup](https://firebase.google.com/docs/web/setup)
+
+### 認証メールドメイン制限をデプロイする
+
+このリポジトリの`functions/`には、`@okakam.net`以外を拒否する`beforeUserCreated`と`beforeUserSignedIn`のBlocking Functionsを定義しています。`hd=okakam.net`はGoogleのアカウント選択画面へのヒントであり、認可判定はBlocking FunctionsとCloud Run側で行います。
+
+Identity PlatformのBlocking functions設定が利用可能であることを確認し、Functions専用依存関係をインストールしてからデプロイします。
+
+    pnpm --dir functions --ignore-workspace install --frozen-lockfile --ignore-scripts
+    firebase deploy --project="$LTM_PROJECT_ID" --only functions
+
+デプロイ後、Firebase ConsoleのAuthentication → Settings → Blocking functionsで、before user createdとbefore user signed inの両方が登録済みであることを確認します。Functionsのコードを変更した場合は、Firebase Authenticationの認証フローへ反映するため、このdeployを再実行します。Cloud Runのデプロイとは別の認証済みFirebase CLI操作です。
 
 ## 6. Firebase CLIでRulesとIndexesを適用する
 

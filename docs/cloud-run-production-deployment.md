@@ -28,6 +28,15 @@ PR作成・PRブランチpush
 
 PRイベントとPRブランチへのpushではProduction secretsを使用せず、deploy jobも起動しない。Production deployは`cloud-run-production` concurrency groupで直列化し、古いdeployをキャンセルしない。
 
+Firebase AuthenticationのBlocking FunctionsはCloud Run deployとは別管理です。Functionsのコードを変更した場合は、Identity Platformへ接続した認証済み開発コンテナから次を実行し、Firebase ConsoleのAuthentication → Settings → Blocking functionsで`beforeUserCreated`と`beforeUserSignedIn`の登録を確認します。
+
+```bash
+pnpm --dir functions --ignore-workspace install --frozen-lockfile --ignore-scripts
+firebase deploy --project="$LTM_PROJECT_ID" --only functions
+```
+
+この操作はGitHub ActionsのCloud Run deploy jobから自動実行しません。Firebase CLI認証とIdentity PlatformのBlocking functions設定を、Cloud RunのWIFデプロイ権限から分離します。
+
 ## GitHub Environment `production`
 
 GitHub repositoryの Settings → Environments → New environment で `production` を作成する。
@@ -77,6 +86,7 @@ Firebaseでサインインした状態で、`https://<Cloud RunのベースURL>/
 - deploy service accountにはCloud Run deploy、Cloud Build、Artifact Registry、runtime service account impersonationに必要な権限を付与する。
 - runtime service accountにはFirestoreアクセス、Secret Manager secret access、Cloud Run実行に必要な権限だけを付与する。
 - Cloud Run serviceは`--allow-unauthenticated`で公開し、アプリ層の`AUTH_REQUIRED=1`、Firebase session、MCP PATで認証する。
+- Firebase AuthenticationのEmail/Password・Googleログインは`@okakam.net`だけを許可する。`beforeUserCreated`と`beforeUserSignedIn`、Cloud Run側principal検証の二重構成を維持する。
 - Cloud Run runtime service accountへ対象GCS bucketの必要なIAM権限とFirestore accessを付与する。GCS credential keyは作成せず、Application Default Credentialsを使う。
 - maintenance tokenはGCP Secret Managerへ登録し、workflowから値をログ出力しない。
 - Cloud Runは`asia-northeast1`、min 0、max 1、concurrency 1、1 vCPU、512 MiBを初期値とする。
@@ -88,7 +98,10 @@ mainへマージした後、GitHub Actionsで次を確認する。
 1. `verify` jobが成功する（Docker image build後の`GET /api/health`も含む）。
 2. `deploy` jobがproduction Environmentで実行される。
 3. Cloud Runのrevisionが作成される。
-4. Cloud Run smokeでhealth、MCP initialize、tools/list、save、search、get、update、link、reindex、deleteが成功する。
-5. 失敗時はCloud Run revisionとGitHub Actionsログを確認し、必要ならmainからworkflow dispatchで再実行する。
+4. Firebase ConsoleでBlocking functionsのbefore user created / before user signed inが登録済みである。
+5. `@okakam.net`のEmail/Password・Googleログインが成功する。
+6. 許可外ドメインのEmail/Password・Google新規登録・ログインと、既存の許可外ユーザーの再ログインが拒否される。
+7. Cloud Run smokeでhealth、MCP initialize、tools/list、save、search、get、update、link、reindex、deleteが成功する。
+8. 失敗時はCloud Run revisionとGitHub Actionsログを確認し、必要ならmainからworkflow dispatchで再実行する。
 
 実環境のSecrets、GCP権限、Firebase/GCS/Firestore接続、GitHub Environmentの作成はrepository外の管理作業である。認証済みGitHub管理者が設定し、値をcommitしない。
