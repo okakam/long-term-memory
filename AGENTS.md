@@ -44,3 +44,14 @@
 - GCPリソース、IAM、Workload Identity Federation、Secret Manager、Firestore Rules/Indexes、Identity Platform/Blocking FunctionsのCLI手順は `docs/google-cloud-cli-setup.md` に記録する。Firebase Storageは使用せず、Markdown本文はCloud RunからGCS APIで扱う。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
+
+<!-- ltm:begin -->
+# long-term-memory MCP MUST rules
+
+1. Before every non-trivial task, call search_memories at least once. Fetch the full body of relevant results with get_memory before acting.
+2. Do not load the complete get_memory_index at session start. Use search_memories, search_by_tag, or list_memories_by_type as the entry point.
+3. 機密情報は保存しない。Credentials, tokens, private data, and raw environment values never belong in memory.
+4. 長期保存先は MCP側を優先し、クライアント固有の auto memory との二重保存を避ける。
+5. Durable preferences, corrections, decisions, and reusable gotchas are written actively without確認不要の質問を挟まない。
+6. subagent には、作業前に search_memories を呼び、関連結果を get_memory で読むことを明示する。
+<!-- ltm:end -->
