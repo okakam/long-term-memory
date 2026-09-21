@@ -8,7 +8,7 @@ import { isAllowedEmailDomain } from './email-domain.js';
 
 export function enforceAllowedEmail(email: unknown): void {
   if (!isAllowedEmailDomain(email)) {
-    throw new HttpsError('permission-denied', 'Only okakam.net accounts are allowed.');
+    throw new HttpsError('permission-denied', 'email domain is not allowed');
   }
 }
 

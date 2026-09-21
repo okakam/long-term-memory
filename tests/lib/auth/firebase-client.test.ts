@@ -71,3 +71,30 @@ test('session交換に失敗したらFirebase client userをsign outする', asy
   await expect(establishSession(credential)).rejects.toThrow('email domain is not allowed');
   expect(mocks.signOut).toHaveBeenCalledWith(mocks.auth);
 });
+
+test('ID token取得に失敗してもFirebase client userをsign outする', async () => {
+  vi.stubEnv('NEXT_PUBLIC_FIREBASE_API_KEY', 'public-api-key');
+  vi.stubEnv('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN', 'example.firebaseapp.com');
+  vi.stubEnv('NEXT_PUBLIC_FIREBASE_PROJECT_ID', 'firebase-project');
+  vi.stubEnv('NEXT_PUBLIC_FIREBASE_APP_ID', 'app-id');
+  const credential = {
+    user: { getIdToken: vi.fn(async () => { throw new Error('token unavailable'); }) },
+  } as unknown as UserCredential;
+
+  await expect(establishSession(credential)).rejects.toThrow('token unavailable');
+  expect(mocks.signOut).toHaveBeenCalledWith(mocks.auth);
+});
+
+test('session交換のfetchに失敗してもFirebase client userをsign outする', async () => {
+  vi.stubEnv('NEXT_PUBLIC_FIREBASE_API_KEY', 'public-api-key');
+  vi.stubEnv('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN', 'example.firebaseapp.com');
+  vi.stubEnv('NEXT_PUBLIC_FIREBASE_PROJECT_ID', 'firebase-project');
+  vi.stubEnv('NEXT_PUBLIC_FIREBASE_APP_ID', 'app-id');
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network unavailable'); }));
+  const credential = {
+    user: { getIdToken: vi.fn(async () => 'id-token') },
+  } as unknown as UserCredential;
+
+  await expect(establishSession(credential)).rejects.toThrow('network unavailable');
+  expect(mocks.signOut).toHaveBeenCalledWith(mocks.auth);
+});

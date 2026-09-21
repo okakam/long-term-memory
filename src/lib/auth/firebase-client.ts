@@ -76,16 +76,20 @@ export async function signInWithGoogle(): Promise<UserCredential> {
 
 export async function establishSession(credential: UserCredential): Promise<void> {
   const auth = await clientAuth();
-  const idToken = await credential.user.getIdToken();
-  const response = await fetch('/api/auth/session', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ idToken }),
-  });
-  if (response.ok) return;
-  const message = await response.text();
-  await signOut(auth).catch(() => undefined);
-  throw new Error(message || 'authentication required');
+  try {
+    const idToken = await credential.user.getIdToken();
+    const response = await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+    if (response.ok) return;
+    const message = await response.text();
+    throw new Error(message || 'authentication required');
+  } catch (cause) {
+    await signOut(auth).catch(() => undefined);
+    throw cause;
+  }
 }
 
 export async function signOutFirebase(): Promise<void> {
