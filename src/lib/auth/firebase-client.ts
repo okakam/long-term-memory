@@ -12,6 +12,8 @@ import {
   type UserCredential,
 } from 'firebase/auth';
 
+import { ALLOWED_EMAIL_DOMAIN } from './email-domain';
+
 interface FirebaseClientConfig {
   apiKey: string;
   authDomain: string;
@@ -62,18 +64,28 @@ export async function signUpWithPassword(email: string, password: string): Promi
   return createUserWithEmailAndPassword(await clientAuth(), email, password);
 }
 
+export function createGoogleProvider(): GoogleAuthProvider {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ hd: ALLOWED_EMAIL_DOMAIN });
+  return provider;
+}
+
 export async function signInWithGoogle(): Promise<UserCredential> {
-  return signInWithPopup(await clientAuth(), new GoogleAuthProvider());
+  return signInWithPopup(await clientAuth(), createGoogleProvider());
 }
 
 export async function establishSession(credential: UserCredential): Promise<void> {
+  const auth = await clientAuth();
   const idToken = await credential.user.getIdToken();
   const response = await fetch('/api/auth/session', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ idToken }),
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (response.ok) return;
+  const message = await response.text();
+  await signOut(auth).catch(() => undefined);
+  throw new Error(message || 'authentication required');
 }
 
 export async function signOutFirebase(): Promise<void> {
