@@ -14,9 +14,9 @@ if [[ -z "$SESSION_ID" ]]; then
 fi
 SAFE_SESSION_ID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
 FLAG_DIR=${TMPDIR:-/tmp}
-FLAG_FILE="$FLAG_DIR/claude-ltm-read-$SAFE_SESSION_ID.flag"
+FLAG_FILE="$FLAG_DIR/ltm-read-$SAFE_SESSION_ID.flag"
 
-# Do not remind twice in one Claude session.
+# Do not remind twice in one client session.
 if [[ -e "$FLAG_FILE" ]]; then
   exit 0
 fi
