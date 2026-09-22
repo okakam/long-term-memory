@@ -4,10 +4,14 @@ import { expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   requireWebPrincipal: vi.fn(async () => ({ userId: 'user-1' })),
   listPats: vi.fn(async () => []),
+  OAuthService: vi.fn(function OAuthServiceMock() {
+    return { listGrants: vi.fn(async () => []) };
+  }),
 }));
 
 vi.mock('@/lib/auth/web-principal', () => ({ requireWebPrincipal: mocks.requireWebPrincipal }));
 vi.mock('@/lib/auth/pat', () => ({ listPats: mocks.listPats }));
+vi.mock('@/lib/oauth/service', () => ({ OAuthService: mocks.OAuthService }));
 
 import TokenSettingsPage from '@/app/settings/tokens/page';
 

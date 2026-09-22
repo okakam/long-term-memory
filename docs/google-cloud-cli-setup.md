@@ -11,7 +11,7 @@
 - Cloud Run: Next.js アプリケーションを実行する唯一の実行基盤
 - Firebase Authentication with Identity Platform: Email/Password・Google 認証
 - Firebase Auth Blocking Functions: @okakam.net 以外の新規登録・ログインを拒否
-- Firestore: project、membership、memory metadata、name index、tombstone、MCP PAT hash
+- Firestore: project、membership、memory metadata、name index、tombstone、MCP PAT hash、OAuth client/grant/token hash、rate counter
 - GCS: Markdown 本文の immutable な正本
 - /tmp SQLite: Cloud Run 内で再構築する検索 cache
 
@@ -24,6 +24,8 @@ GCS と Firestore の実行時認証は Cloud Run runtime service account の Ap
 | GCP / Firebase project ID | long-term-memory-prod |
 | project number | 751062990941 |
 | region | asia-northeast1 |
+| Artifact Registry repository | cloud-run-source-deploy |
+| Artifact Registry cleanup policy | タグなし・作成から3日後に削除（実削除モード） |
 | GCS bucket | long-term-memory-prod-751062990941 |
 | GCS object prefix | projects |
 | Firestore database | (default)、Firestore Native、Standard |
@@ -140,6 +142,32 @@ Firebase Auth Blocking Functions を deploy する前に、Functions の依存 A
 
 gcloud run deploy --source . を使うと Cloud Build と Artifact Registry が動作するため、API 有効化だけでなく Billing account の紐付けも必要です。ビルド回数、Artifact Registry 容量、Cloud Run、GCS、Firestore、Secret Manager の利用量は課金対象になり得ます。
 
+### Artifact Registry の不要イメージを自動削除する
+
+Cloud Run の source deploy が使用する Artifact Registry repository には、タグのないイメージを作成から 3 日後に削除する cleanup policy を設定します。タグ付きのイメージ（`latest` など）は対象外です。policy の正本は `docs/artifact-registry-cleanup-policy.json` です。
+
+今回の repository は `cloud-run-source-deploy` です。対象 repository を確認します。
+
+    export LTM_ARTIFACT_REPOSITORY='cloud-run-source-deploy'
+    gcloud artifacts repositories list --project="$LTM_PROJECT_ID" --location="$LTM_REGION"
+
+policy を設定します。`--no-dry-run` を明示して実削除を有効にします。既存の設定が dry-run の場合、`--policy` だけでは dry-run が維持されるため、必ず `--no-dry-run` を付けます。
+
+    gcloud artifacts repositories set-cleanup-policies "$LTM_ARTIFACT_REPOSITORY" \
+      --project="$LTM_PROJECT_ID" \
+      --location="$LTM_REGION" \
+      --policy=docs/artifact-registry-cleanup-policy.json \
+      --no-dry-run
+
+設定と dry-run 状態を確認します。
+
+    gcloud artifacts repositories list-cleanup-policies "$LTM_ARTIFACT_REPOSITORY" \
+      --project="$LTM_PROJECT_ID" \
+      --location="$LTM_REGION" \
+      --format='yaml'
+
+`Dry run is disabled.`、`tagState: UNTAGGED`、`olderThan: 259200s` が表示されることを確認します。cleanup は Artifact Registry の定期処理で実行されるため、作成から正確に 72 時間経過した瞬間に削除されるとは限りません。設定変更時点で 3 日を超えたタグなしイメージがあれば、次回の定期処理で削除対象になります。
+
 ## 5. GCS bucket を作成する
 
 bucket 名は Google Cloud 全体で一意である必要があります。今回の bucket は long-term-memory-prod-751062990941 です。
@@ -226,10 +254,10 @@ Firebase Console で次を設定します。
 
 1. Authentication → Sign-in method → Email/Password を有効化
 2. Authentication → Sign-in method → Google を有効化
-3. Authentication → Settings → Authorized domains へ Cloud Run の hostname を追加
+3. Authentication → Settings → Authorized domains へOAuthのbrowser hostを追加する。custom domain有効後は `ltm.okakam.net`、移行中は実際のCloud Run `run.app` hostnameを追加する。scheme、path、portは追加しない
 4. Identity Platform / Authentication の設定を対象 project で確認
 
-Authorized domains はログイン元の Web hostname の許可リストであり、メールアドレスの domain 制限ではありません。@okakam.net の制限はアプリ側と Blocking Functions の両方で行います。
+Authorized domains はログイン元の Web hostname の許可リストであり、メールアドレスの domain 制限ではありません。@okakam.net の制限はアプリ側と Blocking Functions の両方で行います。`hd=okakam.net`はaccount pickerのヒントに過ぎず、OAuth browser hostの許可設定を代替しません。
 
 ### Firebase Auth Blocking Functions を deploy する
 
@@ -252,6 +280,16 @@ firebase.json は firestore.rules と firestore.indexes.json を参照します�
     firebase firestore:indexes --project="$LTM_PROJECT_ID" --database='(default)'
 
 初期状態で indexes: []、fieldOverrides: [] でも正常です。firestore.rules は Firebase client SDK からの read/write を拒否し、Cloud Run の Firebase Admin SDK だけが Firestore を操作します。
+
+### OAuth rate counterのTTL
+
+OAuthのrate counterは `oauthRateLimits` collection groupの `expires_at` timestampへTTLを設定します。TTL削除はバックグラウンド処理で遅延するため、認可判定や固定rate windowの正本にはせず、アプリ側の期限・counter判定を必ず使います。
+
+    gcloud firestore fields ttls update expires_at \
+      --collection-group=oauthRateLimits \
+      --enable-ttl
+    gcloud firestore fields ttls list \
+      --collection-group=oauthRateLimits
 
 ## 10. 専用 Service Account と IAM を設定する
 
@@ -361,6 +399,7 @@ GitHub repository の Settings → Environments → production を作成し、De
 | NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN | Firebase Web app の authDomain |
 | NEXT_PUBLIC_FIREBASE_PROJECT_ID | long-term-memory-prod |
 | NEXT_PUBLIC_FIREBASE_APP_ID | Firebase Web app の appId |
+| MCP_OAUTH_ENABLED | OAuth feature flag。初回deploy/rollbackは `0`、Codex受入前だけ `1` |
 | MCP_PUBLIC_URL | Cloud Run の base URL |
 | MCP_ALLOWED_ORIGINS | 初期値は Cloud Run の base URL |
 | LTM_CURATOR_USER_ID | shared write を許可する Firebase UID |
@@ -384,17 +423,17 @@ GitHub Actions の google-github-actions/auth はサービスアカウントキ�
       --min=0 --max=1 --concurrency=1 \
       --cpu=1 --memory=512Mi --timeout=300 \
       --service-account="$LTM_RUNTIME_SA" \
-      --set-env-vars="LTM_STORAGE_DRIVER=cloud,AUTH_REQUIRED=1,LTM_GCS_BUCKET=$LTM_GCS_BUCKET,LTM_GCS_PREFIX=$LTM_GCS_PREFIX,FIREBASE_PROJECT_ID=$LTM_PROJECT_ID,NEXT_PUBLIC_FIREBASE_API_KEY=$LTM_FIREBASE_API_KEY,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$LTM_FIREBASE_AUTH_DOMAIN,NEXT_PUBLIC_FIREBASE_PROJECT_ID=$LTM_PROJECT_ID,NEXT_PUBLIC_FIREBASE_APP_ID=$LTM_FIREBASE_APP_ID" \
+      --set-env-vars="LTM_STORAGE_DRIVER=cloud,AUTH_REQUIRED=1,MCP_OAUTH_ENABLED=0,LTM_GCS_BUCKET=$LTM_GCS_BUCKET,LTM_GCS_PREFIX=$LTM_GCS_PREFIX,FIREBASE_PROJECT_ID=$LTM_PROJECT_ID,NEXT_PUBLIC_FIREBASE_API_KEY=$LTM_FIREBASE_API_KEY,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$LTM_FIREBASE_AUTH_DOMAIN,NEXT_PUBLIC_FIREBASE_PROJECT_ID=$LTM_PROJECT_ID,NEXT_PUBLIC_FIREBASE_APP_ID=$LTM_FIREBASE_APP_ID" \
       --set-secrets="LTM_MAINTENANCE_TOKEN=$LTM_SECRET_ID:latest"
 
-この deploy は URL を確定するための bootstrap ですが、LTM_STORAGE_DRIVER=cloud と AUTH_REQUIRED=1 を明示して、本番のストレージ・認証モードで起動します。URL確定前なので MCP_PUBLIC_URL と MCP_ALLOWED_ORIGINS は最終 deploy で設定し、URL取得前のサービスを受入確認へ使いません。Cloud Run は --allow-unauthenticated で Invoker を公開しますが、アプリ側は AUTH_REQUIRED=1、Firebase session、MCP PAT で認証します。
+この deploy は URL を確定するための bootstrap ですが、LTM_STORAGE_DRIVER=cloud、AUTH_REQUIRED=1、MCP_OAUTH_ENABLED=0 を明示して、本番のストレージ・認証モードとPAT互換を先に確認します。URL確定前なので MCP_PUBLIC_URL と MCP_ALLOWED_ORIGINS は最終 deploy で設定し、URL取得前のサービスをOAuth受入確認へ使いません。Cloud Run は --allow-unauthenticated で Invoker を公開しますが、アプリ側は AUTH_REQUIRED=1、Firebase session、MCP PAT で認証します。
 
 URL を取得します。
 
     export LTM_CLOUD_RUN_URL="$(gcloud run services describe long-term-memory --project="$LTM_PROJECT_ID" --region="$LTM_REGION" --format='value(status.url)')"
     printf '%s\n' "$LTM_CLOUD_RUN_URL"
 
-この URL を CLOUD_RUN_URL、MCP_PUBLIC_URL、MCP_ALLOWED_ORIGINS へ反映します。production Environment の値を揃えてから、develop → main の Release PR をマージします。main push で verify、deploy、Cloud Run smoke が実行されます。
+この URL はbootstrap直後の確認用です。独自ドメインの設定後は `https://ltm.okakam.net` を `CLOUD_RUN_URL`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`へ反映します。production Environment の値を揃えてから、develop → main の Release PR をマージします。main push で verify、deploy、Cloud Run smoke が実行されます。
 
 ## 15. Smoke 用 Firebase ユーザーと PAT
 
@@ -407,7 +446,7 @@ Cloud Run の base URL へ Firebase ユーザーでサインインし、smoke pr
 
 PAT は画面から発行します。
 
-1. $LTM_CLOUD_RUN_URL/settings/tokens を開く
+1. 独自ドメイン設定後は `https://ltm.okakam.net/settings/tokens`、設定前は `$LTM_CLOUD_RUN_URL/settings/tokens` を開く
 2. Firebase でサインインし、ラベルを入力して PATを発行 を押す
 3. 表示された PAT を PATをコピー でコピーする
 4. GitHub repository の Settings → Environments → production → LTM_MCP_TOKEN へ登録する

@@ -35,10 +35,24 @@
 
 - Cloud Run/Firebase/GCS/Firestore構成の設計・実装計画は `docs/superpowers/specs/2026-09-19-cloud-run-firebase-gcs-firestore-design.md` と `docs/superpowers/plans/2026-09-20-cloud-run-gcs-storage.md` を正本とする。
 - Firebase Authentication with Identity PlatformではEmail/Password・Googleを`@okakam.net`だけに限定する。`functions/`の`beforeUserCreated`・`beforeUserSignedIn`とCloud RunのFirebase Admin SDK principal検証を正本とし、Functions deployはCloud Run deployとは別のFirebase CLI操作で行う。詳細は `docs/superpowers/specs/2026-09-21-auth-email-domain-restriction-design.md`、`docs/superpowers/plans/2026-09-21-auth-email-domain-restriction.md`、`docs/google-cloud-cli-setup.md` に記録する。
-- Cloud Run用GCS Markdown adapter、Firestore metadata/auth store、`/tmp` SQLite cache、Firebase ID token/session cookie、API認可、Invoker公開・アプリ層認証のCloud Run workflow/smoke、認証必須のimage既定値、Firestore memory/name indexを実装する。旧データのexport/import/verifyはfresh start方針のため対象外とする。
+- FirebaseはWeb本人確認のIdentity Provider、Cloud RunのOAuth authorization serverはMCP credential発行者として分離する。`MCP_OAUTH_ENABLED=1`ではHTTPSの`MCP_PUBLIC_URL`と`AUTH_REQUIRED=1`を必須にし、Codexの通常利用は`codex mcp login long-term-memory`のDCR/PKCE OAuthを使う。OAuth grantはSettingsから失効でき、PATはClaude Code curator・CI・Cloud Run smokeなどmachine互換用途に維持する。
+- Cloud Run用GCS Markdown adapter、Firestore metadata/auth store、`/tmp` SQLite cache、Firebase ID token/session cookie、OAuth/PAT Bearer principal、API認可、Invoker公開・アプリ層認証のCloud Run workflow/smoke、認証必須のimage既定値、Firestore memory/name indexを実装する。旧データのexport/import/verifyはfresh start方針のため対象外とする。
+- MCPサーバー名は `long-term-memory` に統一し、Claude Codeのツール名も `mcp__long-term-memory__*` を使用する。curatorのファイル名・launchdラベルは運用サービス識別子として既存の `ltm-shared-curator` を維持する。
 - production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote service、永続telemetry DBを削除した。旧Vercel Blob/Tursoのmigration専用スクリプト、テスト、devDependenciesも、旧データを移行せず空スタートする方針により削除済みである。
 - ローカル検証時点で全テスト、lint、型検査、`NODE_ENV=production pnpm build`を実行する。Cloud Run smoke scriptはinitialize、tools/list、save、get、update、link、reindex、search、deleteを実行し、renameは`CloudMemoryService`の回帰テストで検証する。Cloud Run/Firebase/GCSの実環境smokeは外部資格情報が必要な未完了ゲートであり、旧データのexport/import/verifyは対象外、旧Vercel Project削除はユーザー報告で完了している。
 - `main`へのPRマージ後は、`push`イベントでGitHub Actionsのverify完了後に`production` Environmentを使ってCloud Runへ自動deployする。手動dispatchもmainブランチだけを許可し、Production deployは同時実行しない。Environmentの設定値は`docs/cloud-run-production-deployment.md`に記録する。
+- Cloud Runの公開MCP URLは`https://ltm.okakam.net`へ統一する。DNS・Google-managed certificateの有効化後、Production Environmentの`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`CLOUD_RUN_URL`を揃えてから再デプロイする。
 - GCPリソース、IAM、Workload Identity Federation、Secret Manager、Firestore Rules/Indexes、Identity Platform/Blocking FunctionsのCLI手順は `docs/google-cloud-cli-setup.md` に記録する。Firebase Storageは使用せず、Markdown本文はCloud RunからGCS APIで扱う。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
+
+<!-- ltm:begin -->
+# long-term-memory MCP MUST rules
+
+1. Before every non-trivial task, call search_memories at least once. Fetch the full body of relevant results with get_memory before acting.
+2. Do not load the complete get_memory_index at session start. Use search_memories, search_by_tag, or list_memories_by_type as the entry point.
+3. 機密情報は保存しない。Credentials, tokens, private data, and raw environment values never belong in memory.
+4. 長期保存先は MCP側を優先し、クライアント固有の auto memory との二重保存を避ける。
+5. Durable preferences, corrections, decisions, and reusable gotchas are written actively without確認不要の質問を挟まない。
+6. subagent には、作業前に search_memories を呼び、関連結果を get_memory で読むことを明示する。
+<!-- ltm:end -->

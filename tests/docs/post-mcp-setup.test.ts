@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 const root = resolve(import.meta.dirname, '../..');
 const read = (relativePath: string) => readFileSync(resolve(root, relativePath), 'utf8');
 
-test('Claude Code資産は能動検索と6つのMUSTを保持する', () => {
+test('Claude CodeとCodexで共有できるskillとinstruction blockを保持する', () => {
   const skill = read('skills/long-term-memory/SKILL.md');
   expect(skill).toContain('mcp__long-term-memory__*');
   expect(skill).toContain('search_memories');
@@ -20,6 +20,7 @@ test('Claude Code資産は能動検索と6つのMUSTを保持する', () => {
     'get_memory_index',
     '機密情報は保存しない',
     'MCP側',
+    'クライアント固有',
     '確認不要',
     'subagent',
   ]) {
@@ -28,7 +29,8 @@ test('Claude Code資産は能動検索と6つのMUSTを保持する', () => {
 
   const hook = read('claude-config/hooks/ltm-init-reminder.sh');
   expect(hook).toContain('set -uo pipefail');
-  expect(hook).toContain('claude-ltm-read-');
+  expect(hook).toContain('ltm-read-');
+  expect(hook).toContain('one client session');
   expect(hook).toContain('search_memories');
   expect(hook).toContain('get_memory');
   expect(hook).toContain('1 セッション 1 回');
@@ -36,9 +38,28 @@ test('Claude Code資産は能動検索と6つのMUSTを保持する', () => {
   execFileSync('bash', ['-n', resolve(root, 'claude-config/hooks/ltm-init-reminder.sh')]);
 });
 
-test('設置プロンプトは一経路の冪等配置と自己検証を定義する', () => {
+test('設置手順はClaude CodeとCodexの冪等配置と自己検証を定義する', () => {
   const setup = read('docs/post-mcp-setup.md');
   for (const requirement of [
+    '# Claude Code / Codex',
+    'Codex CLI',
+    '.agents/skills/long-term-memory/SKILL.md',
+    'codex mcp add long-term-memory',
+    'codex mcp login long-term-memory',
+    '~/.codex/config.toml',
+    'AGENTS.md',
+    'AGENTS.override.md',
+    '.codex/hooks.json',
+    'UserPromptSubmit',
+    'git rev-parse --show-toplevel',
+    '/hooks',
+    'hooks.jsonまたはinline configの妥当性',
+    'RULES_FILEの各マーカー',
+    'canonical UserPromptSubmit commandが正確に1個',
+    'script hash',
+    'inlineの`[hooks]`',
+    'claude-config/claude-md-block.md',
+    'CodexではClaude Codeの`settings.json`と`CLAUDE.md`を配置・編集しません。',
     'jq',
     'unchanged',
     '.bak-',
@@ -49,10 +70,33 @@ test('設置プロンプトは一経路の冪等配置と自己検証を定義�
     'bash -n',
     '3 ターン',
     'Claude Code を再起動',
+    'Codex CLI を再起動',
   ]) {
     expect(setup).toContain(requirement);
   }
   expect(setup).not.toContain('claude-config/install.sh');
+  const codexSetup = setup.split('### Codexでskillを使う場合', 1)[0];
+  expect(codexSetup).not.toContain('--bearer-token-env-var LTM_MCP_TOKEN');
+  expect(setup).toContain('--bearer-token-env-var LTM_MCP_TOKEN');
+  expect(setup).toContain('LTM_MAINTENANCE_TOKEN');
+
+  const jsonFence = setup.match(/```json\n([\s\S]*?)\n```/);
+  expect(jsonFence).not.toBeNull();
+  const hookConfig = JSON.parse(jsonFence?.[1] ?? '') as {
+    hooks?: {
+      UserPromptSubmit?: Array<{
+        hooks?: Array<{ type?: string; command?: string }>;
+      }>;
+    };
+  };
+  const commands = (hookConfig.hooks?.UserPromptSubmit ?? [])
+    .flatMap((group) => group.hooks ?? [])
+    .filter((hook) => hook.type === 'command')
+    .map((hook) => hook.command);
+  expect(commands).toEqual([
+    'bash "$(git rev-parse --show-toplevel)/claude-config/hooks/ltm-init-reminder.sh"',
+  ]);
+  expect(setup).toContain('[[hooks.UserPromptSubmit]]');
 
   const embeds = setup.match(/<!-- ltm:embed src=/g) ?? [];
   expect(embeds).toHaveLength(3);
@@ -96,12 +140,12 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   expect(plist).not.toContain('Documents');
 
   const config = JSON.parse(read('docs/mcp-config.cloud-run.json')) as {
-    mcpServers: { 'ltm-shared': { url: string; headers: Record<string, string> } };
+    mcpServers: { 'long-term-memory': { url: string; headers: Record<string, string> } };
   };
-  expect(config.mcpServers['ltm-shared'].url).toContain('$' + '{MCP_PUBLIC_URL}');
-  expect(config.mcpServers['ltm-shared'].headers.Authorization).toContain('$' + '{LTM_MCP_TOKEN}');
-  expect(config.mcpServers['ltm-shared'].headers['X-LTM-Maintenance-Token']).toContain('$' + '{LTM_MAINTENANCE_TOKEN}');
-  expect(config.mcpServers['ltm-shared'].headers).not.toHaveProperty('X-Vercel-Protection-Bypass');
+  expect(config.mcpServers['long-term-memory'].url).toContain('$' + '{MCP_PUBLIC_URL}');
+  expect(config.mcpServers['long-term-memory'].headers.Authorization).toContain('$' + '{LTM_MCP_TOKEN}');
+  expect(config.mcpServers['long-term-memory'].headers['X-LTM-Maintenance-Token']).toContain('$' + '{LTM_MAINTENANCE_TOKEN}');
+  expect(config.mcpServers['long-term-memory'].headers).not.toHaveProperty('X-Vercel-Protection-Bypass');
   expect(existsSync(resolve(root, 'scripts/curator/install.sh'))).toBe(true);
 
   const workflow = read('.github/workflows/curator.yml');
