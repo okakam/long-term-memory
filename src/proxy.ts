@@ -6,6 +6,7 @@ import { getFirebasePrincipal } from '@/lib/auth/session';
 const publicPaths = [
   /^\/sign-in(?:\/|$)/,
   /^\/sign-up(?:\/|$)/,
+  /^\/oauth(?:\/|$)/,
   /^\/api\/auth\/session$/,
   /^\/api\/auth\/config$/,
   /^\/api\/health$/,
