@@ -28,6 +28,12 @@ PR作成・PRブランチpush
 
 PRイベントとPRブランチへのpushではProduction secretsを使用せず、deploy jobも起動しない。Production deployは`cloud-run-production` concurrency groupで直列化し、古いdeployをキャンセルしない。
 
+## OAuthの段階的rolloutとrollback
+
+OAuthは `MCP_OAUTH_ENABLED` のGitHub production Environment variableで段階的に有効化する。初回のコード deploy は `MCP_OAUTH_ENABLED=0`、`AUTH_REQUIRED=1`、HTTPSの `MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`CLOUD_RUN_URL` を確認して実行し、既存PAT smokeを通す。その後、metadata、DCR、Firebase browser login、Codex `codex mcp login long-term-memory` の受入直前にだけ `MCP_OAUTH_ENABLED=1`へ変更して再deployする。
+
+OAuthのmetadata、browser login、MCP受入のいずれかが失敗した場合は、Production Environmentのflagを `0` に戻して再deployし、PAT smokeが通ることを確認してから原因を調査する。OAuth token signing key、client secret、Firebase service account JSONは追加せず、opaque tokenのhashだけを永続化する。flag offでも既存PAT/curator/CI経路を維持できることをrollbackの完了条件とする。
+
 Firebase AuthenticationのBlocking FunctionsはCloud Run deployとは別管理です。Functionsのコードを変更した場合は、Identity Platformへ接続した認証済み開発コンテナから次を実行し、Firebase ConsoleのAuthentication → Settings → Blocking functionsで`beforeUserCreated`と`beforeUserSignedIn`の登録を確認します。
 
 ```bash
@@ -69,6 +75,7 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase Auth domain |
 | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase公開設定 |
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | Firebase公開設定 |
+| `MCP_OAUTH_ENABLED` | OAuth metadata/DCR/Codex loginのfeature flag。初期値は `0` |
 | `MCP_PUBLIC_URL` | 公開MCP URL |
 | `MCP_ALLOWED_ORIGINS` | MCP許可origin |
 | `LTM_CURATOR_USER_ID` | shared writeを許可するFirebase UID |
@@ -105,7 +112,7 @@ Firebaseでサインインした状態で、`https://ltm.okakam.net/settings/tok
 - GitHub OIDCのWIF providerはrepository `okakam/long-term-memory` とmain refに限定する。
 - deploy service accountにはCloud Run deploy、Cloud Build、Artifact Registry、runtime service account impersonationに必要な権限を付与する。
 - runtime service accountにはFirestoreアクセス、Secret Manager secret access、Cloud Run実行に必要な権限だけを付与する。
-- Cloud Run serviceは`--allow-unauthenticated`で公開し、アプリ層の`AUTH_REQUIRED=1`、Firebase session、MCP PATで認証する。
+- Cloud Run serviceは`--allow-unauthenticated`で公開し、アプリ層の`AUTH_REQUIRED=1`、Firebase session、OAuth access token、既存MCP PATで認証する。
 - Firebase AuthenticationのEmail/Password・Googleログインは`@okakam.net`だけを許可する。`beforeUserCreated`と`beforeUserSignedIn`、Cloud Run側principal検証の二重構成を維持する。
 - Cloud Run runtime service accountへ対象GCS bucketの必要なIAM権限とFirestore accessを付与する。GCS credential keyは作成せず、Application Default Credentialsを使う。
 - maintenance tokenはGCP Secret Managerへ登録し、workflowから値をログ出力しない。
@@ -121,7 +128,8 @@ mainへマージした後、GitHub Actionsで次を確認する。
 4. Firebase ConsoleでBlocking functionsのbefore user created / before user signed inが登録済みである。
 5. `@okakam.net`のEmail/Password・Googleログインが成功する。
 6. 許可外ドメインのEmail/Password・Google新規登録・ログインと、既存の許可外ユーザーの再ログインが拒否される。
-7. Cloud Run smokeでhealth、MCP initialize、tools/list、save、search、get、update、link、reindex、deleteが成功する。
-8. 失敗時はCloud Run revisionとGitHub Actionsログを確認し、必要ならmainからworkflow dispatchで再実行する。
+7. flag offのCloud Run smokeでhealth、MCP initialize、tools/list、save、search、get、update、link、reindex、deleteが成功する。
+8. flag onでOAuth metadata、DCR/PKCE、Firebase同意、Codex login、OAuth MCP tools、grant revokeが成功する。
+9. 失敗時はflagを `0` に戻してPAT smokeを確認し、Cloud Run revisionとGitHub Actionsログを調査する。
 
 実環境のSecrets、GCP権限、Firebase/GCS/Firestore接続、GitHub Environmentの作成はrepository外の管理作業である。認証済みGitHub管理者が設定し、値をcommitしない。

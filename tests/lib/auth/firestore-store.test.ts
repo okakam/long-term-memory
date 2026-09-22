@@ -34,6 +34,7 @@ class FakeFirestore implements FirestoreGateway {
   async runTransaction<T>(fn: (transaction: FirestoreTransaction) => Promise<T>): Promise<T> {
     return fn({
       get: (path) => this.get(path),
+      list: (collectionPath) => this.list(collectionPath),
       set: (path, data, merge) => this.set(path, data, merge),
       update: (path, data) => this.update(path, data),
       delete: (path) => this.delete(path),

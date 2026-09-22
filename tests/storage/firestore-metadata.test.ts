@@ -47,6 +47,7 @@ class FakeFirestore implements FirestoreGateway {
     try {
       const transaction: FirestoreTransaction = {
         get: (path) => this.get(path),
+        list: (collectionPath) => this.list(collectionPath),
         set: (path, data, merge) => this.set(path, data, merge),
         update: (path, data) => this.update(path, data),
         delete: (path) => this.delete(path),

@@ -11,7 +11,7 @@
 - Cloud Run: Next.js アプリケーションを実行する唯一の実行基盤
 - Firebase Authentication with Identity Platform: Email/Password・Google 認証
 - Firebase Auth Blocking Functions: @okakam.net 以外の新規登録・ログインを拒否
-- Firestore: project、membership、memory metadata、name index、tombstone、MCP PAT hash
+- Firestore: project、membership、memory metadata、name index、tombstone、MCP PAT hash、OAuth client/grant/token hash、rate counter
 - GCS: Markdown 本文の immutable な正本
 - /tmp SQLite: Cloud Run 内で再構築する検索 cache
 
@@ -254,10 +254,10 @@ Firebase Console で次を設定します。
 
 1. Authentication → Sign-in method → Email/Password を有効化
 2. Authentication → Sign-in method → Google を有効化
-3. Authentication → Settings → Authorized domains へ Cloud Run の hostname を追加
+3. Authentication → Settings → Authorized domains へOAuthのbrowser hostを追加する。custom domain有効後は `ltm.okakam.net`、移行中は実際のCloud Run `run.app` hostnameを追加する。scheme、path、portは追加しない
 4. Identity Platform / Authentication の設定を対象 project で確認
 
-Authorized domains はログイン元の Web hostname の許可リストであり、メールアドレスの domain 制限ではありません。@okakam.net の制限はアプリ側と Blocking Functions の両方で行います。
+Authorized domains はログイン元の Web hostname の許可リストであり、メールアドレスの domain 制限ではありません。@okakam.net の制限はアプリ側と Blocking Functions の両方で行います。`hd=okakam.net`はaccount pickerのヒントに過ぎず、OAuth browser hostの許可設定を代替しません。
 
 ### Firebase Auth Blocking Functions を deploy する
 
@@ -280,6 +280,16 @@ firebase.json は firestore.rules と firestore.indexes.json を参照します�
     firebase firestore:indexes --project="$LTM_PROJECT_ID" --database='(default)'
 
 初期状態で indexes: []、fieldOverrides: [] でも正常です。firestore.rules は Firebase client SDK からの read/write を拒否し、Cloud Run の Firebase Admin SDK だけが Firestore を操作します。
+
+### OAuth rate counterのTTL
+
+OAuthのrate counterは `oauthRateLimits` collection groupの `expires_at` timestampへTTLを設定します。TTL削除はバックグラウンド処理で遅延するため、認可判定や固定rate windowの正本にはせず、アプリ側の期限・counter判定を必ず使います。
+
+    gcloud firestore fields ttls update expires_at \
+      --collection-group=oauthRateLimits \
+      --enable-ttl
+    gcloud firestore fields ttls list \
+      --collection-group=oauthRateLimits
 
 ## 10. 専用 Service Account と IAM を設定する
 
@@ -389,6 +399,7 @@ GitHub repository の Settings → Environments → production を作成し、De
 | NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN | Firebase Web app の authDomain |
 | NEXT_PUBLIC_FIREBASE_PROJECT_ID | long-term-memory-prod |
 | NEXT_PUBLIC_FIREBASE_APP_ID | Firebase Web app の appId |
+| MCP_OAUTH_ENABLED | OAuth feature flag。初回deploy/rollbackは `0`、Codex受入前だけ `1` |
 | MCP_PUBLIC_URL | Cloud Run の base URL |
 | MCP_ALLOWED_ORIGINS | 初期値は Cloud Run の base URL |
 | LTM_CURATOR_USER_ID | shared write を許可する Firebase UID |
@@ -412,10 +423,10 @@ GitHub Actions の google-github-actions/auth はサービスアカウントキ�
       --min=0 --max=1 --concurrency=1 \
       --cpu=1 --memory=512Mi --timeout=300 \
       --service-account="$LTM_RUNTIME_SA" \
-      --set-env-vars="LTM_STORAGE_DRIVER=cloud,AUTH_REQUIRED=1,LTM_GCS_BUCKET=$LTM_GCS_BUCKET,LTM_GCS_PREFIX=$LTM_GCS_PREFIX,FIREBASE_PROJECT_ID=$LTM_PROJECT_ID,NEXT_PUBLIC_FIREBASE_API_KEY=$LTM_FIREBASE_API_KEY,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$LTM_FIREBASE_AUTH_DOMAIN,NEXT_PUBLIC_FIREBASE_PROJECT_ID=$LTM_PROJECT_ID,NEXT_PUBLIC_FIREBASE_APP_ID=$LTM_FIREBASE_APP_ID" \
+      --set-env-vars="LTM_STORAGE_DRIVER=cloud,AUTH_REQUIRED=1,MCP_OAUTH_ENABLED=0,LTM_GCS_BUCKET=$LTM_GCS_BUCKET,LTM_GCS_PREFIX=$LTM_GCS_PREFIX,FIREBASE_PROJECT_ID=$LTM_PROJECT_ID,NEXT_PUBLIC_FIREBASE_API_KEY=$LTM_FIREBASE_API_KEY,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$LTM_FIREBASE_AUTH_DOMAIN,NEXT_PUBLIC_FIREBASE_PROJECT_ID=$LTM_PROJECT_ID,NEXT_PUBLIC_FIREBASE_APP_ID=$LTM_FIREBASE_APP_ID" \
       --set-secrets="LTM_MAINTENANCE_TOKEN=$LTM_SECRET_ID:latest"
 
-この deploy は URL を確定するための bootstrap ですが、LTM_STORAGE_DRIVER=cloud と AUTH_REQUIRED=1 を明示して、本番のストレージ・認証モードで起動します。URL確定前なので MCP_PUBLIC_URL と MCP_ALLOWED_ORIGINS は最終 deploy で設定し、URL取得前のサービスを受入確認へ使いません。Cloud Run は --allow-unauthenticated で Invoker を公開しますが、アプリ側は AUTH_REQUIRED=1、Firebase session、MCP PAT で認証します。
+この deploy は URL を確定するための bootstrap ですが、LTM_STORAGE_DRIVER=cloud、AUTH_REQUIRED=1、MCP_OAUTH_ENABLED=0 を明示して、本番のストレージ・認証モードとPAT互換を先に確認します。URL確定前なので MCP_PUBLIC_URL と MCP_ALLOWED_ORIGINS は最終 deploy で設定し、URL取得前のサービスをOAuth受入確認へ使いません。Cloud Run は --allow-unauthenticated で Invoker を公開しますが、アプリ側は AUTH_REQUIRED=1、Firebase session、MCP PAT で認証します。
 
 URL を取得します。
 
