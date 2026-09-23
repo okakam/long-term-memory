@@ -55,6 +55,14 @@ Firebase AuthenticationのWebアプリ登録、Email/Password・Google provider�
 
 devcontainer.jsonの customizations.vscode.extensions に openai.chatgptを指定しています。既存のコンテナに反映するには、VS Codeで「Dev Containers: Rebuild Container」を実行してください。
 
+## Codex MCP OAuth loopback callback
+
+`codex mcp login long-term-memory`は、実行ごとに異なる`127.0.0.1`のcallback portを使います。`.devcontainer/devcontainer.json`ではVS Codeの`remote.autoForwardPorts`を有効にし、`remote.autoForwardPortsSource`を`process`にして、Codexが開くlistener processからportを検出できるようにしています。固定portやport rangeを`forwardPorts`へ追加しないでください。
+
+設定を反映するには「Dev Containers: Rebuild Container」を実行します。ログイン中にPortsパネルで、その実行のcallback portが転送済みか確認してください。自動検出されない場合は、Codexのログイン処理が待機中に「Forward a Port」で、その実行のcallback portだけを一時転送します。古い実行のportは次のログインで再利用できません。
+
+転送を確認したらブラウザーの「許可」は1回だけ押します。最初の承認POSTが成功するとtransactionとcookieは消費されます。callbackでCodexへ戻らず同じ画面を再送信すると`invalid_request`になるため、二度押しせず、必要なら古いログインを終了して新しい`codex mcp login long-term-memory`を開始してください。認証URLやcallback URLはcode/stateを含むため、Issueやログへ貼り付けないでください。
+
 ## バージョンと更新
 
 Node.jsは22、pnpmは11.1.3を使用します。Google Cloud CLIとFirebase CLIはイメージbuild時に公式配布元からインストールします。CLIを更新する場合はDockerfileを変更してDev Containers: Rebuild Containerを実行してください。
@@ -64,4 +72,3 @@ Node.jsは22、pnpmは11.1.3を使用します。Google Cloud CLIとFirebase CLI
 compose.yamlのappサービスでは、Codex CLIのbwrapがnested namespaceを作成できるよう seccomp=unconfined を設定しています。これは開発用コンテナに限定した設定であり、本番コンテナへは適用しません。
 
 compose.yamlを変更した後は、VS Codeの「Dev Containers: Rebuild Container」でコンテナを再作成してください。再接続後、bwrap --ro-bind / / true が成功すればnamespace設定を確認できます。
-

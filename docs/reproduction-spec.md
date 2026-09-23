@@ -10,6 +10,8 @@
 
 開発コンテナには Node.js 22、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
 
+VS Code Dev Containerでは`remote.autoForwardPorts=true`、`remote.autoForwardPortsSource="process"`を既定にして、Codex OAuthの動的loopback callback listenerを自動転送する。自動検出されない場合はログイン中のcallback portだけをPortsパネルから一時転送する。固定callback portやport rangeは公開しない。
+
 Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret Managerは `gcloud` コマンドで実行する。FirebaseのFirestore Rules/Indexes適用は `firebase deploy --only firestore` を使用する。サービスアカウントJSON、APIキー、PAT、maintenance tokenをDockerfile・ソース・実在`.env`へ記載しない。
 
 ## 1. 目的と確定方針
@@ -40,7 +42,7 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 - Google OAuthの`hd=okakam.net`は表示上のヒントであり、認可判定には使わない。`user@sub.okakam.net`、類似ドメイン、メールアドレスなしは拒否する。
 - Cloud RunのInvoker IAMは公開にし、Firebase session、OAuth access token、既存MCP PATによるアプリ層認証を必須にする。Cloud Run IAM認証を重ねるとブラウザのFirebase認証フローを遮断するため採用しない。
 - API routeへ直接ID tokenを送る場合だけ `Authorization: Bearer <Firebase ID token>` を許可する。MCPはFirebase ID tokenではなくOAuth access tokenまたはMCP PATを使う。
-- MCP OAuthはDCR、authorization code、PKCE S256、15分access token、30日refresh tokenを使い、Firebase sessionで本人確認した同意画面から発行する。DCRはscopeを省略可能とし、指定時は`mcp:access`だけを許可して登録responseには常に`mcp:access`を返す。`application_type`も省略可能とし、指定時は`native`だけを許可して登録responseへ返す。それ以外のscope/application typeは拒否する。Codex loopback callbackは`http://127.0.0.1[:port]/<path>`を使い、認可時はportだけ可変、pathは完全一致とする。OAuthは `mcp:access` scopeだけを持ち、project roleをtokenへ複製しない。
+- MCP OAuthはDCR、authorization code、PKCE S256、15分access token、30日refresh tokenを使い、Firebase sessionで本人確認した同意画面から発行する。DCRはscopeを省略可能とし、指定時は`mcp:access`だけを許可して登録responseには常に`mcp:access`を返す。`application_type`も省略可能とし、指定時は`native`だけを許可して登録responseへ返す。それ以外のscope/application typeは拒否する。Codex loopback callbackは`http://127.0.0.1[:port]/<path>`を使い、認可時はportだけ可変、pathは完全一致とする。VS Code Dev Container内の利用ではprocessベースの自動port転送を使い、必要な場合は現在のcallback portだけを一時転送する。OAuthは `mcp:access` scopeだけを持ち、project roleをtokenへ複製しない。
 - PAT本文は発行レスポンスで一度だけ返し、FirestoreにはSHA-256 hash、prefix、所有UID、期限、失効日時だけを保存する。OAuth client、authorization code、access/refresh tokenも本文を保存せずhashとprefixだけを保存する。
 - project accessはrequestごとにFirestore membershipで判定する。`__shared__` はread-onlyで、writeはPAT、Firebase UID、`LTM_MAINTENANCE_TOKEN`の三条件を満たすcuratorだけに限定し、OAuth credentialでは許可しない。
 - Firestore client SDKからの直接read/writeは `firestore.rules` で全拒否し、Admin SDK経由だけでアクセスする。

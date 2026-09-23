@@ -21,6 +21,7 @@
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
 - コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
+- VS Code Dev Containerでは`remote.autoForwardPorts=true`と`remote.autoForwardPortsSource="process"`を既定にし、Codex OAuthの動的loopback callback portを転送する。callback用の固定port/rangeを`forwardPorts`へ追加せず、自動検出されない場合は`.devcontainer/README.md`の手順で現在のportだけを一時転送する。
 - Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存し、`long-term-memory-codex` volume で永続化する。
 - `/workspace/.codex/config.toml` で Codex CLI の TUI フッターにコンテキスト残量、5時間制限、長期使用制限を表示する。
 - 依存関係は `long-term-memory-node_modules` volume に保存する。ローカル開発では `AUTH_REQUIRED=0` を使い、本番の認証設定と混同しない。
