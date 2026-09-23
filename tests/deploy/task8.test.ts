@@ -48,6 +48,21 @@ test('Next security headersはFirebase endpointと基本防御を含む', async 
   expect(csp).toContain('identitytoolkit.googleapis.com');
   expect(csp).toMatch(/frame-src 'self' https:\/\/\*\.firebaseapp\.com https:\/\/\*\.web\.app https:\/\/accounts\.google\.com/);
   expect(csp).toContain("frame-ancestors 'none'");
+
+  const commonGroup = headerGroups.find((group) => group.source === '/(.*)');
+  expect(commonGroup).toBeDefined();
+  const commonHeaders = new Map(commonGroup?.headers.map((header) => [header.key, header.value]));
+  expect(commonHeaders.get('X-Content-Type-Options')).toBe('nosniff');
+  expect(commonHeaders.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
+  expect(commonHeaders.get('X-Frame-Options')).toBe('DENY');
+  if (process.env.NODE_ENV === 'production') {
+    expect(commonHeaders.get('Strict-Transport-Security')).toBe('max-age=63072000; includeSubDomains; preload');
+  }
+
+  const cspGroups = headerGroups.filter((group) => group.headers.some((header) => header.key === 'Content-Security-Policy'));
+  expect(cspGroups).toHaveLength(1);
+  expect(cspGroups[0].source).toBe('/((?!oauth/authorize$).*)');
+  expect(cspGroups[0].headers.find((header) => header.key === 'Content-Security-Policy')?.value).toContain("form-action 'self'");
 });
 
 test('Cloud Run workflowはPRでruntime secretを使わず低コスト設定でdeployする', () => {

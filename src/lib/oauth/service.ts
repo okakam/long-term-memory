@@ -49,6 +49,7 @@ export type OAuthAuthorizationStart = {
   csrfToken: string;
   clientName: string;
   scope: typeof MCP_OAUTH_SCOPE;
+  redirectUri: string;
 };
 
 export type OAuthAuthorizationApproval = {
@@ -259,7 +260,13 @@ export class OAuthService {
       consumed_at: null,
       revoked_at: null,
     });
-    return { transactionId, csrfToken, clientName: client.client_name, scope: MCP_OAUTH_SCOPE };
+    return {
+      transactionId,
+      csrfToken,
+      clientName: client.client_name,
+      scope: MCP_OAUTH_SCOPE,
+      redirectUri: input.redirectUri,
+    };
   }
 
   async resumeAuthorization(transactionId: string, csrfToken: string): Promise<OAuthAuthorizationStart> {
@@ -271,7 +278,13 @@ export class OAuthService {
     }
     const client = await store.getClient(transaction.client_id);
     if (!client) throw new OAuthProtocolError('invalid_client', 'client is invalid');
-    return { transactionId, csrfToken, clientName: client.client_name, scope: transaction.scope };
+    return {
+      transactionId,
+      csrfToken,
+      clientName: client.client_name,
+      scope: transaction.scope,
+      redirectUri: transaction.redirect_uri,
+    };
   }
 
   async approveAuthorization(input: { transactionId: string; csrfToken: string; userId: string; approved: boolean }): Promise<OAuthAuthorizationApproval> {

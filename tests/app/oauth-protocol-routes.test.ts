@@ -126,6 +126,34 @@ test('未ログイン時のauthorize GETは公開issuerへsign-in redirectする
   expect(location.searchParams.get('oauth_transaction')).toMatch(/^ltm_oatx_/);
 });
 
+test('Firebaseサインイン後に再開した同意画面は保存済みloopback originだけをCSPへ許可する', async () => {
+  await setup();
+  const client = await registerClient(registeredCallbackWithPort);
+  vi.mocked(auth.verifySessionCookie).mockRejectedValueOnce(new Error('session expired'));
+  const signIn = await authorizeGet(new Request(
+    authorizeUrl(client.client_id, authorizationCallbackWithPort),
+    { headers: { cookie: 'ltm_session=session' } },
+  ));
+  expect(signIn.status).toBe(302);
+  const transactionId = new URL(signIn.headers.get('location')!).searchParams.get('oauth_transaction')!;
+  const setCookie = signIn.headers.get('set-cookie') ?? '';
+  const transactionCookie = setCookie.match(/ltm_oauth_tx=([^;,]+)/)?.[1];
+  const csrfCookie = setCookie.match(/ltm_oauth_csrf=([^;,]+)/)?.[1];
+  expect(transactionCookie).toBe(encodeURIComponent(transactionId));
+  expect(csrfCookie).toMatch(/^ltm_csrf_/);
+
+  const resumed = await authorizeGet(new Request(
+    `https://ltm.okakam.net/oauth/authorize?oauth_transaction=${encodeURIComponent(transactionId)}`,
+    { headers: { cookie: `ltm_oauth_tx=${transactionCookie}; ltm_oauth_csrf=${csrfCookie}; ltm_session=session` } },
+  ));
+
+  expect(resumed.status).toBe(200);
+  const csp = resumed.headers.get('Content-Security-Policy') ?? '';
+  expect(csp).toContain("form-action 'self' http://127.0.0.1:53124");
+  expect(csp).not.toContain('/callback/codex');
+  expect(csp).not.toContain('state-1');
+});
+
 test('authorization code、PKCE token exchange、refresh、revokeをform-urlencodedで処理する', async () => {
   await setup();
   const client = await registerClient(registeredCallbackWithPort);
@@ -134,6 +162,10 @@ test('authorization code、PKCE token exchange、refresh、revokeをform-urlenco
     { headers: { cookie: 'ltm_session=session' } },
   ));
   expect(authorization.status).toBe(200);
+  const csp = authorization.headers.get('Content-Security-Policy') ?? '';
+  expect(csp).toContain("form-action 'self' http://127.0.0.1:53124");
+  expect(csp).not.toContain('/callback/codex');
+  expect(csp).not.toContain('state-1');
   const html = await authorization.text();
   const transactionId = html.match(/name="transaction_id" value="([^"]+)"/)?.[1];
   const csrfToken = html.match(/name="csrf_token" value="([^"]+)"/)?.[1];
