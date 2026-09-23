@@ -17,7 +17,7 @@
 - 初期リリースのOAuth client registrationはDCRだけを広告する。CIMD、事前登録client、OIDC ID token、implicit/password/client-credentials grantは実装しない。
 - authorization code、access token、refresh token、transaction IDは256 bit以上の暗号学的乱数を使い、永続層・ログ・例外・文書にはSHA-256 hashとprefixだけを残す。
 - access tokenのTTLは15分、authorization codeは60秒、authorization transactionは10分、refresh tokenは30日とする。refresh tokenは毎回rotateし、旧token再利用時は同familyを失効する。
-- DCRは正確に1件のportなし`http://127.0.0.1/<callback-path>`、`grant_types: ['authorization_code', 'refresh_token']`、`response_types: ['code']`、`token_endpoint_auth_method: 'none'`だけを受け入れる。未指定のDCR metadataはこの許可値へ正規化し、unsupported valueは`invalid_client_metadata`で拒否する。
+- DCRは正確に1件の`http://127.0.0.1[:port]/<callback-path>`、`grant_types: ['authorization_code', 'refresh_token']`、`response_types: ['code']`、`token_endpoint_auth_method: 'none'`だけを受け入れる。callback portは任意で、認可時はport差だけを許容する。未指定のDCR metadataはこの許可値へ正規化し、unsupported valueは`invalid_client_metadata`で拒否する。
 - OAuth rate limitは固定10分windowとし、DCRはglobal 30かつIP hash 5、authorizeはIP hash 20、tokenはclient ID + IP hash 60、revokeはIP hash 30を上限にする。IPはCloud Runの`X-Forwarded-For`先頭だけをadmission keyとして使い、認可identityには使わない。
 - OAuthの許可scopeは`mcp:access`だけとする。project roleはtokenへ複製せず、毎リクエストの`assertProjectAccess`を正本とする。
 - Firebase ID tokenをMCP Bearer tokenとして受け付けない。OAuth access tokenと既存`ltm_` PATだけを許可する。
@@ -105,18 +105,17 @@ export const MCP_OAUTH_SCOPE = 'mcp:access' as const;
 export function redirectUriMatches(registered: string, requested: string): boolean {
   const left = new URL(registered);
   const right = new URL(requested);
-  if (left.protocol === 'http:' && left.hostname === '127.0.0.1' && left.port === ''
+  if (left.protocol === 'http:' && left.hostname === '127.0.0.1'
     && right.protocol === 'http:' && right.hostname === '127.0.0.1') {
-    return left.protocol === right.protocol
-      && left.hostname === right.hostname
-      && left.pathname === right.pathname
-      && left.search === right.search;
+    validateDcrRedirectUri(registered);
+    validateDcrRedirectUri(requested);
+    return left.pathname === right.pathname && left.search === right.search;
   }
   return left.href === right.href;
 }
 ```
 
-`validateDcrRedirectUri`は`http://127.0.0.1`、portなし、非root callback pathだけを受け入れ、fragment、custom scheme、wildcard、`localhost`、IPv6、HTTPS、port付きURIを拒否する。`redirectUriMatches`は登録値がportなし`http://127.0.0.1`の場合だけrequested URIのport差を無視し、それ以外は`href`完全一致にする。enabled時の`getOAuthConfiguration`は`AUTH_REQUIRED=1`、HTTPS、hostname、query/fragmentなしのissuerを強制し、resourceを`new URL('/api/mcp', issuer)`、metadata URLを`/.well-known/oauth-protected-resource/api/mcp`とする。
+`validateDcrRedirectUri`は有効なportを任意で持つ`http://127.0.0.1`の非root callback pathだけを受け入れ、port 0、query、fragment、custom scheme、wildcard、`localhost`、IPv6、HTTPSを拒否する。`redirectUriMatches`はIPv4 loopback callbackではport差だけを無視してpathを照合し、それ以外のURIは完全一致させる。enabled時の`getOAuthConfiguration`は`AUTH_REQUIRED=1`、HTTPS、hostname、query/fragmentなしのissuerを強制し、resourceを`new URL('/api/mcp', issuer)`、metadata URLを`/.well-known/oauth-protected-resource/api/mcp`とする。
 
 - [ ] **Step 4: 秘密値のテストと実装を追加する**
 
@@ -273,7 +272,7 @@ test('PKCEを照合して一回だけaccess/refresh tokenを発行する', async
 });
 ```
 
-PKCE不一致、scope不正、resource不一致、期限切れtransaction、拒否、refresh replay、grant revoke、rate limit超過もtestする。`DcrClientRegistrationSchema`に複数redirect URI、`client_credentials`、`token_endpoint_auth_method: 'client_secret_post'`、`response_types: ['token']`、port付き/localhost callbackを渡した場合に`invalid_client_metadata`となり、欠けた許可metadataは規定値へ正規化することもtestする。rate limitはDCR global/IP、authorize IP、token client/IP、revoke IPごとの固定window境界、同時transaction、期限切れcounter、429 `Retry-After`を検証する。refresh requestで`resource`を送らない場合はgrant時のresourceを継承し、異なるresourceを送った場合は`invalid_target`を返すこともtestする。`verifyAccessToken`は期限・失効・resource・scopeを検証し、成功時だけOAuth principalを返す。
+PKCE不一致、scope不正、resource不一致、期限切れtransaction、拒否、refresh replay、grant revoke、rate limit超過もtestする。`DcrClientRegistrationSchema`に複数redirect URI、`client_credentials`、`token_endpoint_auth_method: 'client_secret_post'`、`response_types: ['token']`、port 0/localhost callbackを渡した場合に`invalid_client_metadata`となり、動的port付きIPv4 loopback callbackを受理し、欠けた許可metadataは規定値へ正規化することもtestする。rate limitはDCR global/IP、authorize IP、token client/IP、revoke IPごとの固定window境界、同時transaction、期限切れcounter、429 `Retry-After`を検証する。refresh requestで`resource`を送らない場合はgrant時のresourceを継承し、異なるresourceを送った場合は`invalid_target`を返すこともtestする。`verifyAccessToken`は期限・失効・resource・scopeを検証し、成功時だけOAuth principalを返す。
 
 - [ ] **Step 2: 失敗を確認する**
 
@@ -367,7 +366,7 @@ test('metadataはDCRとPKCE S256を広告しCIMDを広告しない', async () =>
 });
 ```
 
-route testには有効なportなし`127.0.0.1` callback、port付き/localhost/IPv6 callback、`client_credentials` grant、implicit response type、client secret auth methodのDCR拒否、form-urlencoded token request、code交換、refresh、revoke、endpoint別429/`Retry-After`、同意POSTでFirebase sessionが消えた場合にcodeを発行せずsign-inへ戻ること、`cache-control: no-store`、OAuth標準errorを含める。test store/fake identityはTask 2/3のinjection APIで設定する。
+route testにはport有無両方の有効な`127.0.0.1` callback、port 0/localhost/IPv6 callback、`client_credentials` grant、implicit response type、client secret auth methodのDCR拒否、form-urlencoded token request、code交換、refresh、revoke、endpoint別429/`Retry-After`、同意POSTでFirebase sessionが消えた場合にcodeを発行せずsign-inへ戻ること、`cache-control: no-store`、OAuth標準errorを含める。test store/fake identityはTask 2/3のinjection APIで設定する。
 
 - [ ] **Step 2: 失敗を確認する**
 
