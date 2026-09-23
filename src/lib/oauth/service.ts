@@ -81,6 +81,7 @@ export const DcrClientRegistrationSchema = z.object({
   redirect_uris: z.array(z.string().min(1)).length(1),
   grant_types: z.array(z.string()).optional(),
   response_types: z.array(z.string()).optional(),
+  scope: z.string().optional(),
   token_endpoint_auth_method: z.string().optional(),
 }).strict().superRefine((value, context) => {
   const grantTypes = value.grant_types ?? [...allowedGrantTypes];
@@ -94,6 +95,9 @@ export const DcrClientRegistrationSchema = z.object({
   }
   if (authMethod !== 'none') {
     context.addIssue({ code: 'custom', path: ['token_endpoint_auth_method'], message: 'invalid_client_metadata' });
+  }
+  if (value.scope !== undefined && value.scope !== MCP_OAUTH_SCOPE) {
+    context.addIssue({ code: 'custom', path: ['scope'], message: 'invalid_client_metadata' });
   }
   try {
     validateDcrRedirectUri(value.redirect_uris[0]);
