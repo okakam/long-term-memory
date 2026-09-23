@@ -1,6 +1,7 @@
 import { getOAuthConfiguration } from '@/lib/oauth/config';
 import { oauthConfigurationErrorResponse, oauthErrorResponse } from '@/lib/oauth/http';
 import { DcrClientRegistrationSchema, OAuthProtocolError, OAuthService } from '@/lib/oauth/service';
+import { MCP_OAUTH_SCOPE } from '@/lib/oauth/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,7 @@ export async function POST(request: Request): Promise<Response> {
       redirect_uris: client.redirect_uris,
       grant_types: client.grant_types,
       response_types: client.response_types,
+      scope: MCP_OAUTH_SCOPE,
       token_endpoint_auth_method: client.token_endpoint_auth_method,
     }, { status: 201, headers: { 'cache-control': 'no-store' } });
   } catch (error) {
