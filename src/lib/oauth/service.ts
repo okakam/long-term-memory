@@ -67,6 +67,7 @@ export type OAuthTokenResponse = {
 
 export type DcrClientRegistrationInput = {
   clientName: string | null;
+  applicationType?: 'native';
   redirectUris: [string];
   grantTypes: ['authorization_code', 'refresh_token'];
   responseTypes: ['code'];
@@ -82,6 +83,7 @@ export const DcrClientRegistrationSchema = z.object({
   grant_types: z.array(z.string()).optional(),
   response_types: z.array(z.string()).optional(),
   scope: z.string().optional(),
+  application_type: z.literal('native').optional(),
   token_endpoint_auth_method: z.string().optional(),
 }).strict().superRefine((value, context) => {
   const grantTypes = value.grant_types ?? [...allowedGrantTypes];
@@ -106,6 +108,7 @@ export const DcrClientRegistrationSchema = z.object({
   }
 }).transform((value): DcrClientRegistrationInput => ({
   clientName: value.client_name ?? null,
+  ...(value.application_type !== undefined ? { applicationType: value.application_type } : {}),
   redirectUris: [value.redirect_uris[0]],
   grantTypes: ['authorization_code', 'refresh_token'],
   responseTypes: ['code'],
