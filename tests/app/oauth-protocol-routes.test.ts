@@ -14,6 +14,8 @@ import { LocalIndexStore } from '@/lib/storage/local-index';
 
 const originalEnv = { ...process.env };
 const callback = 'http://127.0.0.1/callback/codex';
+const registeredCallbackWithPort = 'http://127.0.0.1:49210/callback/codex';
+const authorizationCallbackWithPort = 'http://127.0.0.1:53124/callback/codex';
 const verifier = 'verifier-that-is-long-enough-for-pkce-0123456789';
 const challenge = createHash('sha256').update(verifier, 'utf8').digest('base64url');
 let db: Database.Database | undefined;
@@ -42,20 +44,20 @@ async function setup() {
   setFirebaseAuthForTests(auth);
 }
 
-async function registerClient() {
+async function registerClient(redirectUri = callback) {
   const response = await register(new Request('https://ltm.okakam.net/oauth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
-    body: JSON.stringify({ client_name: 'Codex', redirect_uris: [callback] }),
+    body: JSON.stringify({ client_name: 'Codex', redirect_uris: [redirectUri] }),
   }));
   expect(response.status).toBe(201);
   return response.json() as Promise<{ client_id: string }>;
 }
 
-function authorizeUrl(clientId: string) {
+function authorizeUrl(clientId: string, redirectUri = callback) {
   const query = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: callback,
+    redirect_uri: redirectUri,
     response_type: 'code',
     scope: 'mcp:access',
     resource: 'https://ltm.okakam.net/api/mcp',
@@ -75,8 +77,14 @@ test('DCRは許可されたloopback callbackだけを登録し、unsupported met
   expect(valid.status).toBe(201);
   expect((await valid.json()).client_id).toMatch(/^ltm_cli_/);
 
+  const validDynamicPort = await register(new Request('https://ltm.okakam.net/oauth/register', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ redirect_uris: ['http://127.0.0.1:53124/callback/codex'] }),
+  }));
+  expect(validDynamicPort.status).toBe(201);
+
   for (const metadata of [
-    { redirect_uris: ['http://127.0.0.1:53124/callback'] },
+    { redirect_uris: ['http://127.0.0.1:0/callback'] },
     { redirect_uris: ['http://localhost/callback'] },
     { redirect_uris: ['http://[::1]/callback'] },
     { redirect_uris: [callback], grant_types: ['client_credentials'] },
@@ -93,8 +101,11 @@ test('DCRは許可されたloopback callbackだけを登録し、unsupported met
 
 test('authorization code、PKCE token exchange、refresh、revokeをform-urlencodedで処理する', async () => {
   await setup();
-  const client = await registerClient();
-  const authorization = await authorizeGet(new Request(authorizeUrl(client.client_id), { headers: { cookie: 'ltm_session=session' } }));
+  const client = await registerClient(registeredCallbackWithPort);
+  const authorization = await authorizeGet(new Request(
+    authorizeUrl(client.client_id, authorizationCallbackWithPort),
+    { headers: { cookie: 'ltm_session=session' } },
+  ));
   expect(authorization.status).toBe(200);
   const html = await authorization.text();
   const transactionId = html.match(/name="transaction_id" value="([^"]+)"/)?.[1];
@@ -112,14 +123,21 @@ test('authorization code、PKCE token exchange、refresh、revokeをform-urlenco
   }));
   expect(approved.status).toBe(302);
   const callbackLocation = new URL(approved.headers.get('location')!);
-  expect(callbackLocation.origin).toBe('http://127.0.0.1');
+  expect(callbackLocation.origin).toBe('http://127.0.0.1:53124');
+  expect(callbackLocation.port).toBe('53124');
   expect(callbackLocation.searchParams.get('state')).toBe('state-1');
   const code = callbackLocation.searchParams.get('code');
   expect(code).toMatch(/^ltm_oac_/);
 
   const exchanged = await tokenPost(new Request('https://ltm.okakam.net/oauth/token', {
     method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id, code: code!, redirect_uri: callback, code_verifier: verifier }),
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: client.client_id,
+      code: code!,
+      redirect_uri: authorizationCallbackWithPort,
+      code_verifier: verifier,
+    }),
   }));
   expect(exchanged.status).toBe(200);
   const token = await exchanged.json() as { access_token: string; refresh_token: string; token_type: string; expires_in: number };
