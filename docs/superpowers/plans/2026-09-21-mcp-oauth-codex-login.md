@@ -12,6 +12,8 @@
 
 ## Global Constraints
 
+- OAuthからFirebaseログインへ戻すブラウザー向けredirectも公開issuerを使い、受信`Request.url`やCloud Run内部hostを使わない。
+
 - productionのissuerは、末尾`/`、query、fragmentを除いた`MCP_PUBLIC_URL`であり、公開MCP URLは`https://ltm.okakam.net`とする。
 - `MCP_OAUTH_ENABLED=1`では`AUTH_REQUIRED=1`とHTTPSの`MCP_PUBLIC_URL`を必須にし、不正設定でOAuth code/tokenを発行しない。
 - 初期リリースのOAuth client registrationはDCRだけを広告する。CIMD、事前登録client、OIDC ID token、implicit/password/client-credentials grantは実装しない。
@@ -381,6 +383,8 @@ protected-resource metadataの`resource`は`https://ltm.okakam.net/api/mcp`、`a
 `/oauth/register`はJSONだけ、`/oauth/token`と`/oauth/revoke`は`application/x-www-form-urlencoded`だけを受け付ける。`/oauth/register`は`DcrClientRegistrationSchema`で`redirect_uris`、grant/response/auth method、任意scope、任意`application_type`を正規化・検証する。scope指定は`mcp:access`だけ、application type指定は`native`だけを許可し、unsupported valueは`invalid_client_metadata`にする。registration responseは許可scope `mcp:access`を返し、requestに`application_type: 'native'`があれば同値を返す。content type/method違反はOAuth `invalid_request`または405を返す。各endpointの最初にTask 1のrate limit policyを評価し、超過時は`Retry-After`付き429/`temporarily_unavailable`を返す。`/oauth/revoke`はaccess tokenなら当該tokenだけ、refresh tokenなら同familyを失効する`OAuthService.revokeToken`を呼び、unknown tokenにも204を返してtoken存在を開示しない。
 
 - [ ] **Step 4: authorize routeと同意HTMLを実装する**
+
+未ログイン時の`/sign-in?oauth_transaction=<id>` redirectは設定済みの公開issuer (`MCP_PUBLIC_URL`) をoriginとし、受信`Request.url`からredirectを組み立てない。
 
 `GET /oauth/authorize`はOAuth parameterでtransactionを開始する。Firebase sessionがなければserver保存transaction IDだけを`ltm_oauth_tx` HttpOnly/Secure/SameSite=Lax cookieへ入れ、`/sign-in?oauth_transaction=<id>`へ302する。sessionがあればtransactionを照合し、同意ページを返す。
 

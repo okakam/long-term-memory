@@ -107,6 +107,8 @@ MCP transportはBearer tokenをOAuth access tokenとして先に検証し、OAut
 
 ## 6. セキュリティ境界
 
+ブラウザー向け`/sign-in` redirectのoriginは常に設定済みの公開issuer (`MCP_PUBLIC_URL`) とする。Cloud Runの内部`Request.url`、`Host`、forwarded-host値からredirect先を組み立てず、`0.0.0.0:8080`など内部アドレスを外部へ返さない。
+
 - 本番OAuth endpointとissuerはHTTPSだけを許可する。`MCP_OAUTH_ENABLED=1`かつ`AUTH_REQUIRED=0`の構成ではtokenを発行しない。
 - PKCE S256は必須とし、plain method、implicit flow、password grant、client credentials grantを実装しない。
 - DCRはpublic native clientを対象にする。requestは正確に1件の`redirect_uris`、任意`client_name`、任意`grant_types`、任意`response_types`、任意`token_endpoint_auth_method`、任意`scope`、任意`application_type: 'native'`だけを読み、未指定のgrant/response/auth methodは`['authorization_code', 'refresh_token']`、`['code']`、`'none'`へ正規化する。`scope`は省略可能だが指定時は`mcp:access`だけ、`application_type`は指定時`native`だけを受け付け、指定値をregistration responseにも返す。これ以外のscope/application type/grant/response/auth methodとmetadataの未知fieldは`invalid_client_metadata`で拒否し、未知fieldは保存しない。redirect URIは有効なportを任意で持つ`http://127.0.0.1`の非root callbackだけを受け付け、認可時はport差のみ許容する。wildcard、custom scheme、query、fragment、port 0、`localhost`、IPv6、HTTPSを拒否する。

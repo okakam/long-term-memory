@@ -75,6 +75,8 @@ SQLiteは `/tmp/long-term-memory/index.db` に作成し、WAL、foreign key、FT
 
 ## 6. API・MCP・UI
 
+未ログイン時のOAuth `/sign-in` redirectは`MCP_PUBLIC_URL`を基準にし、受信`Request.url`や内部Host名を公開しない。
+
 - `GET /api/health`: 認証不要のCloud Run health check。
 - `/api/auth/session`: Firebase ID tokenを短期session cookieへ交換。余計なquery parameterは拒否。
 - `/api/projects`、`/api/projects/:id/members`、`/api/auth/tokens`、`/api/memories/:id`: Firebase principalとFirestore membershipをservice呼び出し前に検証する。
