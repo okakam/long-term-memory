@@ -79,12 +79,14 @@ test('DCRは許可されたloopback callbackだけを登録し、unsupported met
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
       scope: 'mcp:access',
+      application_type: 'native',
     }),
   }));
   expect(valid.status).toBe(201);
   const registration = await valid.json();
   expect(registration.client_id).toMatch(/^ltm_cli_/);
   expect(registration.scope).toBe('mcp:access');
+  expect(registration.application_type).toBe('native');
 
   const validDynamicPort = await register(new Request('https://ltm.okakam.net/oauth/register', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -100,6 +102,7 @@ test('DCRは許可されたloopback callbackだけを登録し、unsupported met
     { redirect_uris: [callback], response_types: ['token'] },
     { redirect_uris: [callback], token_endpoint_auth_method: 'client_secret_post' },
     { redirect_uris: [callback], scope: 'mcp:write' },
+    { redirect_uris: [callback], application_type: 'web' },
   ]) {
     const response = await register(new Request('https://ltm.okakam.net/oauth/register', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(metadata),

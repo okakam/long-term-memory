@@ -31,6 +31,7 @@ export async function POST(request: Request): Promise<Response> {
       grant_types: client.grant_types,
       response_types: client.response_types,
       scope: MCP_OAUTH_SCOPE,
+      ...(parsed.data.applicationType !== undefined ? { application_type: parsed.data.applicationType } : {}),
       token_endpoint_auth_method: client.token_endpoint_auth_method,
     }, { status: 201, headers: { 'cache-control': 'no-store' } });
   } catch (error) {
