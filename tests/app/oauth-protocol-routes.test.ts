@@ -72,10 +72,19 @@ test('DCRは許可されたloopback callbackだけを登録し、unsupported met
   await setup();
   const valid = await register(new Request('https://ltm.okakam.net/oauth/register', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ redirect_uris: [callback] }),
+    body: JSON.stringify({
+      client_name: 'Codex',
+      redirect_uris: [callback],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+      scope: 'mcp:access',
+    }),
   }));
   expect(valid.status).toBe(201);
-  expect((await valid.json()).client_id).toMatch(/^ltm_cli_/);
+  const registration = await valid.json();
+  expect(registration.client_id).toMatch(/^ltm_cli_/);
+  expect(registration.scope).toBe('mcp:access');
 
   const validDynamicPort = await register(new Request('https://ltm.okakam.net/oauth/register', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -90,6 +99,7 @@ test('DCRは許可されたloopback callbackだけを登録し、unsupported met
     { redirect_uris: [callback], grant_types: ['client_credentials'] },
     { redirect_uris: [callback], response_types: ['token'] },
     { redirect_uris: [callback], token_endpoint_auth_method: 'client_secret_post' },
+    { redirect_uris: [callback], scope: 'mcp:write' },
   ]) {
     const response = await register(new Request('https://ltm.okakam.net/oauth/register', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(metadata),
