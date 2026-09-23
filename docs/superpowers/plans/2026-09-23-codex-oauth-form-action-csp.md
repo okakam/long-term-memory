@@ -187,4 +187,4 @@ Expected: testsがPASSし、Next.jsがcustom header route matcherを受理して
 `cloud-run` workflowのContainer health checkで、runner imageに`next.config.ts`がimportする`src/lib/security/content-security-policy.ts`が含まれず、`next start`時に`MODULE_NOT_FOUND`となることを確認した。runner stageへこのmoduleをコピーし、built imageの`/api/health`起動確認を回帰ゲートとして維持する。
 
 - [x] `content-security-policy.ts`をrunner imageへコピーする。
-- [ ] PR CIのDocker container health checkが成功することを確認する。
+- [x] PR CIのDocker container health checkが成功することを確認する。
