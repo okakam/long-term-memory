@@ -1,4 +1,5 @@
 import { getOAuthConfiguration } from '@/lib/oauth/config';
+import { getOAuthAuthorizationPageCsp } from '@/lib/oauth/authorization-csp';
 import { oauthConfigurationErrorResponse, oauthErrorResponse } from '@/lib/oauth/http';
 import { OAuthProtocolError, type OAuthAuthorizationRequest, OAuthService } from '@/lib/oauth/service';
 import { renderOAuthAuthorizationPage } from '@/components/OAuthAuthorizationPage';
@@ -69,11 +70,15 @@ function authorizationInput(request: Request): OAuthAuthorizationRequest {
   };
 }
 
-function renderAuthorizationPage(start: { transactionId: string; csrfToken: string; clientName: string; scope: string }): Response {
+function renderAuthorizationPage(start: { transactionId: string; csrfToken: string; clientName: string; scope: string; redirectUri: string }): Response {
   const markup = renderOAuthAuthorizationPage(start);
   return new Response(`<!doctype html>${markup}`, {
     status: 200,
-    headers: { 'cache-control': 'no-store', 'content-type': 'text/html; charset=utf-8' },
+    headers: {
+      'cache-control': 'no-store',
+      'content-security-policy': getOAuthAuthorizationPageCsp(start.redirectUri),
+      'content-type': 'text/html; charset=utf-8',
+    },
   });
 }
 

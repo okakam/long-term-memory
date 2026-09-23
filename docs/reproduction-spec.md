@@ -78,6 +78,7 @@ SQLiteは `/tmp/long-term-memory/index.db` に作成し、WAL、foreign key、FT
 ## 6. API・MCP・UI
 
 未ログイン時のOAuth `/sign-in` redirectは`MCP_PUBLIC_URL`を基準にし、受信`Request.url`や内部Host名を公開しない。
+OAuth consentの`/oauth/authorize`では、transaction保存済みのredirect URIを再検証し、response CSPの`form-action`へCodex loopback callbackのorigin (`http://127.0.0.1[:port]`)だけを加える。callback pathやqueryは追加しない。Next.jsの静的CSPはこのrouteを除外し、その他のrouteでは`form-action 'self'`を維持する。共通security headersは全routeへ適用する。
 
 - `GET /api/health`: 認証不要のCloud Run health check。
 - `/api/auth/session`: Firebase ID tokenを短期session cookieへ交換。余計なquery parameterは拒否。
@@ -102,7 +103,7 @@ MCP toolsは次の16個を維持する。
 
 ## 8. CI/CD
 
-`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にrootのtest・lint・production build・Docker buildに加えてFunctions専用のinstall・test・buildを実行し、runtime secretを渡さない。Firebase Functionsの本番デプロイはFirebase CLIの認証済み操作としてCloud Run deployとは分離する。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS/OAuth flagはEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
+`.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にrootのtest・lint・production build・Docker build・built image上の`/api/health`起動確認に加えてFunctions専用のinstall・test・buildを実行し、runtime secretを渡さない。Next.jsは`next start`時にも`next.config.ts`を読み込むため、runner imageにはそこから参照するproject module依存を含める。Firebase Functionsの本番デプロイはFirebase CLIの認証済み操作としてCloud Run deployとは分離する。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS/OAuth flagはEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
 
 deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase設定はproduction environmentからsmokeへ渡し、OAuth tokenはCodex CLIのlogin storeで扱い、ログへ出力しない。flag offのPAT smoke後にだけOAuth flagをonへ切り替え、失敗時はoffへ戻してPAT経路を確認する。
 
