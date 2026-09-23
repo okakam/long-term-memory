@@ -30,6 +30,7 @@ COPY --from=prod_deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder  /app/src/lib/db/schema.sql ./src/lib/db/schema.sql
+COPY --from=builder /app/src/lib/security/content-security-policy.ts ./src/lib/security/content-security-policy.ts
 COPY package.json next.config.ts ./
 RUN mkdir -p /tmp/long-term-memory
 EXPOSE 8080
