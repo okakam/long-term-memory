@@ -23,6 +23,10 @@
   "postCreateCommand": "bash -lc 'if [ -f package.json ]; then pnpm install; fi; codex --version'",
   "customizations": {
     "vscode": {
+      "settings": {
+        "remote.autoForwardPorts": true,
+        "remote.autoForwardPortsSource": "process"
+      },
       "extensions": [
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",

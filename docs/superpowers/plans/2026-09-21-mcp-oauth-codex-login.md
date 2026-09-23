@@ -17,6 +17,7 @@
 - productionのissuerは、末尾`/`、query、fragmentを除いた`MCP_PUBLIC_URL`であり、公開MCP URLは`https://ltm.okakam.net`とする。
 - `MCP_OAUTH_ENABLED=1`では`AUTH_REQUIRED=1`とHTTPSの`MCP_PUBLIC_URL`を必須にし、不正設定でOAuth code/tokenを発行しない。
 - 初期リリースのOAuth client registrationはDCRだけを広告する。CIMD、事前登録client、OIDC ID token、implicit/password/client-credentials grantは実装しない。
+- VS Code Dev ContainerでCodexを使う場合、callback portを固定せず`remote.autoForwardPortsSource="process"`で動的loopback listenerを転送する。自動検出されない場合は実行中のcallback portだけを一時転送する。
 - authorization code、access token、refresh token、transaction IDは256 bit以上の暗号学的乱数を使い、永続層・ログ・例外・文書にはSHA-256 hashとprefixだけを残す。
 - access tokenのTTLは15分、authorization codeは60秒、authorization transactionは10分、refresh tokenは30日とする。refresh tokenは毎回rotateし、旧token再利用時は同familyを失効する。
 - DCRは正確に1件の`http://127.0.0.1[:port]/<callback-path>`、`grant_types: ['authorization_code', 'refresh_token']`、`response_types: ['code']`、`token_endpoint_auth_method: 'none'`、任意の`scope: 'mcp:access'`、任意の`application_type: 'native'`だけを受け入れる。callback portは任意で、認可時はport差だけを許容する。未指定のDCR metadataは許可値へ正規化し、unsupported valueは`invalid_client_metadata`で拒否する。
@@ -765,6 +766,8 @@ codex mcp add long-term-memory \
   --url "https://ltm.okakam.net/api/mcp?project_id=<project-slug>"
 codex mcp login long-term-memory
 ```
+
+VS Code Dev Container内から実行する場合は、`remote.autoForwardPortsSource="process"`でそのログイン固有のcallback portが`127.0.0.1`へ転送されることを確認する。自動検出されない場合は待機中のCodex listener portだけを一時転送してから「許可」を1回押す。同じ認可formの再送信はtransaction消費後の`invalid_request`になるため、二度押ししない。
 
 browserでは許可済み`@okakam.net` accountによるFirebase sign-in、同意、callback、Codex接続、MCP initialize/tools/list/read/write/reindexを確認する。対象外account、存在しないproject、memberのreindex、OAuth credentialでの`__shared__` write、失効済みgrantは拒否されることも確認する。最後にPAT curator/CI smokeをもう一度実行し、OAuth追加後もmachine経路が維持されることを確認する。
 
