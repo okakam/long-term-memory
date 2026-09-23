@@ -36,8 +36,8 @@ function clearAuthorizationCookies(response: Response): void {
   response.headers.append('set-cookie', cookie(CSRF_COOKIE, '', 0));
 }
 
-function redirectToSignIn(request: Request, transactionId: string): Response {
-  const location = new URL('/sign-in', request.url);
+function redirectToSignIn(issuer: URL, transactionId: string): Response {
+  const location = new URL('/sign-in', issuer);
   location.searchParams.set('oauth_transaction', transactionId);
   return new Response(null, { status: 302, headers: { location: location.href } });
 }
@@ -102,7 +102,7 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     if (!await service.identityProvider.getPrincipal(request)) {
-      const response = redirectToSignIn(request, start.transactionId);
+      const response = redirectToSignIn(configuration.issuer, start.transactionId);
       appendAuthorizationCookies(response, start.transactionId, start.csrfToken);
       return response;
     }
@@ -139,7 +139,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     const service = new OAuthService();
     const principal = await service.identityProvider.getPrincipal(request);
-    if (!principal) return redirectToSignIn(request, transactionId);
+    if (!principal) return redirectToSignIn(configuration.issuer, transactionId);
     const approval = await service.approveAuthorization({
       transactionId, csrfToken, userId: principal.userId, approved: decision === 'approve',
     });

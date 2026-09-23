@@ -28,6 +28,8 @@
 
 ## 変更時の確認
 
+- OAuthからFirebaseログインへ戻すredirectは設定済みの公開issuer (`MCP_PUBLIC_URL`) を基準にする。Cloud Runの内部`Request.url`、`Host`、forwarded-hostを使って内部アドレスを外部へ返さない。
+
 - YAML/JSON の構文を検証し、`docker compose -f .devcontainer/compose.yaml config --quiet` を実行する。
 - 開発コンテナをビルドし、`node`、`pnpm`、`codex`、`gh`、`gcloud`、`firebase`、`jq` のバージョンとvolumeの書き込み可否を確認する。GCP/Firebaseの認証はコンテナ内でCLIを使って行い、認証情報はnamed volumeに保存する。
 - 変更前後に `git diff --check` を実行する。

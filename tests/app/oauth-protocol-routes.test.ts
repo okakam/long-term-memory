@@ -112,6 +112,20 @@ test('DCRは許可されたloopback callbackだけを登録し、unsupported met
   }
 });
 
+test('未ログイン時のauthorize GETは公開issuerへsign-in redirectする', async () => {
+  await setup();
+  const client = await registerClient();
+  const internalUrl = authorizeUrl(client.client_id).replace('https://ltm.okakam.net', 'https://0.0.0.0:8080');
+
+  const response = await authorizeGet(new Request(internalUrl));
+
+  expect(response.status).toBe(302);
+  const location = new URL(response.headers.get('location')!);
+  expect(location.origin).toBe('https://ltm.okakam.net');
+  expect(location.pathname).toBe('/sign-in');
+  expect(location.searchParams.get('oauth_transaction')).toMatch(/^ltm_oatx_/);
+});
+
 test('authorization code、PKCE token exchange、refresh、revokeをform-urlencodedで処理する', async () => {
   await setup();
   const client = await registerClient(registeredCallbackWithPort);
@@ -186,7 +200,7 @@ test('同意POST時にFirebase sessionが消えた場合はcodeを発行せずsi
   const csrfToken = csrfMatch?.[1] ?? '';
   setFirebaseAuthForTests(null);
 
-  const response = await authorizePost(new Request('https://ltm.okakam.net/oauth/authorize', {
+  const response = await authorizePost(new Request('https://0.0.0.0:8080/oauth/authorize', {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
@@ -195,8 +209,10 @@ test('同意POST時にFirebase sessionが消えた場合はcodeを発行せずsi
     body: new URLSearchParams({ transaction_id: transactionId, csrf_token: csrfToken, decision: 'approve' }),
   }));
   expect(response.status).toBe(302);
-  expect(new URL(response.headers.get('location')!).pathname).toBe('/sign-in');
-  expect(new URL(response.headers.get('location')!).searchParams.get('oauth_transaction')).toBe(transactionId);
+  const location = new URL(response.headers.get('location')!);
+  expect(location.origin).toBe('https://ltm.okakam.net');
+  expect(location.pathname).toBe('/sign-in');
+  expect(location.searchParams.get('oauth_transaction')).toBe(transactionId);
 });
 
 test('token/revoke endpointはform以外を拒否し、unknown revoke tokenは存在を開示しない', async () => {
