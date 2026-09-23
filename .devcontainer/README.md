@@ -64,3 +64,4 @@ Node.jsは22、pnpmは11.1.3を使用します。Google Cloud CLIとFirebase CLI
 compose.yamlのappサービスでは、Codex CLIのbwrapがnested namespaceを作成できるよう seccomp=unconfined を設定しています。これは開発用コンテナに限定した設定であり、本番コンテナへは適用しません。
 
 compose.yamlを変更した後は、VS Codeの「Dev Containers: Rebuild Container」でコンテナを再作成してください。再接続後、bwrap --ro-bind / / true が成功すればnamespace設定を確認できます。
+
