@@ -2,7 +2,7 @@
 
 ## 状態
 
-設計承認済み・実装計画再点検済み。実装は未着手。実装の正本は `docs/superpowers/plans/2026-09-21-mcp-oauth-codex-login.md` とし、対象は `long-term-memory` のリモートMCPを、PATを手入力せず `codex mcp login long-term-memory` で認証できるようにすることである。
+設計承認済み・実装計画再点検済み。OAuth同意後のCSP修正はローカル実装・品質ゲート完了、Production browser acceptance待ち。OAuth全体の実装正本は `docs/superpowers/plans/2026-09-21-mcp-oauth-codex-login.md` とし、対象は `long-term-memory` のリモートMCPを、PATを手入力せず `codex mcp login long-term-memory` で認証できるようにすることである。
 
 ## 1. 目的と完了条件
 
@@ -114,6 +114,7 @@ MCP transportはBearer tokenをOAuth access tokenとして先に検証し、OAut
 - DCRはpublic native clientを対象にする。requestは正確に1件の`redirect_uris`、任意`client_name`、任意`grant_types`、任意`response_types`、任意`token_endpoint_auth_method`、任意`scope`、任意`application_type: 'native'`だけを読み、未指定のgrant/response/auth methodは`['authorization_code', 'refresh_token']`、`['code']`、`'none'`へ正規化する。`scope`は省略可能だが指定時は`mcp:access`だけ、`application_type`は指定時`native`だけを受け付け、指定値をregistration responseにも返す。これ以外のscope/application type/grant/response/auth methodとmetadataの未知fieldは`invalid_client_metadata`で拒否し、未知fieldは保存しない。redirect URIは有効なportを任意で持つ`http://127.0.0.1`の非root callbackだけを受け付け、認可時はport差のみ許容する。wildcard、custom scheme、query、fragment、port 0、`localhost`、IPv6、HTTPSを拒否する。
 - OAuth endpointsは`Cache-Control: no-store`を返す。authorization code、access token、refresh token、Firebase ID token、cookieを構造化ログ、例外本文、analyticsへ出力しない。queryを含むauthorize requestもrequest loggingではredactする。
 - `/oauth/authorize`の同意POSTはCSRF防御を必須にする。token、register、revokeにはcookie認証を使わず、client/tokenの検証だけを行う。Settingsのgrant一覧・失効は既存Firebase sessionとsame-origin検証を必須にする。
+- OAuth同意画面(`/oauth/authorize`)はtransactionに保存されたredirect URIを再検証し、CSPの`form-action`にそのloopback origin (`http://127.0.0.1[:port]`)だけを追加する。callback path/queryはCSPへ含めない。静的CSPはこのrouteだけ対象外とし、他のrouteでは`form-action 'self'`と既存security headerを維持する。
 - DCR、authorize、token、revokeにはFirestore-backedの固定window rate limitを適用し、process-local counterだけには依存しない。DCRはglobal 30/10分に加えCloud Runが付与する`X-Forwarded-For`先頭の正規化IP hashごとに5/10分、authorizeはIP hashごとに20/10分、tokenは`client_id + IP hash`ごとに60/10分、revokeはIP hashごとに30/10分とする。forwarded IPは認可identityには使わずrate-limit admission keyとしてのみ扱い、`X-Real-IP`など任意headerは読まない。IPが欠ける/不正なら`unknown` bucketに集約し、DCR global bucketも必ず評価する。超過は`Retry-After`付き429とOAuth `temporarily_unavailable`を返す。counterはFirestore Timestampの`expires_at`を持ち、`oauthRateLimits` collection groupの`expires_at`をTTL fieldに設定する。TTL削除は遅延し得るため、window判定は常に`expires_at`をアプリ側でも評価する。
 - revokeまたはSettingsでgrantを失効すると、対応するaccess token、refresh token、未使用codeを失効する。member削除は既存membership検証により即時にMCP利用を止める。
 - `__shared__` writeはOAuth scopeやOAuth grantで許可しない。`LTM_CURATOR_USER_ID`と`LTM_MAINTENANCE_TOKEN`を持つ既存PAT機械処理だけが維持書き込みを行う。
