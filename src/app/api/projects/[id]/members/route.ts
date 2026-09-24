@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { assertProjectAccess, assertSameOrigin, AuthorizationError } from '@/lib/auth/access';
-import { findFirebaseUserIdByEmail } from '@/lib/auth/firebase';
+import { findFirebaseEmailByUserId, findFirebaseUserIdByEmail } from '@/lib/auth/firebase';
 import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getAuthStore } from '@/lib/auth/store';
 import { assertProjectId } from '@/lib/slug';
@@ -65,7 +65,12 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     const principal = await requireWebPrincipal(req);
     const store = await getAuthStore();
     await assertProjectAccess(principal, id, 'read', store);
-    return Response.json(await store.listMembers(id));
+    const members = await store.listMembers(id);
+    return Response.json(await Promise.all(members.map(async (member) => ({
+      user_id: member.user_id,
+      email: await findFirebaseEmailByUserId(member.user_id),
+      role: member.role,
+    }))));
   } catch (error) {
     return errorResponse(error);
   }
@@ -82,7 +87,12 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const existing = await store.getMembership(id, userId);
     if (existing && existing.role !== role) throw new MembershipConflictError('member already has a different role');
     if (!existing) await store.addMember(id, userId, role);
-    return Response.json({ project_id: id, user_id: userId, role }, { status: 201 });
+    return Response.json({
+      project_id: id,
+      user_id: userId,
+      email: await findFirebaseEmailByUserId(userId),
+      role,
+    }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }

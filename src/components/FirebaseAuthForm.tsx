@@ -69,13 +69,14 @@ export function FirebaseAuthForm({ mode, continuation = null }: FirebaseAuthForm
 
   return (
     <section className="auth-card">
+      <p className="eyebrow">ACCOUNT</p>
       <h1>{mode === 'sign-in' ? 'ログイン' : 'アカウント作成'}</h1>
       <form onSubmit={submit}>
         <label>メールアドレス<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
         <label>パスワード<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required /></label>
-        <button type="submit" disabled={pending}>{pending ? '処理中…' : mode === 'sign-in' ? 'ログイン' : '登録'}</button>
+        <button className="primary" type="submit" disabled={pending}>{pending ? '処理中…' : mode === 'sign-in' ? 'ログイン' : '登録'}</button>
       </form>
-      <button type="button" onClick={google} disabled={pending}>Googleで続行</button>
+      <button className="button-secondary" type="button" onClick={google} disabled={pending}>Googleで続行</button>
       <p>
         {mode === 'sign-in' ? 'アカウントをお持ちでない場合は' : 'すでにアカウントをお持ちの場合は'}{' '}
         <a href={authSwitchHref(mode === 'sign-in' ? '/sign-up' : '/sign-in', continuation)}>

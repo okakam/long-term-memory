@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 import {
+  findFirebaseEmailByUserId,
   findFirebaseUserIdByEmail,
   setFirebaseAuthForTests,
   verifyFirebaseIdToken,
@@ -95,4 +96,19 @@ test('登録済みの許可emailだけをmember UIDへ解決する', async () =>
   await expect(findFirebaseUserIdByEmail(' MEMBER@OKAKAM.NET ')).resolves.toBe('member-1');
   await expect(findFirebaseUserIdByEmail('member@example.com')).rejects.toMatchObject({ status: 400 });
   await expect(findFirebaseUserIdByEmail('missing@okakam.net')).rejects.toMatchObject({ status: 400 });
+});
+
+test('member一覧表示用に許可済みUIDだけをemailへ解決する', async () => {
+  setFirebaseAuthForTests({
+    ...auth,
+    getUser: vi.fn(async (uid: string) => {
+      if (uid === 'member-1') return { uid, email: 'member@okakam.net' };
+      if (uid === 'external-1') return { uid, email: 'member@example.com' };
+      throw new Error('not found');
+    }),
+  });
+
+  await expect(findFirebaseEmailByUserId('member-1')).resolves.toBe('member@okakam.net');
+  await expect(findFirebaseEmailByUserId('external-1')).resolves.toBeNull();
+  await expect(findFirebaseEmailByUserId('missing')).resolves.toBeNull();
 });

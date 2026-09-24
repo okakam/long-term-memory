@@ -15,6 +15,7 @@ export interface FirebaseAdminAuth {
   verifySessionCookie(cookie: string): Promise<FirebaseDecodedToken>;
   createSessionCookie(idToken: string, options: { expiresIn: number }): Promise<string>;
   getUserByEmail?(email: string): Promise<{ uid: string; email?: string }>;
+  getUser?(uid: string): Promise<{ uid: string; email?: string }>;
 }
 
 export interface FirebasePrincipal {
@@ -102,5 +103,18 @@ export async function findFirebaseUserIdByEmail(email: string): Promise<string> 
   } catch (error) {
     if (error instanceof MemberLookupError) throw error;
     throw new MemberLookupError();
+  }
+}
+
+/** Returns a display-only address for a member UID without making list APIs fail. */
+export async function findFirebaseEmailByUserId(userId: string): Promise<string | null> {
+  const find = adminAuth().getUser;
+  if (!find) return null;
+  try {
+    const user = await find(userId);
+    if (!user.uid || !isAllowedEmailDomain(user.email)) return null;
+    return user.email.trim().toLowerCase();
+  } catch {
+    return null;
   }
 }

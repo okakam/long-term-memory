@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { LocalIndexStore } from '@/lib/storage/local-index';
 import { migrateAuth } from '@/lib/auth/migrate';
 import { AuthStore, resetAuthStoreForTests, setAuthStoreForTests } from '@/lib/auth/store';
+import { setFirebaseAuthForTests } from '@/lib/auth/firebase';
 
 const mocks = vi.hoisted(() => ({
   requireWebPrincipal: vi.fn(async () => ({ userId: 'owner' })),
@@ -16,6 +17,7 @@ let db: Database.Database | undefined;
 
 afterEach(async () => {
   await resetAuthStoreForTests();
+  setFirebaseAuthForTests(null);
   db?.close();
   db = undefined;
   vi.clearAllMocks();
@@ -28,6 +30,15 @@ async function setup() {
   await migrateAuth(index);
   const store = new AuthStore(index);
   setAuthStoreForTests(store);
+  setFirebaseAuthForTests({
+    verifyIdToken: vi.fn(),
+    verifySessionCookie: vi.fn(),
+    createSessionCookie: vi.fn(),
+    getUser: vi.fn(async (userId: string) => ({
+      uid: userId,
+      email: userId === 'owner' ? 'owner@okakam.net' : 'member@okakam.net',
+    })),
+  });
   await store.createProject('project', 'owner');
 }
 
@@ -52,9 +63,15 @@ test('owner は member の追加・一覧・削除を行える', async () => {
   const context = { params: Promise.resolve({ id: 'project' }) };
   const added = await membersRoute.POST(request({ user_id: 'member' }), context);
   expect(added.status).toBe(201);
+  await expect(added.json()).resolves.toEqual({
+    project_id: 'project', user_id: 'member', email: 'member@okakam.net', role: 'member',
+  });
   const listed = await membersRoute.GET(request({}), context);
   expect(listed.status).toBe(200);
-  expect((await listed.json()).map((member: { user_id: string }) => member.user_id)).toEqual(['member', 'owner']);
+  await expect(listed.json()).resolves.toEqual([
+    { user_id: 'member', email: 'member@okakam.net', role: 'member' },
+    { user_id: 'owner', email: 'owner@okakam.net', role: 'owner' },
+  ]);
   const removed = await membersRoute.DELETE(new Request('https://example.test/api/projects/project/members?user_id=member', {
     method: 'DELETE', headers: { origin: 'https://example.test', host: 'example.test' },
   }), context);

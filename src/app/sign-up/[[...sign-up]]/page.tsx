@@ -10,5 +10,5 @@ type SignUpPageProps = {
 export default async function SignUpPage({ searchParams }: SignUpPageProps = {}) {
   const params = searchParams ? await searchParams : undefined;
   const continuation = oauthAuthorizationContinuation(params?.oauth_transaction);
-  return <main><FirebaseAuthForm mode="sign-up" continuation={continuation} /></main>;
+  return <main className="auth-shell"><FirebaseAuthForm mode="sign-up" continuation={continuation} /></main>;
 }
