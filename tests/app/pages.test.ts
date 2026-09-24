@@ -10,11 +10,17 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/memory/singleton', () => ({ getMemoryService: mocks.getMemoryService }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock('@/lib/auth/firebase-client', () => ({
+  subscribeFirebaseAuth: vi.fn(() => () => undefined),
+  signOutFirebase: vi.fn(),
+}));
 
 import ProjectPage from '@/app/p/[slug]/page';
 import MemoryDetailPage from '@/app/p/[slug]/memories/[name]/page';
 import MemoriesPage from '@/app/p/[slug]/memories/page';
 import MemoryEditor from '@/components/MemoryEditor';
+import { Header } from '@/components/Header';
 
 const memory: Memory = {
   id: 'memory-id',
@@ -80,4 +86,11 @@ test('shared の memories page は delete 操作を描画しない', async () =>
   const html = renderToStaticMarkup(element);
   expect(html).toContain('project-memory');
   expect(html).not.toContain('Delete');
+});
+
+test('HeaderはLong term memoryと主要ナビゲーションを表示する', () => {
+  const html = renderToStaticMarkup(createElement(Header));
+  expect(html).toContain('Long term memory');
+  expect(html).toContain('ダッシュボード');
+  expect(html).toContain('設定');
 });

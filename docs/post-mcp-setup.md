@@ -11,6 +11,16 @@
 - OAuth接続は`/settings/tokens`の`Codex / OAuth 接続`から失効できます。失効後はOAuth grantのaccess tokenとrefresh tokenが使えなくなります。
 - `docs/mcp-config.cloud-run.json`はGitHub ActionsのClaude Code remote curatorが読むPAT設定例です。Codexの`~/.codex/config.toml`へそのまま追加するファイルではありません。
 
+## Dashboardでプロジェクトを作成する
+
+OAuth credentialは本人確認だけを表し、MCPで使う`project_id`へのアクセスはDashboardで管理するmembershipによってリクエストごとに再確認されます。初回のCodex接続前に、Firebaseでログインした状態で次を行ってください。
+
+1. `/dashboard`の「プロジェクト管理」でproject slugを入力し、プロジェクトを作成する。作成者は自動的に`owner`になります。
+2. 必要な場合だけ、同カードから登録済みの`@okakam.net`アカウントをメールアドレスで追加する。`owner`はmember追加、role変更、削除を行えます。最後の`owner`は削除又はmemberへの変更ができません。
+3. 作成したslugをMCP URLの`project_id`に指定する。OAuth同意はmembershipを作成・変更しません。
+
+memberは通常のMCP read/writeを使えますが、member管理と`reindex`はownerだけが行えます。UID、token、OAuth code、callback URLはDashboardにも手順にも入力・記録しません。
+
 ## Codex CLIの設定
 
 Codex CLIは通常`~/.codex/config.toml`（`CODEX_HOME`を設定している場合はその配下）を読みます。Claude Codeの`settings.json`や`CLAUDE.md`はCodexの設定ではありません。CodexのMCP hookは`hooks.json`または`config.toml`の`[hooks]`へ登録します。

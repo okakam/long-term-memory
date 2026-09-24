@@ -40,6 +40,9 @@ test('Claude CodeとCodexで共有できるskillとinstruction blockを保持す
 
 test('設置手順はClaude CodeとCodexの冪等配置と自己検証を定義する', () => {
   const setup = read('docs/post-mcp-setup.md');
+  for (const requirement of ['Dashboardでプロジェクトを作成', 'owner', 'project_id']) {
+    expect(setup).toContain(requirement);
+  }
   for (const requirement of [
     '# Claude Code / Codex',
     'Codex CLI',
