@@ -22,6 +22,7 @@ afterEach(async () => {
 });
 
 async function setup() {
+  mocks.requireWebPrincipal.mockResolvedValue({ userId: 'owner' });
   db = new Database(':memory:');
   const index = new LocalIndexStore(db);
   await migrateAuth(index);
@@ -35,6 +36,14 @@ function request(body: object) {
     method: 'POST',
     headers: { origin: 'https://example.test', host: 'example.test' },
     body: JSON.stringify(body),
+  });
+}
+
+function memberRequest(method: 'PATCH' | 'DELETE', body?: object) {
+  return new Request('https://example.test/api/projects/project/members?user_id=owner', {
+    method,
+    headers: { origin: 'https://example.test', host: 'example.test' },
+    body: body ? JSON.stringify(body) : undefined,
   });
 }
 
@@ -58,4 +67,15 @@ test('member は membership API を変更できない', async () => {
   const context = { params: Promise.resolve({ id: 'project' }) };
   const response = await membersRoute.POST(request({ user_id: 'other' }), context);
   expect(response.status).toBe(403);
+});
+
+test('最後のownerをmemberへ変更又は削除できない', async () => {
+  await setup();
+  const context = { params: Promise.resolve({ id: 'project' }) };
+
+  const changed = await membersRoute.PATCH(memberRequest('PATCH', { user_id: 'owner', role: 'member' }), context);
+  expect(changed.status).toBe(409);
+
+  const deleted = await membersRoute.DELETE(memberRequest('DELETE'), context);
+  expect(deleted.status).toBe(409);
 });

@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 import {
+  findFirebaseUserIdByEmail,
   setFirebaseAuthForTests,
   verifyFirebaseIdToken,
   verifyFirebaseSessionCookie,
@@ -80,4 +81,18 @@ test('session cookieを優先しBearerは明示許可時だけ検証する', asy
   await expect(getFirebasePrincipal(bearerRequest, { allowBearer: true })).resolves.toMatchObject({ userId: 'firebase-user' });
 
   await expect(requireFirebasePrincipal(new Request('https://example.test/'))).rejects.toMatchObject({ status: 401 });
+});
+
+test('登録済みの許可emailだけをmember UIDへ解決する', async () => {
+  setFirebaseAuthForTests({
+    ...auth,
+    getUserByEmail: vi.fn(async (email: string) => {
+      if (email !== 'member@okakam.net') throw new Error('not found');
+      return { uid: 'member-1', email };
+    }),
+  });
+
+  await expect(findFirebaseUserIdByEmail(' MEMBER@OKAKAM.NET ')).resolves.toBe('member-1');
+  await expect(findFirebaseUserIdByEmail('member@example.com')).rejects.toMatchObject({ status: 400 });
+  await expect(findFirebaseUserIdByEmail('missing@okakam.net')).rejects.toMatchObject({ status: 400 });
 });

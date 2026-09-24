@@ -14,6 +14,7 @@ export interface FirebaseAdminAuth {
   verifyIdToken(token: string): Promise<FirebaseDecodedToken>;
   verifySessionCookie(cookie: string): Promise<FirebaseDecodedToken>;
   createSessionCookie(idToken: string, options: { expiresIn: number }): Promise<string>;
+  getUserByEmail?(email: string): Promise<{ uid: string; email?: string }>;
 }
 
 export interface FirebasePrincipal {
@@ -37,6 +38,15 @@ export class ForbiddenFirebaseError extends Error {
   constructor() {
     super('email domain is not allowed');
     this.name = 'ForbiddenFirebaseError';
+  }
+}
+
+export class MemberLookupError extends Error {
+  readonly status = 400;
+
+  constructor() {
+    super('member account was not found');
+    this.name = 'MemberLookupError';
   }
 }
 
@@ -78,4 +88,19 @@ export async function verifyFirebaseSessionCookie(cookie: string): Promise<Fireb
 
 export async function createSessionCookie(idToken: string): Promise<string> {
   return adminAuth().createSessionCookie(idToken, { expiresIn: 5 * 24 * 60 * 60 * 1000 });
+}
+
+export async function findFirebaseUserIdByEmail(email: string): Promise<string> {
+  const normalized = email.trim().toLowerCase();
+  if (!isAllowedEmailDomain(normalized)) throw new MemberLookupError();
+  const find = adminAuth().getUserByEmail;
+  if (!find) throw new MemberLookupError();
+  try {
+    const user = await find(normalized);
+    if (!user.uid || !isAllowedEmailDomain(user.email ?? normalized)) throw new MemberLookupError();
+    return user.uid;
+  } catch (error) {
+    if (error instanceof MemberLookupError) throw error;
+    throw new MemberLookupError();
+  }
 }
