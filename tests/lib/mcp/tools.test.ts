@@ -53,11 +53,14 @@ test('feedback/project write は Why/How を body に合成して保存する', 
   const service = makeService();
   const feedback = await call(service, 'remember_feedback', {
     name: 'feedback-memory', description: 'desc', body: 'body\n',
-    entities: [{ name: 'TypeScript' }], why: 'reason', how_to_apply: 'trigger',
+    entities: [{ name: 'TypeScript' }, { name: 'Codex' }],
+    triples: [['TypeScript', 'used-by', 'Codex']],
+    why: 'reason', how_to_apply: 'trigger',
   });
   expect(feedback.result.content[0].text).toContain('saved feedback memory feedback-memory');
   expect((service.saveAsync as ReturnType<typeof vi.fn>).mock.calls[0][1]).toMatchObject({
     type: 'feedback', body: 'body\n\n**Why:** reason\n**How to apply:** trigger',
+    triples: [['TypeScript', 'used-by', 'Codex']],
   });
 });
 
