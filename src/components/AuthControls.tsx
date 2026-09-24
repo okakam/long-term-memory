@@ -12,6 +12,6 @@ export function AuthControls() {
 
   useEffect(() => subscribeFirebaseAuth(setSignedIn), []);
 
-  if (!signedIn) return <><Link href="/sign-in">ログイン</Link><Link href="/sign-up">登録</Link></>;
-  return <button type="button" onClick={async () => { await signOutFirebase(); router.refresh(); }}>ログアウト</button>;
+  if (!signedIn) return <span className="auth-actions"><Link href="/sign-in">ログイン</Link><Link className="button-primary" href="/sign-up">登録</Link></span>;
+  return <button className="button-secondary" type="button" onClick={async () => { await signOutFirebase(); router.refresh(); }}>ログアウト</button>;
 }

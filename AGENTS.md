@@ -31,6 +31,7 @@
 
 - OAuthからFirebaseログインへ戻すredirectは設定済みの公開issuer (`MCP_PUBLIC_URL`) を基準にする。Cloud Runの内部`Request.url`、`Host`、forwarded-hostを使って内部アドレスを外部へ返さない。
 - OAuth同意画面(`/oauth/authorize`)のresponse CSPはtransactionから再検証したCodex loopback callbackのoriginだけを`form-action`へ追加する。静的CSPはこのrouteだけを除外し、他routeの`form-action 'self'`と共通security headersを維持する。callback path/queryや任意originを許可しない。本番受入はdeploy後のCodex browser consent/callback smokeで確認し、ローカル成功と混同しない。
+- Dashboardのproject作成者はFirestore membershipのownerとし、ownerだけが登録済み許可ドメインのemailでmemberを管理する。認可の正本はUID membershipであり、email directory lookupは表示・追加時だけに使う。最後のownerを削除又はmemberへ変更してはならない。
 - Cloud Run runner imageには、起動時に読み込まれる`next.config.ts`とそのproject module依存を含める。Docker imageの`/api/health`起動確認をdeploy前の回帰ゲートとする。
 
 - YAML/JSON の構文を検証し、`docker compose -f .devcontainer/compose.yaml config --quiet` を実行する。

@@ -5,6 +5,10 @@ import { afterEach, expect, test, vi } from 'vitest';
 import DashboardPage from '@/app/dashboard/page';
 import { resetTelemetryStore, setTelemetryStoreForTests, TelemetryStore } from '@/lib/telemetry/store';
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+
 let db: Database.Database | undefined;
 
 afterEach(() => {
@@ -37,6 +41,8 @@ test('dashboard は JST 窓、7/30/90 プリセット、日次系列、全 tool 
     searchParams: Promise.resolve({ days: '999', project: 'project' }),
   }));
   expect(html).toContain('（JST・365日）');
+  expect(html).toContain('プロジェクト管理');
+  expect(html).toContain('利用状況');
   expect(html).toContain('/dashboard?days=7&amp;project=project');
   expect(html).toContain('/dashboard?days=30&amp;project=project');
   expect(html).toContain('/dashboard?days=90&amp;project=project');

@@ -86,6 +86,7 @@ OAuth consentの`/oauth/authorize`では、transaction保存済みのredirect UR
 - `/.well-known/oauth-protected-resource/api/mcp`、`/.well-known/oauth-authorization-server`、`/oauth/register`、`/oauth/authorize`、`/oauth/token`、`/oauth/revoke`: Codex向けDCR/PKCE OAuth endpoint。metadataとOAuth endpointは`Cache-Control: no-store`を返す。
 - `/api/mcp`: requestごとにOAuth access tokenまたはPAT、project access、shared maintenance条件を検証する。OAuthはmembershipを再評価し、失効済みgrantを拒否する。認証主体やproject stateをmodule globalへ保存しない。
 - `/api/auth/oauth-grants`: Firebase session本人のOAuth接続一覧と失効だけを許可し、token本文・hash・refresh familyは返さない。
+- `/dashboard`: Firebaseでログインした作成者がprojectを作成するとFirestore membershipの`owner`になる。ownerだけが登録済み許可ドメインのメールアドレスをmemberへ追加し、role変更・削除を行える。OAuth同意はmembershipを変更せず、MCP requestごとにmembershipを再評価する。
 - Web UIは `/sign-in` と `/sign-up` をpublicにし、Firebase client SDKのemail/password・Google providerを使う。Firebase公開設定は `/api/auth/config` からno-storeで取得でき、client bundleへ秘密値を埋め込まない。共有scopeでは編集・削除を表示しない。
 
 MCP toolsは次の16個を維持する。
