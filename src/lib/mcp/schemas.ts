@@ -22,11 +22,13 @@ const EntityInput = z.object({
 const RequiredEntities = z.array(EntityInput)
   .min(1, 'Provide at least one entity (canonical concept name) extracted from the body.')
   .describe('Non-empty canonical concepts extracted from the body; required for associative recall.');
-const Triples = z.array(z.tuple([
-  z.string().min(1).describe('Canonical subject entity name.'),
-  z.string().min(1).describe('Relationship predicate.'),
-  z.string().min(1).describe('Canonical object entity name.'),
-])).optional().describe('Optional [subject, predicate, object] relationships between listed entities.');
+const Triple = z.array(z.string().min(1))
+  .length(3, 'A relationship triple must contain subject, predicate, and object.')
+  .transform(([subject, predicate, object]): [string, string, string] => [subject, predicate, object])
+  .describe('A three-string [subject, predicate, object] relationship tuple.');
+const Triples = z.array(Triple)
+  .optional()
+  .describe('Optional [subject, predicate, object] relationships between listed entities.');
 const Why = z.string().min(1).describe('The rationale for this feedback or project decision; must not be empty.');
 const HowToApply = z.string().min(1).describe('The future trigger or condition for applying this feedback or decision; must not be empty.');
 const IncludeShared = z.boolean().optional().describe('Whether to append matching read-only memories from the shared scope; defaults to true.');
@@ -68,11 +70,7 @@ const PatchInput = z.object({
   tags: z.array(z.string()).optional().describe('Replacement tag list; supplied arrays overwrite the old list.'),
   links: z.array(z.string()).optional().describe('Replacement directional link list; supplied arrays overwrite the old list.'),
   entities: z.array(EntityInput).optional().describe('Replacement entity list; re-supply when changing the body.'),
-  triples: z.array(z.tuple([
-    z.string().min(1).describe('Canonical subject entity name.'),
-    z.string().min(1).describe('Relationship predicate.'),
-    z.string().min(1).describe('Canonical object entity name.'),
-  ])).optional().describe('Replacement relationship list; re-supply when relations changed.'),
+  triples: Triples.describe('Replacement relationship list; re-supply when relations changed.'),
   supersedes: z.array(z.string()).optional().describe('Replacement names of memories this memory supersedes.'),
   source_refs: z.array(z.object({
     project_id: z.string().min(1).describe('The source project identifier.'),
