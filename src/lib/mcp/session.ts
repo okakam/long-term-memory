@@ -137,9 +137,16 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
       let release!: () => void;
       contextQueue = new Promise<void>((resolve) => { release = resolve; });
       await previous;
-      Object.assign(sessionContext, requestContext);
       try {
+        if (closed) throw new Error('MCP session is closed');
+        Object.assign(sessionContext, requestContext);
         return await operation();
+      } catch (error) {
+        if (error instanceof McpRequestTimeoutError) {
+          retireSession(session);
+          await session.close().catch(() => undefined);
+        }
+        throw error;
       } finally {
         release();
       }
@@ -158,27 +165,47 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
   return session;
 }
 
-const sessions = new Map<string, Promise<McpSession>>();
+interface CachedSession {
+  promise: Promise<McpSession>;
+  value?: McpSession;
+}
 
-export function getOrCreateSession(ctx: ToolContext): Promise<McpSession> {
-  const key = JSON.stringify({
+const sessions = new Map<string, CachedSession>();
+
+function sessionKey(ctx: ToolContext): string {
+  return JSON.stringify({
     sharedWrite: ctx.canWriteShared === true,
     principal: ctx.principal
       ? [ctx.principal.userId, ctx.principal.credentialId ?? null, ctx.principal.credentialKind ?? null]
       : null,
   });
+}
+
+function retireSession(session: McpSession): void {
+  for (const [key, cached] of sessions) {
+    if (cached.value === session) {
+      sessions.delete(key);
+      return;
+    }
+  }
+}
+
+export function getOrCreateSession(ctx: ToolContext): Promise<McpSession> {
+  const key = sessionKey(ctx);
   const existing = sessions.get(key);
-  if (existing) return existing;
-  const promise = createMcpSession(ctx);
-  sessions.set(key, promise);
-  void promise.catch(() => {
-    if (sessions.get(key) === promise) sessions.delete(key);
+  if (existing) return existing.promise;
+  const cached: CachedSession = { promise: createMcpSession(ctx) };
+  sessions.set(key, cached);
+  void cached.promise.then((session) => {
+    cached.value = session;
+  }, () => {
+    if (sessions.get(key) === cached) sessions.delete(key);
   });
-  return promise;
+  return cached.promise;
 }
 
 export async function resetSessionState(): Promise<void> {
-  const current = [...sessions.values()];
+  const current = [...sessions.values()].map((cached) => cached.promise);
   sessions.clear();
   const resolved = await Promise.allSettled(current);
   await Promise.all(resolved.flatMap((item) => item.status === 'fulfilled' ? [item.value.close()] : []));
