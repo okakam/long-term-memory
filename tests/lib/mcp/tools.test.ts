@@ -4,6 +4,12 @@ import type { MemoryService } from '@/lib/memory/service';
 import type { Memory } from '@/lib/memory/types';
 import { resetSessionState } from '@/lib/mcp/session';
 import { handleMcpRequest } from '@/lib/mcp/transport';
+import {
+  FindRelatedInput, ForgetMemoryInput, GetMemoryIndexInput, GetMemoryInput,
+  LinkMemoriesInput, ListByTypeInput, ReindexInput, RememberFeedbackInput,
+  RememberProjectFactInput, RememberReferenceInput, RememberSessionSummaryInput,
+  RememberUserFactInput, SearchByTagInput, SearchMemoriesInput, UpdateMemoryInput,
+} from '@/lib/mcp/schemas';
 
 const saved: Memory = {
   id: '01HZZZZZZZZZZZZZZZZZZZZZZ',
@@ -42,12 +48,45 @@ async function call(service: MemoryService, name: string, arguments_: object, pr
   const response = await handleMcpRequest(new Request(`https://example.test/api/mcp?project_id=${project}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: arguments_ } }),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { project_id: project, ...arguments_ } } }),
   }), { mode: 'stateless', service });
   return response.json() as Promise<{ result: { content: Array<{ text: string }>; isError?: boolean } }> ;
 }
 
 afterEach(async () => { await resetSessionState(); });
+
+test('15個のproject scoped toolはtop-level project_idを必須とする', () => {
+  const schemas = [
+    FindRelatedInput, ForgetMemoryInput, GetMemoryIndexInput, GetMemoryInput,
+    LinkMemoriesInput, ListByTypeInput, ReindexInput, RememberFeedbackInput,
+    RememberProjectFactInput, RememberReferenceInput, RememberSessionSummaryInput,
+    RememberUserFactInput, SearchByTagInput, SearchMemoriesInput, UpdateMemoryInput,
+  ];
+  for (const schema of schemas) {
+    const result = schema.safeParse({});
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.some((issue) => issue.path.join('.') === 'project_id')).toBe(true);
+  }
+});
+
+test('project_idはslug又はshared scopeだけを許可する', () => {
+  const missing = SearchMemoriesInput.safeParse({ query: 'oauth' });
+  expect(missing.success).toBe(false);
+  if (!missing.success) expect(missing.error.issues.some((issue) => issue.path.join('.') === 'project_id')).toBe(true);
+  expect(SearchMemoriesInput.safeParse({ project_id: 'product-a', query: 'oauth' }).success).toBe(true);
+  expect(SearchMemoriesInput.safeParse({ project_id: '__shared__', query: 'oauth' }).success).toBe(true);
+  expect(SearchMemoriesInput.safeParse({ project_id: '../escape', query: 'oauth' }).success).toBe(false);
+});
+
+test('source_refsのproject_idだけでは保存先projectを指定できない', () => {
+  const result = RememberProjectFactInput.safeParse({
+    name: 'project-memory', description: 'desc', body: 'body',
+    entities: [{ name: 'Project' }], why: 'reason', how_to_apply: 'trigger',
+    source_refs: [{ project_id: 'source-project', memory: 'source-memory' }],
+  });
+  expect(result.success).toBe(false);
+  if (!result.success) expect(result.error.issues.some((issue) => issue.path.join('.') === 'project_id')).toBe(true);
+});
 
 test('feedback/project write は Why/How を body に合成して保存する', async () => {
   const service = makeService();
