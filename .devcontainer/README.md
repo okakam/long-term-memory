@@ -1,6 +1,6 @@
 # 開発コンテナのCodex / Google Cloud環境
 
-この開発コンテナには、Node.js開発に加えてOpenAI Codex CLI、GitHub CLI（gh）、Google Cloud CLI（gcloud）、Firebase CLI、jq、xz-utilsを導入しています。Turso CLIは使用しません。
+この開発コンテナには、Node.js開発に加えてOpenAI Codex CLI、GitHub CLI（gh）、Google Cloud CLI（gcloud）、Firebase CLI、`nc`（netcat-openbsd）、jq、xz-utilsを導入しています。Turso CLIは使用しません。
 
 ## 初回利用
 
@@ -13,6 +13,7 @@
        gh --version
        gcloud --version
        firebase --version
+       command -v nc
        jq --version
 
 3. Codexを起動し、表示された案内からChatGPTまたは利用可能な方法でサインインする。
@@ -21,6 +22,10 @@
 6. FirebaseのRules/Indexesを操作する場合は firebase login --no-localhost を実行する。
 
 Codex、gcloud、Firebase CLIの設定はnamed volumeへ保存され、コンテナ再作成後も再利用できます。APIキー、サービスアカウントJSON、PAT、maintenance tokenなどの認証情報はDockerfileやリポジトリへ記述しません。
+
+## VS Code終了時のコンテナ動作
+
+`.devcontainer/devcontainer.json` の `shutdownAction` は `none` に設定しています。VS Codeを閉じても開発コンテナは停止しません。コンテナと開発サーバーは動き続けるため、使い終わったらDockerビューから停止するか、リポジトリのルートで `docker compose -f .devcontainer/compose.yaml stop app` を実行してください。設定変更を適用するには「Dev Containers: Rebuild Container」を実行します。
 
 ## Google Cloud操作
 

@@ -19,9 +19,10 @@
 ## 開発環境
 
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
-- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
+- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、`nc`（`netcat-openbsd`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
 - VS Code Dev Containerでは`remote.autoForwardPorts=true`と`remote.autoForwardPortsSource="process"`を既定にし、Codex OAuthの動的loopback callback portを転送する。callback用の固定port/rangeを`forwardPorts`へ追加せず、自動検出されない場合は`.devcontainer/README.md`の手順で現在のportだけを一時転送する。
+- `.devcontainer/devcontainer.json` の `shutdownAction` は `none` とし、VS Codeを閉じても開発コンテナを停止しない。不要時は明示的に停止する。
 - Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存し、`long-term-memory-codex` volume で永続化する。
 - `/workspace/.codex/config.toml` で Codex CLI の TUI フッターにコンテキスト残量、5時間制限、長期使用制限を表示する。
 - 依存関係は `long-term-memory-node_modules` volume に保存する。ローカル開発では `AUTH_REQUIRED=0` を使い、本番の認証設定と混同しない。
@@ -35,7 +36,7 @@
 - Cloud Run runner imageには、起動時に読み込まれる`next.config.ts`とそのproject module依存を含める。Docker imageの`/api/health`起動確認をdeploy前の回帰ゲートとする。
 
 - YAML/JSON の構文を検証し、`docker compose -f .devcontainer/compose.yaml config --quiet` を実行する。
-- 開発コンテナをビルドし、`node`、`pnpm`、`codex`、`gh`、`gcloud`、`firebase`、`jq` のバージョンとvolumeの書き込み可否を確認する。GCP/Firebaseの認証はコンテナ内でCLIを使って行い、認証情報はnamed volumeに保存する。
+- 開発コンテナをビルドし、`node`、`pnpm`、`codex`、`gh`、`gcloud`、`firebase`、`nc`、`jq` の導入とvolumeの書き込み可否を確認する。GCP/Firebaseの認証はコンテナ内でCLIを使って行い、認証情報はnamed volumeに保存する。
 - 変更前後に `git diff --check` を実行する。
 - 完了を報告する前に、変更内容に応じたテストまたはビルドを実行し、結果を記録する。
 
