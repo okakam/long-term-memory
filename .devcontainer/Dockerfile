@@ -27,6 +27,7 @@ RUN apt-get update \
       gh \
       gnupg \
       make \
+      netcat-openbsd \
       openssh-client \
       procps \
       python3 \

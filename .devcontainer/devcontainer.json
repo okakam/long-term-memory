@@ -7,7 +7,7 @@
   "containerEnv": {
     "CODEX_HOME": "/home/node/.codex"
   },
-  "shutdownAction": "stopCompose",
+  "shutdownAction": "none",
   "overrideCommand": false,
   "forwardPorts": [3000, 3939],
   "portsAttributes": {

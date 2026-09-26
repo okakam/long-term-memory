@@ -8,9 +8,11 @@
 
 ## 0. 開発コンテナとCLI
 
-開発コンテナには Node.js 22、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
+開発コンテナには Node.js 22、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、`nc`（`netcat-openbsd`）、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
 
 VS Code Dev Containerでは`remote.autoForwardPorts=true`、`remote.autoForwardPortsSource="process"`を既定にして、Codex OAuthの動的loopback callback listenerを自動転送する。自動検出されない場合はログイン中のcallback portだけをPortsパネルから一時転送する。固定callback portやport rangeは公開しない。
+
+`.devcontainer/devcontainer.json` の `shutdownAction` は `none` とし、VS Codeを閉じても開発コンテナを停止しない。不要になったコンテナは明示的に停止する。
 
 Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret Managerは `gcloud` コマンドで実行する。FirebaseのFirestore Rules/Indexes適用は `firebase deploy --only firestore` を使用する。サービスアカウントJSON、APIキー、PAT、maintenance tokenをDockerfile・ソース・実在`.env`へ記載しない。
 
