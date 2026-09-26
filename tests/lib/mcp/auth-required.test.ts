@@ -89,6 +89,35 @@ test('member PAT も project 指定なしで tools/list できる', async () => 
   } finally { db.close(); }
 });
 
+test('list_projects は memory のない owner/member project だけを内部 UID なしで返す', async () => {
+  process.env.AUTH_REQUIRED = '1';
+  const { db, store } = await setup();
+  try {
+    await store.createProject('member-project', 'other-user', '2026-09-26T01:00:00.000Z');
+    await store.addMember('member-project', 'user-1', 'member');
+    await store.createProject('unrelated-project', 'other-user', '2026-09-26T02:00:00.000Z');
+
+    const request = async (userId: string, id: number) => {
+      const pat = await createPat(userId, userId);
+      const response = await handleMcpRequest(new Request('https://example.test/api/mcp', {
+        method: 'POST',
+        headers: { authorization: 'Bearer ' + pat.token },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'list_projects', arguments: {} } }),
+      }), { mode: 'stateless', service });
+      expect(response.status).toBe(200);
+      return JSON.parse((await response.json()).result.content[0].text) as unknown;
+    };
+
+    expect(await request('user-1', 5)).toEqual([
+      { project_id: 'secure-project', role: 'owner', created_at: expect.any(String), updated_at: expect.any(String) },
+      { project_id: 'member-project', role: 'member', created_at: '2026-09-26T01:00:00.000Z', updated_at: '2026-09-26T01:00:00.000Z' },
+    ]);
+    expect(await request('member-1', 6)).toEqual([
+      { project_id: 'secure-project', role: 'member', created_at: expect.any(String), updated_at: expect.any(String) },
+    ]);
+  } finally { db.close(); }
+});
+
 test('MCPの既定セッションはユーザー間で認証コンテキストを共有しない', async () => {
   process.env.AUTH_REQUIRED = '1';
   const { db, store } = await setup();

@@ -79,6 +79,19 @@ test('local-session は request ごとの service context を更新する', asyn
   expect((await second.json()).result.content[0].text).toContain('beta');
 });
 
+test('local mode の list_projects は service の summary を維持する', async () => {
+  const summary = { id: 'local-project', count: 2, updated_at: '2026-09-26T03:00:00.000Z', shared: false };
+  const response = await handleMcpRequest(new Request('https://example.test/api/mcp', {
+    method: 'POST',
+    body: JSON.stringify({ jsonrpc: '2.0', id: 14, method: 'tools/call', params: { name: 'list_projects', arguments: {} } }),
+  }), {
+    mode: 'stateless',
+    service: { listProjects: () => [summary] } as unknown as MemoryService,
+  });
+  expect(response.status).toBe(200);
+  expect(JSON.parse((await response.json()).result.content[0].text)).toEqual([summary]);
+});
+
 test('notification は 202 で本文を返さない', async () => {
   const response = await call({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
   expect(response.status).toBe(202);
