@@ -164,6 +164,8 @@ git commit -m "feat: list accessible MCP projects"
 - Modify: `src/lib/telemetry/instrument.ts`
 - Modify: `src/lib/mcp/server.ts`
 - Modify: `tests/lib/mcp/tools.test.ts`
+- Modify: `tests/lib/mcp/schemas.test.ts`
+- Modify: `tests/lib/mcp/descriptions.test.ts`
 - Modify: `tests/lib/mcp/tools.read.shared.test.ts`
 - Modify: `tests/lib/mcp/tools.write.shared.test.ts`
 - Modify: `tests/lib/telemetry/instrument.test.ts`
@@ -175,11 +177,11 @@ git commit -m "feat: list accessible MCP projects"
 
 - [ ] **Step 1: tool scopeとtelemetryの失敗testを書く**
 
-一つのprincipalが`alpha`と`beta`へ連続save/searchでき、各mock service callが指定projectを受けることを確認する。未所属project、member reindex、shared writeの不足条件ではserviceを呼ばず、JSON-RPC `isError: true` のtool errorを返すことを追加する。HTTPは有効な`tools/call` requestへのprotocol応答として200のままにする。instrument testではsuccess/failureともtop-level `project_id`を記録し、`list_projects`がglobal/metaとして扱われることを確認する。
+一つのprincipalが`alpha`と`beta`へ連続save/searchでき、各mock service callが指定projectを受けることを確認する。未所属project、member reindex、shared writeの不足条件ではserviceを呼ばず、JSON-RPC `isError: true` のtool errorを返すことを追加する。HTTPは有効な`tools/call` requestへのprotocol応答として200のままにする。`schemas.test.ts`では全scope toolのrequired top-level idと`ReindexInput`を固定し、`descriptions.test.ts`と既存tool testsのquery/argumentsを新contractへ移行する。instrument testではsuccess/failureともtop-level `project_id`を記録し、`list_projects`がglobal/metaとして扱われることを確認する。
 
 - [ ] **Step 2: testが失敗することを確認する**
 
-Run: `pnpm exec vitest run tests/lib/mcp/tools.test.ts tests/lib/mcp/tools.read.shared.test.ts tests/lib/mcp/tools.write.shared.test.ts tests/lib/telemetry/instrument.test.ts`
+Run: `pnpm exec vitest run tests/lib/mcp/tools.test.ts tests/lib/mcp/schemas.test.ts tests/lib/mcp/descriptions.test.ts tests/lib/mcp/tools.read.shared.test.ts tests/lib/mcp/tools.write.shared.test.ts tests/lib/telemetry/instrument.test.ts`
 
 Expected: handlerが固定`ctx.projectId`を使うためFAIL。
 
@@ -193,7 +195,7 @@ Expected: handlerが固定`ctx.projectId`を使うためFAIL。
 
 - [ ] **Step 5: focused testを通す**
 
-Run: `pnpm exec vitest run tests/lib/mcp/tools.test.ts tests/lib/mcp/tools.read.shared.test.ts tests/lib/mcp/tools.write.shared.test.ts tests/lib/telemetry/instrument.test.ts`
+Run: `pnpm exec vitest run tests/lib/mcp/tools.test.ts tests/lib/mcp/schemas.test.ts tests/lib/mcp/descriptions.test.ts tests/lib/mcp/tools.read.shared.test.ts tests/lib/mcp/tools.write.shared.test.ts tests/lib/telemetry/instrument.test.ts`
 
 Expected: PASS。
 
