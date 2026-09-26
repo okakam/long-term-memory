@@ -29,6 +29,7 @@ RUN apt-get update \
       make \
       netcat-openbsd \
       openssh-client \
+      openssh-server \
       procps \
       python3 \
       jq \
@@ -45,6 +46,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
       google-cloud-cli \
+    && rm -f /etc/ssh/ssh_host_* \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
     && corepack install --global pnpm \
@@ -52,10 +54,22 @@ RUN apt-get update \
     && npm install --global firebase-tools \
     && npm cache clean --force
 
+COPY .devcontainer/start-devcontainer-sshd /usr/local/bin/start-devcontainer-sshd
+
+RUN chmod 0755 /usr/local/bin/start-devcontainer-sshd \
+    && mkdir -p /etc/ssh/sshd_config.d \
+    && printf '%s\n' \
+      'PasswordAuthentication no' \
+      'KbdInteractiveAuthentication no' \
+      'PermitRootLogin no' \
+      > /etc/ssh/sshd_config.d/99-devcontainer.conf
+
 WORKDIR /workspace
 
 # named volume を node ユーザーで書き込めるよう、マウント先を先に作る。
 RUN mkdir -p /workspace/node_modules /workspace/.long-term-memory /home/node/.codex /home/node/.config /pnpm/.corepack \
     && chown -R node:node /workspace /home/node/.codex /home/node/.config /pnpm
+
+EXPOSE 22
 
 CMD ["sleep", "infinity"]

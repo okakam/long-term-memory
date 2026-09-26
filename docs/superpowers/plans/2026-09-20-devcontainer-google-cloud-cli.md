@@ -16,7 +16,7 @@
 - Cloud Run runtimeはApplication Default Credentialsを使い、サービスアカウントキーを作成・保存しない。
 - Markdown本文はGCS、metadata・認可はFirestore、検索cacheは `/tmp` SQLiteとする。
 - `main`と`develop`へは直接pushせず、featureブランチとPull Requestを使う。
-- ローカルDocker buildは実施せず、Compose構文検証と静的確認を実施する。
+- ローカルDocker buildは利用可能な環境で実施し、利用できない場合はCompose構文検証と静的確認を実施する。
 
 ---
 
@@ -52,10 +52,25 @@
 **Files:**
 - Verify: changed YAML/JSON/Markdown/Dockerfile files
 
-- [ ] `docker compose -f .devcontainer/compose.yaml config --quiet`を実行する（現在の検証環境にDocker CLIがないため未実施）。
+- [x] `docker compose -f .devcontainer/compose.yaml config --quiet`を実行する。
 - [x] `git diff --check`を実行する。
-- [x] Docker CLIが利用できないためDockerfile buildを未実施として記録する。
+- [x] Dockerfile buildを実行する。
 - [x] 認証情報、秘密値、実在`.env`が差分に含まれないことを確認する。
+
+### Task 4: 開発用 sshd を追加する
+
+**Files:**
+- Modify: `.devcontainer/Dockerfile`
+- Modify: `.devcontainer/compose.yaml`
+- Create: `.devcontainer/start-devcontainer-sshd`
+- Modify: `.dockerignore`
+- Modify: `.devcontainer/README.md`
+- Modify: `docs/reproduction-spec.md`
+- Modify: `AGENTS.md`
+
+- [x] `openssh-server`をインストールし、起動時に `/run/sshd` とホスト鍵を準備する。
+- [x] Composeのroot PID 1でsshdをforeground起動し、通常のDev Container操作は`node`ユーザーのまま維持する。
+- [x] SSHポートをホストの`127.0.0.1:2222`へ限定公開し、認証情報をリポジトリへ追加しない。
 
 ## 検証結果
 
@@ -63,4 +78,7 @@
 - `pnpm lint`: passed。
 - JSON構文検証: `.devcontainer/devcontainer.json`、`firebase.json`、`firestore.indexes.json` passed。
 - `git diff --check`: passed。
-- Docker Compose/Dockerfile build: Docker CLIが検証環境にないため未実施。Dev Container rebuild後に `node`、`pnpm`、`codex`、`gh`、`gcloud`、`firebase`、`jq`のバージョン確認を行う。
+- Docker Compose構文検証: passed。
+- Dockerfile build: passed。`openssh-server`を含むイメージを生成できた。
+- 起動確認: passed。コンテナ内の`/usr/sbin/sshd` listenerと`127.0.0.1:2222->22`公開を確認した。
+- CLI/volume確認: `node`、`pnpm`、`codex`、`gh`、`gcloud`、`firebase`、`nc`、`jq`の導入とnamed volumeの書き込みを確認した。
