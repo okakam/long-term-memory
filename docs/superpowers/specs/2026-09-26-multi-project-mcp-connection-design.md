@@ -6,7 +6,7 @@
 
 ## 背景と完了条件
 
-現行の MCP endpoint は `POST /api/mcp?project_id=<slug>` であり、connection ごとに一つの project を `ToolContext` へ固定する。このため、複数 project を扱うには MCP 設定を重複して作る必要がある。
+変更前の MCP endpoint は `POST /api/mcp?project_id=<slug>` であり、connection ごとに一つの project を `ToolContext` へ固定していた。このため、複数 project を扱うには MCP 設定を重複して作る必要があった。
 
 完了時には、次を満たす。
 

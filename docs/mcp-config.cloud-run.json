@@ -2,7 +2,7 @@
   "mcpServers": {
     "long-term-memory": {
       "type": "http",
-      "url": "${MCP_PUBLIC_URL}/api/mcp?project_id=__shared__",
+      "url": "${MCP_PUBLIC_URL}/api/mcp",
       "headers": {
         "Authorization": "Bearer ${LTM_MCP_TOKEN}",
         "X-LTM-Maintenance-Token": "${LTM_MAINTENANCE_TOKEN}"

@@ -199,7 +199,7 @@ Run: `pnpm exec vitest run tests/lib/mcp/tools.test.ts tests/lib/mcp/schemas.tes
 
 Expected: PASS。
 
-- [ ] **Step 6: commitする**
+- [x] **Step 6: commitする**
 
 ```bash
 git add src/lib/mcp/tools src/lib/mcp/server.ts src/lib/telemetry/instrument.ts tests/lib/mcp tests/lib/telemetry/instrument.test.ts
@@ -211,38 +211,50 @@ git commit -m "feat: scope MCP tools by project input"
 **Files:**
 
 - Modify: `README.md`
+- Modify: `AGENTS.md`
 - Modify: `docs/reproduction-spec.md`
 - Modify: `docs/post-mcp-setup.md`
 - Modify: `docs/mcp-config.cloud-run.json`
 - Modify: `docs/superpowers/specs/2026-09-21-mcp-oauth-codex-login-design.md`
 - Modify: `docs/superpowers/specs/2026-09-24-project-management-and-ui-design.md`
+- Modify: `docs/superpowers/specs/2026-09-26-multi-project-mcp-connection-design.md`
 - Modify: `docs/superpowers/plans/2026-09-21-mcp-oauth-codex-login.md`
 - Modify: `docs/superpowers/plans/2026-09-24-project-management-and-ui.md`
 - Modify: `.agents/skills/long-term-memory/SKILL.md`
+- Modify: `skills/long-term-memory/SKILL.md`
+- Modify: `scripts/curator/ltm-shared-curator.mcp.json`
+- Modify: `skills/shared-memory-curator/SKILL.md`
+- Modify: `scripts/cloud-run-smoke.ts`
+- Modify: `scripts/curator/export-remote-snapshot.ts`
 - Modify: `tests/docs/post-mcp-setup.test.ts`
+- Modify: `tests/curator/remote-snapshot.test.ts`
+- Create: `tests/curator/curator-skill.test.ts`
+- Modify: `tests/deploy/task8.test.ts`
 
 **Interfaces:**
 
 - Consumes: Tasks 1–4と本設計書。
-- Produces: URL queryなしの公開手順、tool argumentによるscope選択、Dashboard membershipを唯一のproject許可設定とする運用文書。
+- Produces: URL queryなしの公開手順とruntime caller、tool argumentによるscope選択、Dashboard membershipを唯一のproject許可設定とする運用文書。
 
-- [ ] **Step 1: documentation regression testを更新して失敗させる**
+- [x] **Step 1: documentation and caller contract testsを更新して失敗させる**
 
-`codex mcp add` URLが`/api/mcp`であること、`list_projects`後にtool argumentの`project_id`を使うこと、URL queryの`project_id`例がないことを追加する。
+`codex mcp add` URLが`/api/mcp`であること、`list_projects`後にtool argumentの`project_id`を使うこと、URL queryの`project_id`例がないことを追加する。Cloud Run smokeとcurator snapshot testにはqueryなしendpoint、unscoped `list_projects`、project tool argumentsのscopeを追加し、`isError` resultを失敗として扱うことも固定する。shared curator skillには`__shared__`をtool argumentで指定する契約を追加する。
 
-- [ ] **Step 2: documentation testが失敗することを確認する**
+- [x] **Step 2: docs and caller testsが失敗することを確認する**
 
-Run: `pnpm exec vitest run tests/docs/post-mcp-setup.test.ts`
+Run: `pnpm exec vitest run tests/docs/post-mcp-setup.test.ts tests/curator/remote-snapshot.test.ts tests/curator/curator-skill.test.ts tests/deploy/task8.test.ts`
 
-Expected: 現在の手順がURL queryを案内するためFAIL。
+Expected: 現在の手順・curator config・smoke/snapshotがURL queryまたは固定project scopeを使うためFAIL。
 
-- [ ] **Step 3: 全ての正本と例を更新する**
+- [x] **Step 3: 全ての正本とcaller例を更新する**
 
-READMEとsetup guideの`mcp add`を`/api/mcp`へ変更する。Dashboardでmembershipを設定する手順は維持し、MCP toolが`list_projects`で選んだtop-level `project_id`を使うと記載する。curator JSONからURL queryを削除し、shared targetはtool argumentとして示す。OAuth/project managementの既存設計・計画の旧前提を本設計へ参照更新する。skill sourceの「project_idはMCP URL」及びcross-project endpoint記述を更新し、`node scripts/sync-embedded-docs.mjs`で埋込先を同期する。
+READMEとsetup guideの`mcp add`を`/api/mcp`へ変更する。Dashboardでmembershipを設定する手順は維持し、MCP toolが`list_projects`で選んだtop-level `project_id`を使うと記載する。curator JSONからURL queryを削除し、shared targetはtool argumentとして示す。shared curator skillは`list_projects`を無引数で呼び、対象ごとのreadにproject IDを、shared read/writeには`project_id: "__shared__"`を付けるよう更新する。Cloud Run smokeはunscoped `list_projects`で指定project membershipを確認し、各scope toolへtop-level `project_id`を加え、MCP resultの`isError`を失敗として扱う。remote snapshotは実際のproject membership viewを読み、listはunscoped、index/getは対象`project_id`をargumentsへ加える。OAuth/project managementの既存設計・計画の旧前提を本設計へ参照更新する。正本`skills/long-term-memory/SKILL.md`とrepository内agent skill `.agents/skills/long-term-memory/SKILL.md`の「project_idはMCP URL」及びcross-project endpoint記述を更新し、`node scripts/sync-embedded-docs.mjs`で埋込先を同期する。
 
-- [ ] **Step 4: documentation testを通す**
+`AGENTS.md`のCloud architecture項目も新しいquery-free endpointとtool argument単位のscope選択に合わせる。
 
-Run: `pnpm exec vitest run tests/docs/post-mcp-setup.test.ts`
+- [x] **Step 4: focused docs and caller testsを通す**
+
+Run: `pnpm exec vitest run tests/docs/post-mcp-setup.test.ts tests/curator/remote-snapshot.test.ts tests/curator/curator-skill.test.ts tests/deploy/task8.test.ts`
 
 Expected: PASS。
 
@@ -255,8 +267,8 @@ Expected: 全commandが成功する。Cloud Run/Firebase/GCS実環境smokeは資
 - [ ] **Step 6: commitする**
 
 ```bash
-git add README.md docs .agents/skills/long-term-memory/SKILL.md tests/docs/post-mcp-setup.test.ts
-git commit -m "docs: document multi-project MCP connection"
+git add README.md AGENTS.md docs .agents/skills/long-term-memory/SKILL.md skills/long-term-memory/SKILL.md skills/shared-memory-curator/SKILL.md scripts/curator/ltm-shared-curator.mcp.json scripts/cloud-run-smoke.ts scripts/curator/export-remote-snapshot.ts tests/docs/post-mcp-setup.test.ts tests/curator/remote-snapshot.test.ts tests/curator/curator-skill.test.ts tests/deploy/task8.test.ts
+git commit -m "fix: migrate MCP scripts to project-scoped calls"
 ```
 
 ## Plan Self-Review

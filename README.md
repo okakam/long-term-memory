@@ -4,11 +4,11 @@ Markdownを正本にする長期記憶アプリケーションです。Cloud Run
 
 ## Codexから接続する
 
-`https://ltm.okakam.net`でログインして利用可能なプロジェクトのslugを確認し、次を実行します。
+次のURLを一度だけ登録してOAuthログインします。利用可能なプロジェクトは`list_projects`で確認し、各tool callのtop-level `project_id`で対象を選びます。projectの作成とmember管理はDashboardで行います。
 
 ```bash
 codex mcp add long-term-memory \
-  --url 'https://ltm.okakam.net/api/mcp?project_id=<project-slug>'
+  --url 'https://ltm.okakam.net/api/mcp'
 codex mcp login long-term-memory
 ```
 

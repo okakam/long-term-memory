@@ -493,12 +493,19 @@ git commit -m "feat: resume OAuth authorization after Firebase login"
 test('OAuth Bearerはmembershipを再評価し、credentialなしはresource metadata付き401になる', async () => {
   process.env.AUTH_REQUIRED = '1';
   process.env.MCP_OAUTH_ENABLED = '1';
-  const missing = await request();
+  const missing = await handleMcpRequest(request(undefined, {
+    jsonrpc: '2.0', id: 1, method: 'tools/list', params: {},
+  }), { mode: 'stateless', service });
   expect(missing.status).toBe(401);
   expect(missing.headers.get('www-authenticate')).toContain('oauth-protected-resource/api/mcp');
 
-  const denied = await request({ authorization: 'Bearer ' + outsiderAccessToken });
-  expect(denied.status).toBe(403);
+  const outsiderToken = await createOAuthToken(oauth, 'outsider');
+  const denied = await handleMcpRequest(request(outsiderToken, {
+    jsonrpc: '2.0', id: 2, method: 'tools/call',
+    params: { name: 'get_memory', arguments: { project_id: 'secure-project', id_or_name: 'private-memory' } },
+  }), { mode: 'stateless', service });
+  expect(denied.status).toBe(200);
+  expect((await denied.json() as { result?: { isError?: boolean } }).result?.isError).toBe(true);
 });
 ```
 
@@ -525,7 +532,7 @@ export async function requireMcpPrincipal(req: Request): Promise<McpPrincipal> {
 
 - [ ] **Step 4: transportとCORSを更新する**
 
-`handleMcpRequest`は`MCP_OAUTH_ENABLED=1`かつ認証エラー時にOAuth metadata付き401を返す。OAuth scope不足だけは403/`insufficient_scope`を返す。shared write判定は`principal.credentialKind === 'pat'`、`principal.userId === LTM_CURATOR_USER_ID`、`grantsSharedWrite(maintenanceToken)`の三条件すべてを要求し、OAuth credentialではcurator UIDとmaintenance tokenを持っていても403にする。その後に`assertProjectAccess`、tool contextを評価する。`canWriteShared`にも同じ`credentialKind === 'pat'`条件を入れる。stateless session keyは`credentialId`を含め、別OAuth credentialのcontextを共有しない。
+`handleMcpRequest`は`MCP_OAUTH_ENABLED=1`かつprincipal不在・無効時にOAuth metadata付き401を返す。OAuth scope不足だけは403/`insufficient_scope`を返す。shared write判定は`principal.credentialKind === 'pat'`、`principal.userId === LTM_CURATOR_USER_ID`、`grantsSharedWrite(maintenanceToken)`の三条件すべてを要求する。その後tool handlerが`requireProjectAccess`を評価し、project membership/role不足やshared gate不足はHTTP 200のMCP tool error (`isError: true`) として返す。`canWriteShared`にも同じ`credentialKind === 'pat'`条件を入れる。stateless session keyは`credentialId`を含め、別OAuth credentialのcontextを共有しない。
 
 `OPTIONS /api/mcp`は既存`Authorization`を維持し、OAuth専用の秘密headerを追加しない。GET/DELETEの405契約も変えない。
 
@@ -654,12 +661,12 @@ Expected: FAIL。OAuth feature flagとCodex OAuth導入手順がまだない。
 
 `docs/reproduction-spec.md`を、Firebase sessionによるbrowser本人確認、DCR/PKCE OAuth、hash保存のopaque credential、requestごとのmembership再評価、OAuth grant失効、PATの限定用途へ更新する。local既定でOAuthをoffとする理由も記録する。
 
-`docs/post-mcp-setup.md`の一般Codex手順を次へ置き換える。既存の`--bearer-token-env-var LTM_MCP_TOKEN`設定を削除してからOAuth loginを実行する。`project_id`には利用者がアクセスを持つproject slugを入れる。
+`docs/post-mcp-setup.md`の一般Codex手順を次へ置き換える。既存の`--bearer-token-env-var LTM_MCP_TOKEN`設定を削除してからOAuth loginを実行する。projectは接続URLに固定しない。`list_projects`で選択可能projectを確認し、その他15 toolsの各callで利用者がアクセスを持つslugをtop-level `project_id`として渡す。このscope契約は`docs/superpowers/specs/2026-09-26-multi-project-mcp-connection-design.md`で更新された。
 
 ```bash
 codex mcp remove long-term-memory
 codex mcp add long-term-memory \
-  --url "https://ltm.okakam.net/api/mcp?project_id=<project-slug>"
+  --url "https://ltm.okakam.net/api/mcp"
 codex mcp login long-term-memory
 ```
 
@@ -763,7 +770,7 @@ curl --fail --silent --show-error \
 ```bash
 codex mcp remove long-term-memory
 codex mcp add long-term-memory \
-  --url "https://ltm.okakam.net/api/mcp?project_id=<project-slug>"
+  --url "https://ltm.okakam.net/api/mcp"
 codex mcp login long-term-memory
 ```
 
