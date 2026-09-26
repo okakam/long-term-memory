@@ -25,7 +25,7 @@
 - query付き旧URLが黙って別scopeを選ばず、明確に400で更新を要求すること（Task 2）。
 - memoryが無いprojectも`list_projects`に出て、owner/member以外は出ないこと（Task 3）。
 - 同一credentialが二つのprojectを連続操作しても、各service呼出し・telemetryが指定scopeを使うこと（Task 4）。
-- `project_id`を省略、slug規則違反、未所属projectを指定した場合にread/writeともserviceへ届かないこと（Task 1, 4）。
+- `project_id`を省略、slug規則違反、未所属projectを指定した場合にread/writeともserviceへ届かず、MCP tool errorを返すこと（Task 1, 4）。
 - session mode、shared write、owner-only reindexで固定projectや以前のrequestのmaintenance stateを再利用しないこと（Task 2, 4）。
 
 ---
@@ -125,7 +125,7 @@ git commit -m "feat: make MCP transport project-neutral"
 **Interfaces:**
 
 - Consumes: `AuthStoreLike.listAccessibleProjects(userId)`。
-- Produces: `list_projects()`が`project_id`、`role`、`created_at`、`updated_at`を返す契約。local modeはserviceのproject summaryを返す既存挙動を維持する。
+- Produces: authenticated `list_projects()`が`project_id`、`role`、`created_at`、`updated_at`だけを返す契約（内部`owner_user_id`は公開しない）。local modeはserviceのproject summaryを返す既存挙動を維持する。
 
 - [ ] **Step 1: list_projectsの失敗testを書く**
 
@@ -139,7 +139,7 @@ Expected: 現在はmemory serviceの一覧でfilterするため空projectがな�
 
 - [ ] **Step 3: meta toolを実装する**
 
-認証済みの場合は`getAuthStore().listAccessibleProjects(ctx.principal.userId)`を直接返す。memory countを認可判断又は一覧条件に使わない。tool descriptionを「最初に実行して対象`project_id`を選ぶ」案内へ変更する。
+認証済みの場合は`getAuthStore().listAccessibleProjects(ctx.principal.userId)`を読み、結果を`project_id`、`role`、`created_at`、`updated_at`へ明示的にmapする。`owner_user_id`をMCP応答へ含めず、memory countを認可判断又は一覧条件に使わない。tool descriptionを「最初に実行して対象`project_id`を選ぶ」案内へ変更する。
 
 - [ ] **Step 4: focused testを通す**
 
@@ -175,7 +175,7 @@ git commit -m "feat: list accessible MCP projects"
 
 - [ ] **Step 1: tool scopeとtelemetryの失敗testを書く**
 
-一つのprincipalが`alpha`と`beta`へ連続save/searchでき、各mock service callが指定projectを受けることを確認する。未所属project、member reindex、shared writeの不足条件ではserviceを呼ばないことを追加する。instrument testではsuccess/failureともtop-level `project_id`を記録し、`list_projects`がglobal/metaとして扱われることを確認する。
+一つのprincipalが`alpha`と`beta`へ連続save/searchでき、各mock service callが指定projectを受けることを確認する。未所属project、member reindex、shared writeの不足条件ではserviceを呼ばず、JSON-RPC `isError: true` のtool errorを返すことを追加する。HTTPは有効な`tools/call` requestへのprotocol応答として200のままにする。instrument testではsuccess/failureともtop-level `project_id`を記録し、`list_projects`がglobal/metaとして扱われることを確認する。
 
 - [ ] **Step 2: testが失敗することを確認する**
 

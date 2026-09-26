@@ -44,13 +44,13 @@ transport は request ごとに OAuth access token 又は PAT から principal �
 | `__shared__` read | 通常 principal でも可 |
 | `__shared__` write / `reindex` | curator UID の PAT、maintenance token、既存 shared maintenance 条件 |
 
-`AUTH_REQUIRED=0` の local mode では既存の合成 local user と service を使う。production では principal 不在を従来どおり401、membership 又は role 不足を403として扱う。membership 削除、owner 降格、grant/PAT 失効は次の tool invocation から反映される。
+`AUTH_REQUIRED=0` の local mode では既存の合成 local user と service を使う。production では Bearer principal 不在・無効を従来どおり HTTP 401 とし、membership 又は tool role 不足は JSON-RPC tool error (`isError: true`) として返す。Streamable HTTP の有効な `tools/call` request自体はHTTP 200で応答する。membership削除、owner降格、grant/PAT失効は次のtool invocationから反映される。
 
 MCP session を使用する mode でも principal、maintenance token、project を session state へ固定しない。各 HTTP request で principal と maintenance token を読み、各 tool invocation で project を認可する。
 
 ## 一覧・telemetry・Dashboard
 
-`list_projects` は認証済み利用者では Firestore の `listAccessibleProjects(userId)` を正本として返す。memory count は一覧条件に使わず、空 project も返す。local mode は既存の service summary を維持する。
+`list_projects` は認証済み利用者では Firestore の `listAccessibleProjects(userId)` を正本として返す。返却する認証済みproject viewは `project_id`、`role`、`created_at`、`updated_at` のみとし、`owner_user_id`などの内部UIDは公開しない。memory count は一覧条件に使わず、空 project も返す。local mode は既存の service summary を維持する。
 
 `project_id` は `assertProjectId` と同じ slug 及び `__shared__` の検証規則を使う。read tool の `include_shared`、shared read の上限、名前衝突時に project 側を優先する挙動は維持する。tool description には `list_projects` の後に対象 `project_id` を渡すことを明記する。
 
