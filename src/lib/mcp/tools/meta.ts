@@ -17,10 +17,11 @@ export function registerMetaTools(server: McpServer, ctx: ToolContext): void {
     })));
   });
   server.registerTool('reindex', {
-    description: 'Rebuild the SQLite index from markdown files. Useful after external edits.',
+    description: 'Call list_projects first, then pass the chosen project_id as a top-level argument. Rebuild that project’s SQLite index from markdown files. Useful after external edits.',
     inputSchema: ReindexInput,
-  }, async () => {
-    await Promise.resolve(ctx.svc.reindex(ctx.projectId));
+  }, async ({ project_id }) => {
+    await ctx.requireProjectAccess(project_id, 'maintain');
+    await Promise.resolve(ctx.svc.reindex(project_id));
     return text('reindex complete');
   });
 }

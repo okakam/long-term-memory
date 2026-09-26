@@ -14,8 +14,6 @@ export interface ProjectAccessOptions {
 }
 
 export interface ToolContext {
-  /** @deprecated Kept only until all tool handlers use their input project_id. */
-  projectId: string;
   svc: MemoryServiceLike;
   canWriteShared?: boolean;
   principal?: McpPrincipal;

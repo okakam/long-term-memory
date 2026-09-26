@@ -8,7 +8,7 @@ async function call(service: MemoryService, token?: string) {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token) headers['x-ltm-maintenance-token'] = token;
   const response = await handleMcpRequest(new Request(
-    'https://example.test/api/mcp?project_id=__shared__',
+    'https://example.test/api/mcp',
     {
       method: 'POST',
       headers,
@@ -18,7 +18,7 @@ async function call(service: MemoryService, token?: string) {
         method: 'tools/call',
         params: {
           name: 'remember_user_fact',
-          arguments: { name: 'shared-fact', description: 'desc', body: 'body', entities: [{ name: 'Entity' }] },
+          arguments: { project_id: '__shared__', name: 'shared-fact', description: 'desc', body: 'body', entities: [{ name: 'Entity' }] },
         },
       }),
     },

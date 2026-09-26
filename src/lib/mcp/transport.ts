@@ -100,7 +100,6 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
     && (!authRequired()
       || (principal?.credentialKind === 'pat' && principal.userId === process.env.LTM_CURATOR_USER_ID));
   const ctx: ToolContext = {
-    projectId: '', // Removed when the remaining handlers adopt input.project_id in Task 4.
     svc: options.service ?? getMemoryService(),
     canWriteShared,
     principal,

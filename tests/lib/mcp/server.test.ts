@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 
 import { createMcpServer } from '@/lib/mcp/server';
 
-const context = { projectId: '', svc: {} as never, requireProjectAccess: async () => undefined };
+const context = { svc: {} as never, requireProjectAccess: async () => undefined };
 
 test('createMcpServer は 16 ツールを登録する', async () => {
   const server = createMcpServer(context);

@@ -49,7 +49,7 @@ test('MCP initialize と tools/call は aggregate telemetry を記録する', as
   } as unknown as MemoryService;
 
   const response = await handleMcpRequest(new Request(
-    'https://example.test/api/mcp?project_id=project',
+    'https://example.test/api/mcp',
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -57,7 +57,7 @@ test('MCP initialize と tools/call は aggregate telemetry を記録する', as
         jsonrpc: '2.0',
         id: 1,
         method: 'tools/call',
-        params: { name: 'get_memory', arguments: { id_or_name: 'private-memory', secret: 'TOKEN_VALUE' } },
+        params: { name: 'get_memory', arguments: { project_id: 'project', id_or_name: 'private-memory', secret: 'TOKEN_VALUE' } },
       }),
     },
   ), { mode: 'stateless', service });
@@ -65,8 +65,38 @@ test('MCP initialize と tools/call は aggregate telemetry を記録する', as
 
   const rows = telemetry.rows();
   expect(rows.map((row) => row.event)).toEqual(['connect', 'tool_call']);
-  expect(rows[0]).toMatchObject({ project_id: 'project', session_id: expect.any(String), tool: null, kind: null });
+  expect(rows[0]).toMatchObject({ project_id: '__global__', session_id: expect.any(String), tool: null, kind: null });
   expect(rows[1]).toMatchObject({ project_id: 'project', session_id: rows[0].session_id, tool: 'get_memory', kind: 'read', ok: 1 });
   expect(JSON.stringify(rows)).not.toContain('TOKEN_VALUE');
   expect(JSON.stringify(rows)).not.toContain('PRIVATE BODY');
+});
+
+test('失敗 tool と reindex は入力 project を、list_projects は global/meta を記録する', async () => {
+  vi.stubEnv('LTM_TELEMETRY', '1');
+  db = new Database(':memory:');
+  const telemetry = TelemetryStore.open(db);
+  setTelemetryStoreForTests(telemetry);
+  const service = {
+    get: vi.fn(() => { throw new Error('memory not found'); }),
+    listProjects: vi.fn(() => []),
+    reindex: vi.fn(),
+  } as unknown as MemoryService;
+  const request = async (name: string, args: object) => {
+    const response = await handleMcpRequest(new Request('https://example.test/api/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: name, method: 'tools/call', params: { name, arguments: args } }),
+    }), { mode: 'stateless', service });
+    expect(response.status).toBe(200);
+    return response.json() as Promise<{ result: { isError?: boolean } }>;
+  };
+  expect((await request('get_memory', { project_id: 'beta', id_or_name: 'missing', include_shared: false })).result.isError).toBe(true);
+  expect((await request('reindex', { project_id: 'alpha' })).result.isError).not.toBe(true);
+  expect((await request('list_projects', {})).result.isError).not.toBe(true);
+  const calls = telemetry.rows().filter((row) => row.event === 'tool_call');
+  expect(calls.map((row) => [row.tool, row.project_id, row.ok, row.kind])).toEqual([
+    ['get_memory', 'beta', 0, 'read'],
+    ['reindex', 'alpha', 1, 'meta'],
+    ['list_projects', '__global__', 1, 'meta'],
+  ]);
 });
