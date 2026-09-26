@@ -24,13 +24,6 @@ export interface ToolContext {
   sessionId?: string;
 }
 
-/** @deprecated The transport will stop reading project_id from URL query in Task 2. */
-export function extractProjectId(url: URL): string {
-  const value = url.searchParams.get('project_id');
-  if (!value) throw new Error('project_id is required (provide ?project_id=<slug> in the URL)');
-  return assertProjectId(value);
-}
-
 export function createProjectAccessGuard({ principal, maintenanceToken }: ProjectAccessOptions): RequireProjectAccess {
   return async (projectId, action) => {
     assertProjectId(projectId);

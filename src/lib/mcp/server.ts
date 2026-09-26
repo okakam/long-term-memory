@@ -11,7 +11,7 @@ export type { ToolContext } from './context';
 export function createMcpServer(ctx: ToolContext): McpServer {
   const server = new McpServer({ name: 'long-term-memory', version: '0.1.0' });
   instrumentRegistrar(server, undefined, undefined, {
-    projectId: ctx.projectId,
+    projectId: '__global__',
     sessionId: ctx.sessionId,
     maintenance: ctx.canWriteShared,
   });

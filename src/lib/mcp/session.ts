@@ -21,6 +21,7 @@ export interface McpSession {
   send(message: JSONRPCMessage, timeoutMs?: number): Promise<JSONRPCMessage | undefined>;
   acceptInitialize(message: JSONRPCMessage, timeoutMs?: number): Promise<JSONRPCMessage | undefined>;
   initialize(timeoutMs?: number): Promise<void>;
+  runWithContext<T>(ctx: ToolContext, operation: () => Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
 
@@ -40,11 +41,12 @@ let syntheticId = 0;
 export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const sessionId = randomUUID();
-  const sessionContext = { ...ctx, sessionId };
+  const sessionContext: ToolContext = { ...ctx, sessionId };
   const server = createMcpServer(sessionContext);
   const pending = new Map<string, Resolver>();
   let initialization: Promise<void> | null = null;
   let closed = false;
+  let contextQueue: Promise<void> = Promise.resolve();
 
   clientTransport.onmessage = (message) => {
     const id = messageId(message);
@@ -99,7 +101,7 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
     acceptInitialize: async (message, timeoutMs = 30_000) => {
       if (initialization) return session.send(message, timeoutMs);
       const responsePromise = session.send(message, timeoutMs).then(async (response) => {
-        await recordConnect({ projectId: sessionContext.projectId, sessionId });
+        await recordConnect({ projectId: '__global__', sessionId });
         return response;
       });
       initialization = responsePromise.then(() => undefined).catch((error) => {
@@ -123,12 +125,24 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
           },
         }, timeoutMs);
         await session.send({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
-        await recordConnect({ projectId: sessionContext.projectId, sessionId });
+        await recordConnect({ projectId: '__global__', sessionId });
       })().catch((error) => {
         initialization = null;
         throw error;
       });
       return initialization;
+    },
+    runWithContext: async (requestContext, operation) => {
+      const previous = contextQueue;
+      let release!: () => void;
+      contextQueue = new Promise<void>((resolve) => { release = resolve; });
+      await previous;
+      Object.assign(sessionContext, requestContext);
+      try {
+        return await operation();
+      } finally {
+        release();
+      }
     },
     close: async () => {
       if (closed) return;
@@ -148,7 +162,6 @@ const sessions = new Map<string, Promise<McpSession>>();
 
 export function getOrCreateSession(ctx: ToolContext): Promise<McpSession> {
   const key = JSON.stringify({
-    projectId: ctx.projectId,
     sharedWrite: ctx.canWriteShared === true,
     principal: ctx.principal
       ? [ctx.principal.userId, ctx.principal.credentialId ?? null, ctx.principal.credentialKind ?? null]

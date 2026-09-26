@@ -30,17 +30,17 @@ afterEach(async () => {
   await resetAuthStoreForTests();
 });
 
-test('AUTH_REQUIRED=1 の MCP は PAT と membership を要求する', async () => {
+test('AUTH_REQUIRED=1 の MCP は project なし tools/list に PAT を要求する', async () => {
   process.env.AUTH_REQUIRED = '1';
   const { db } = await setup();
   try {
-    const missing = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
+    const missing = await handleMcpRequest(new Request('https://example.test/api/mcp', {
       method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
     }), { mode: 'stateless', service });
     expect(missing.status).toBe(401);
 
     const pat = await createPat('user-1', 'test');
-    const allowed = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
+    const allowed = await handleMcpRequest(new Request('https://example.test/api/mcp', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + pat.token },
       body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
@@ -49,48 +49,43 @@ test('AUTH_REQUIRED=1 の MCP は PAT と membership を要求する', async () 
   } finally { db.close(); }
 });
 
-test('共有書き込みは curator principal と maintenance token の二重条件を要する', async () => {
+test('maintenance header の有無は protocol request の先行認可に使わない', async () => {
   process.env.AUTH_REQUIRED = '1';
   process.env.LTM_CURATOR_USER_ID = 'curator';
-  const { db, store } = await setup();
+  const { db } = await setup();
   try {
     const pat = await createPat('curator', 'curator');
-    const request = (maintenance?: string) => handleMcpRequest(new Request('https://example.test/api/mcp?project_id=__shared__', {
+    const request = (maintenance?: string) => handleMcpRequest(new Request('https://example.test/api/mcp', {
       method: 'POST',
       headers: {
         authorization: 'Bearer ' + pat.token,
         ...(maintenance ? { 'x-ltm-maintenance-token': maintenance } : {}),
       },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: {
-        name: 'remember_user_fact',
-        arguments: { name: 'shared-memory', description: 'd', body: 'b', entities: [{ name: 'Entity' }] },
-      } }),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} }),
     }), { mode: 'stateless', service });
     process.env.LTM_MAINTENANCE_TOKEN = 'maintenance';
     const denied = await request('wrong');
-    expect(denied.status).toBe(403);
+    expect(denied.status).toBe(200);
 
     const valid = await request('maintenance');
     expect(valid.status).toBe(200);
     delete process.env.LTM_MAINTENANCE_TOKEN;
-    void store;
   } finally { db.close(); }
 });
 
-test('reindexはproject owner以外のmemberには許可しない', async () => {
+test('member PAT も project 指定なしで tools/list できる', async () => {
   process.env.AUTH_REQUIRED = '1';
   const { db } = await setup();
   try {
     const pat = await createPat('member-1', 'member');
-    const response = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
+    const response = await handleMcpRequest(new Request('https://example.test/api/mcp', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + pat.token },
       body: JSON.stringify({
-        jsonrpc: '2.0', id: 4, method: 'tools/call',
-        params: { name: 'reindex', arguments: {} },
+        jsonrpc: '2.0', id: 4, method: 'tools/list', params: {},
       }),
     }), { mode: 'stateless', service });
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
   } finally { db.close(); }
 });
 
@@ -108,7 +103,7 @@ test('MCPの既定セッションはユーザー間で認証コンテキスト�
     await store.addMember('secure-project', 'user-2', 'member');
     const ownerPat = await createPat('user-1', 'owner');
     const memberPat = await createPat('user-2', 'member');
-    const request = (token: string, id: number) => handleMcpRequest(new Request('https://example.test/api/mcp?project_id=secure-project', {
+    const request = (token: string, id: number) => handleMcpRequest(new Request('https://example.test/api/mcp', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token },
       body: JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'list_projects', arguments: {} } }),

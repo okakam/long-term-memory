@@ -2,17 +2,11 @@ import { afterEach, expect, test, vi } from 'vitest';
 
 import type { AuthStoreLike, MemberRecord } from '@/lib/auth/store';
 import { resetAuthStoreForTests, setAuthStoreForTests } from '@/lib/auth/store';
-import { createProjectAccessGuard, extractMaintenanceToken, extractProjectId } from '@/lib/mcp/context';
+import { createProjectAccessGuard, extractMaintenanceToken } from '@/lib/mcp/context';
 
 afterEach(async () => {
   vi.unstubAllEnvs();
   await resetAuthStoreForTests();
-});
-
-test('移行期間中は URL query のproject_idを検証する', () => {
-  expect(extractProjectId(new URL('https://example.test/api/mcp?project_id=my-project'))).toBe('my-project');
-  expect(() => extractProjectId(new URL('https://example.test/api/mcp'))).toThrow('project_id is required');
-  expect(() => extractProjectId(new URL('https://example.test/api/mcp?project_id=../escape'))).toThrow();
 });
 
 test('project access は呼び出しごとに指定projectの現在のmembershipを確認する', async () => {

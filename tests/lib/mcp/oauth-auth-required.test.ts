@@ -77,8 +77,8 @@ async function createOAuthToken(oauth: OAuthService, userId: string): Promise<st
   return token.accessToken;
 }
 
-function request(projectId: string, token: string | undefined, message: object): Request {
-  return new Request(`https://example.test/api/mcp?project_id=${projectId}`, {
+function request(token: string | undefined, message: object): Request {
+  return new Request('https://example.test/api/mcp', {
     method: 'POST',
     headers: token ? { authorization: `Bearer ${token}` } : undefined,
     body: JSON.stringify(message),
@@ -92,9 +92,9 @@ afterEach(async () => {
   process.env = { ...originalEnv };
 });
 
-test('OAuth Bearerはmembershipを再評価し、credentialなしはresource metadata付き401になる', async () => {
+test('OAuth Bearerはqueryなしprotocol requestを認証し、credentialなしはresource metadata付き401になる', async () => {
   const { oauth } = await setup();
-  const missing = await handleMcpRequest(request('secure-project', undefined, {
+  const missing = await handleMcpRequest(request(undefined, {
       jsonrpc: '2.0', id: 1, method: 'tools/list', params: {},
   }), { mode: 'stateless', service });
   expect(missing.status).toBe(401);
@@ -102,27 +102,27 @@ test('OAuth Bearerはmembershipを再評価し、credentialなしはresource met
 
   const ownerToken = await createOAuthToken(oauth, 'owner-1');
   const memberToken = await createOAuthToken(oauth, 'member-1');
-  const owner = await handleMcpRequest(request('secure-project', ownerToken, {
-      jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'reindex', arguments: {} },
+  const owner = await handleMcpRequest(request(ownerToken, {
+      jsonrpc: '2.0', id: 2, method: 'tools/list', params: {},
   }), { mode: 'stateless', service });
   expect(owner.status).toBe(200);
 
-  const member = await handleMcpRequest(request('secure-project', memberToken, {
-      jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'reindex', arguments: {} },
+  const member = await handleMcpRequest(request(memberToken, {
+      jsonrpc: '2.0', id: 3, method: 'tools/list', params: {},
   }), { mode: 'stateless', service });
-  expect(member.status).toBe(403);
+  expect(member.status).toBe(200);
 
   await oauth.revokeToken(ownerToken);
-  const revoked = await handleMcpRequest(request('secure-project', ownerToken, {
+  const revoked = await handleMcpRequest(request(ownerToken, {
       jsonrpc: '2.0', id: 4, method: 'tools/list', params: {},
   }), { mode: 'stateless', service });
   expect(revoked.status).toBe(401);
   expect(revoked.headers.get('www-authenticate')).toContain('/.well-known/oauth-protected-resource/api/mcp');
 });
 
-test('Firebase ID token形式はMCP Bearerとして扱わず、OAuthはshared writeを許可しない', async () => {
+test('Firebase ID token形式はMCP Bearerとして扱わず、OAuthはmaintenance headerでもprotocol認証できる', async () => {
   const { oauth } = await setup();
-  const firebaseLike = await handleMcpRequest(request('secure-project', 'eyJhbGciOiJSUzI1NiJ9.firebase.id-token', {
+  const firebaseLike = await handleMcpRequest(request('eyJhbGciOiJSUzI1NiJ9.firebase.id-token', {
       jsonrpc: '2.0', id: 5, method: 'tools/list', params: {},
   }), { mode: 'stateless', service });
   expect(firebaseLike.status).toBe(401);
@@ -130,25 +130,22 @@ test('Firebase ID token形式はMCP Bearerとして扱わず、OAuthはshared wr
   process.env.LTM_CURATOR_USER_ID = 'curator';
   process.env.LTM_MAINTENANCE_TOKEN = 'maintenance';
   const curatorToken = await createOAuthToken(oauth, 'curator');
-  const sharedWrite = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=__shared__', {
+  const sharedWrite = await handleMcpRequest(new Request('https://example.test/api/mcp', {
       method: 'POST',
       headers: {
         authorization: `Bearer ${curatorToken}`,
         'x-ltm-maintenance-token': 'maintenance',
       },
       body: JSON.stringify({
-        jsonrpc: '2.0', id: 6, method: 'tools/call', params: {
-          name: 'remember_user_fact',
-          arguments: { name: 'shared', description: 'd', body: 'b', entities: [{ name: 'Entity' }] },
-        },
+        jsonrpc: '2.0', id: 6, method: 'tools/list', params: {},
       }),
   }), { mode: 'stateless', service });
-  expect(sharedWrite.status).toBe(403);
+  expect(sharedWrite.status).toBe(200);
 });
 
 test('principal resolverはPATとOAuthをcredential kind付きで区別する', async () => {
   const { oauth } = await setup();
   const oauthToken = await createOAuthToken(oauth, 'owner-1');
-  await expect(requireMcpPrincipal(request('secure-project', oauthToken, {})))
+  await expect(requireMcpPrincipal(request(oauthToken, {})))
     .resolves.toMatchObject({ userId: 'owner-1', credentialKind: 'oauth' });
 });
