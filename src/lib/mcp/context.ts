@@ -34,6 +34,7 @@ export function extractProjectId(url: URL): string {
 export function createProjectAccessGuard({ principal, maintenanceToken }: ProjectAccessOptions): RequireProjectAccess {
   return async (projectId, action) => {
     assertProjectId(projectId);
+    if (authRequired() && !principal) throw new UnauthorizedMcpError();
     if (projectId === SHARED_PROJECT_ID && action !== 'read') {
       if (!grantsSharedWrite(maintenanceToken)
         || (authRequired() && (principal?.credentialKind !== 'pat'
@@ -45,8 +46,7 @@ export function createProjectAccessGuard({ principal, maintenanceToken }: Projec
       return;
     }
     if (!authRequired()) return;
-    if (!principal) throw new UnauthorizedMcpError();
-    await assertProjectAccess(principal, projectId, action);
+    await assertProjectAccess(principal!, projectId, action);
   };
 }
 

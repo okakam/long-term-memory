@@ -52,6 +52,13 @@ test('shared write はcurator PATとmaintenance tokenが揃った場合だけ許
   await expect(oauth('__shared__', 'maintain')).rejects.toThrow('shared scope is read-only');
 });
 
+test('認証必須時のprincipal不在はshared writeでも401を返す', async () => {
+  vi.stubEnv('AUTH_REQUIRED', '1');
+  const requireProjectAccess = createProjectAccessGuard({ principal: undefined, maintenanceToken: null });
+
+  await expect(requireProjectAccess('__shared__', 'write')).rejects.toMatchObject({ status: 401 });
+});
+
 test('maintenance token は header だけから読む', () => {
   expect(extractMaintenanceToken(new Request('https://example.test?maintenance_token=bad', { headers: { 'X-LTM-Maintenance-Token': 'good' } }))).toBe('good');
   expect(extractMaintenanceToken(new Request('https://example.test?maintenance_token=bad'))).toBeNull();
