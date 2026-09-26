@@ -8,7 +8,9 @@
 
 ## 0. 開発コンテナとCLI
 
-開発コンテナには Node.js 22、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、`nc`（`netcat-openbsd`）、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
+開発コンテナには Node.js 22、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
+
+開発用 `sshd` はコンテナ起動時に root の PID 1 として foreground 起動し、ホストの `127.0.0.1:2222` からコンテナの `22` 番ポートへ接続できるようにする。パスワード・秘密鍵はイメージやリポジトリへ含めず、SSH認証は公開鍵の登録を前提とする。
 
 VS Code Dev Containerでは`remote.autoForwardPorts=true`、`remote.autoForwardPortsSource="process"`を既定にして、Codex OAuthの動的loopback callback listenerを自動転送する。自動検出されない場合はログイン中のcallback portだけをPortsパネルから一時転送する。固定callback portやport rangeは公開しない。
 
