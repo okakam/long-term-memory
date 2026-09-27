@@ -373,7 +373,7 @@ git commit -m "feat: redesign OAuth consent experience"
 
 - [ ] **Step 1: documentation regression testを書く**
 
-`tests/docs/post-mcp-setup.test.ts`に、OAuth利用前にDashboardでprojectを作成し、URLの`project_id`とmember/ownerの責務を確認する記述があることを追加する。
+`tests/docs/post-mcp-setup.test.ts`に、OAuth利用前にDashboardでprojectを作成し、queryなしMCP URL、tool argumentの`project_id`、member/ownerの責務を確認する記述があることを追加する。
 
 ```ts
 expect(document).toContain('プロジェクトを作成');
@@ -399,9 +399,9 @@ Expected: 全てPASS。native module又はsandbox制約で実行不能な場合�
 
 - [ ] **Step 5: production acceptance手順を実行する**
 
-mainへのrelease PR mergeとdeploy成功後、`https://ltm.okakam.net`でFirebaseログインし、Dashboardから`long-term-memory`をownerとして作成する。同じアカウントでOAuth loginを行い、`codex mcp add long-term-memory --url 'https://ltm.okakam.net/api/mcp?project_id=long-term-memory'`、`codex mcp login long-term-memory`、新しいCodex sessionの`/mcp verbose`を確認する。token、code、cookie、state、callback queryを記録しない。
+mainへのrelease PR mergeとdeploy成功後、`https://ltm.okakam.net`でFirebaseログインし、Dashboardからprojectをownerとして作成する。同じアカウントでOAuth loginを行い、`codex mcp add long-term-memory --url 'https://ltm.okakam.net/api/mcp'`、`codex mcp login long-term-memory`、`list_projects`、新しいCodex sessionの`/mcp verbose`を確認する。project scoped toolはtop-level `project_id`で対象projectを選択する。token、code、cookie、state、callback queryを記録しない。
 
-Expected: `long-term-memory: connected`、16 toolsが表示される。memberでは通常toolが利用でき、ownerのみ`reindex`が利用できる。未所属accountでは403で拒否される。
+Expected: `long-term-memory: connected`、16 toolsが表示される。memberでは通常toolが利用でき、ownerのみ`reindex`が利用できる。未所属accountによるproject scoped tool callはHTTP 200のMCP tool error (`isError: true`) で拒否される。
 
 - [ ] **Step 6: commitする**
 

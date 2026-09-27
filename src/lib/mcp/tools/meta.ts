@@ -8,18 +8,20 @@ import { json, text } from './util';
 
 export function registerMetaTools(server: McpServer, ctx: ToolContext): void {
   server.registerTool('list_projects', {
-    description: 'List all projects that have memories, with counts and last-update.',
+    description: 'Call this first to find accessible projects, then pass the chosen project_id to other tools.',
   }, async () => {
-    const projects = await ctx.svc.listProjects();
-    if (!ctx.principal) return json(projects);
-    const allowed = new Set((await (await getAuthStore()).listAccessibleProjects(ctx.principal.userId)).map((project) => project.project_id));
-    return json(projects.filter((project) => project.id === '__shared__' || allowed.has(project.id)));
+    if (!ctx.principal) return json(await ctx.svc.listProjects());
+    const projects = await (await getAuthStore()).listAccessibleProjects(ctx.principal.userId);
+    return json(projects.map(({ project_id, role, created_at, updated_at }) => ({
+      project_id, role, created_at, updated_at,
+    })));
   });
   server.registerTool('reindex', {
-    description: 'Rebuild the SQLite index from markdown files. Useful after external edits.',
+    description: 'Call list_projects first, then pass the chosen project_id as a top-level argument. Rebuild that project’s SQLite index from markdown files. Useful after external edits.',
     inputSchema: ReindexInput,
-  }, async () => {
-    await Promise.resolve(ctx.svc.reindex(ctx.projectId));
+  }, async ({ project_id }) => {
+    await ctx.requireProjectAccess(project_id, 'maintain');
+    await Promise.resolve(ctx.svc.reindex(project_id));
     return text('reindex complete');
   });
 }

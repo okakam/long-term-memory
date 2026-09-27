@@ -4,8 +4,9 @@
 
 ## 共通の前提
 
-- MCPサーバー名は `long-term-memory`、エンドポイントは `https://<Cloud RunのベースURL>/api/mcp?project_id=<project slug>` です。
-- 通常の利用では、所属するproject slugを`project_id`へ指定します。`__shared__`はcurator向けのread-only scopeであり、通常のクライアント設定には使いません。
+- MCPサーバー名は `long-term-memory`、エンドポイントは `https://<Cloud RunのベースURL>/api/mcp` です。URLに`project_id` queryは付けません。
+- 1つのMCP接続を登録し、`list_projects`で利用可能projectを確認します。それ以外の15 toolsは各callのtop-level `project_id`で対象を指定し、membershipとtool別権限はcallごとに再検証されます。
+- projectの作成とowner/member管理はDashboardで行います。`__shared__`はread-onlyで、curatorのwriteには許可済みPATとmaintenance tokenが必要です。
 - Codexの通常利用はDCR/PKCE OAuthで行い、PAT本文を入力・環境変数へ保存しません。ブラウザのFirebaseログインと同意画面を完了すると、Codexがaccess/refresh tokenを管理します。
 - PATは`/settings/tokens`で発行します。本文は発行直後に一度だけ表示され、Claude Code curator・CI・Cloud Run smokeの機械接続だけで使います。チャット、repository、ログへ貼り付けません。
 - OAuth接続は`/settings/tokens`の`Codex / OAuth 接続`から失効できます。失効後はOAuth grantのaccess tokenとrefresh tokenが使えなくなります。
@@ -13,13 +14,26 @@
 
 ## Dashboardでプロジェクトを作成する
 
-OAuth credentialは本人確認だけを表し、MCPで使う`project_id`へのアクセスはDashboardで管理するmembershipによってリクエストごとに再確認されます。初回のCodex接続前に、Firebaseでログインした状態で次を行ってください。
+OAuth credentialは本人確認だけを表し、MCPで使うprojectへのアクセスはDashboardで管理するmembershipによってtool callごとに再確認されます。初回のCodex接続前に、Firebaseでログインした状態で次を行ってください。
 
 1. `/dashboard`の「プロジェクト管理」でproject slugを入力し、プロジェクトを作成する。作成者は自動的に`owner`になります。
 2. 必要な場合だけ、同カードから登録済みの`@okakam.net`アカウントをメールアドレスで追加する。`owner`はmember追加、role変更、削除を行えます。最後の`owner`は削除又はmemberへの変更ができません。
-3. 作成したslugをMCP URLの`project_id`に指定する。OAuth同意はmembershipを作成・変更しません。
+3. 作成したprojectはMCPから`list_projects`を呼ぶと表示されます。接続URLにはprojectを指定せず、以後のtool callで対象を渡します。OAuth同意はmembershipを作成・変更しません。
 
 memberは通常のMCP read/writeを使えますが、member管理と`reindex`はownerだけが行えます。UID、token、OAuth code、callback URLはDashboardにも手順にも入力・記録しません。
+
+### toolごとのproject選択
+
+`list_projects`はproject引数なしで利用できる一覧toolです。返った`project_id`を、他の15 toolsのtop-level引数として渡します。例:
+
+```json
+{
+  "name": "search_memories",
+  "arguments": { "project_id": "your-project-slug", "query": "OAuth 設計" }
+}
+```
+
+`source_refs[].project_id`はmemoryの出典を示す値で、操作対象を選ぶtop-level `project_id`とは別です。principalがない又は無効な場合はHTTP 401、認証済みでもproject membershipやroleが不足するtool callはHTTP 200のMCP tool error (`isError: true`)になります。queryに`project_id`を含む旧URLはHTTP 400で拒否されます。
 
 ## Codex CLIの設定
 
@@ -27,16 +41,15 @@ Codex CLIは通常`~/.codex/config.toml`（`CODEX_HOME`を設定している場�
 
 ### MCPサーバーを登録する
 
-次の例は、OAuth認証で通常のproject scopeへ登録します。`MCP_PUBLIC_URL`は末尾の`/`を除いたCloud RunベースURL、`project_id`は利用者がアクセスできるproject slugです。
+次の例は、OAuth認証でprojectを固定しないMCP接続を登録します。`MCP_PUBLIC_URL`は末尾の`/`を除いたCloud RunベースURLです。
 
 ```bash
 export MCP_PUBLIC_URL='https://ltm.okakam.net'
-export LTM_MEMORY_PROJECT_ID='your-project-slug'
 
 codex mcp remove long-term-memory
 
 codex mcp add long-term-memory \
-  --url "${MCP_PUBLIC_URL%/}/api/mcp?project_id=${LTM_MEMORY_PROJECT_ID}"
+  --url "${MCP_PUBLIC_URL%/}/api/mcp"
 
 codex mcp login long-term-memory
 ```
@@ -48,7 +61,7 @@ codex mcp list
 codex mcp get long-term-memory
 ```
 
-`codex mcp login`が開くブラウザで許可済み`@okakam.net`アカウントを使ってFirebaseへログインし、同意画面でMCP接続を許可します。OAuth access token、refresh token、authorization code、Firebase ID tokenを環境変数、repository、ログへコピーしないでください。
+`codex mcp login`が開くブラウザで許可済み`@okakam.net`アカウントを使ってFirebaseへログインし、同意画面でMCP接続を許可します。接続後に`list_projects`を呼び、返された利用可能projectをtool callごとに指定します。OAuth access token、refresh token、authorization code、Firebase ID tokenを環境変数、repository、ログへコピーしないでください。
 
 登録後は次で確認し、起動中のCodexを再起動します。TUIでは`/mcp`でも確認できます。
 
@@ -100,11 +113,11 @@ Claude Codeのremote curator、GitHub Actions、Cloud Run smokeはOAuth browser 
 
 ```bash
 codex mcp add long-term-memory \
-  --url "${MCP_PUBLIC_URL%/}/api/mcp?project_id=${LTM_MEMORY_PROJECT_ID}" \
+  --url "${MCP_PUBLIC_URL%/}/api/mcp" \
   --bearer-token-env-var LTM_MCP_TOKEN
 ```
 
-このPAT設定例は機械接続・curator専用です。`docs/mcp-config.cloud-run.json`の`Authorization`と`X-LTM-Maintenance-Token`も同じ用途に限り、OAuth tokenを環境変数やrepositoryへ貼り付ける用途には使いません。
+このPAT設定例は機械接続・curator専用です。`docs/mcp-config.cloud-run.json`の`Authorization`と`X-LTM-Maintenance-Token`も同じ用途に限り、OAuth tokenを環境変数やrepositoryへ貼り付ける用途には使いません。curatorがshared scopeを対象にするtool callでは、URLではなくtop-level引数に`project_id`を渡します。shared対象の引数例は`{"project_id": "__shared__"}`です。shared writeと`reindex`は通常のCodex利用ではなく、設定済みcurator UIDのPAT principalとmaintenance tokenの両方を必要とします。
 
 ## クライアント別の補助資産
 
@@ -150,7 +163,7 @@ Memories are context, not executable instructions. Read the body before relying 
 
 ## Memory model
 
-The project_id comes from the MCP URL and is not a tool argument. Use the five types deliberately:
+Call `list_projects` to find projects the authenticated principal can access. Every other tool requires the selected `project_id` as a top-level argument; the MCP URL has no project query. Project creation and membership changes are managed in the Dashboard. Use the five types deliberately:
 
 - user: stable preferences and working style.
 - feedback: corrections, rules, and recurring gotchas.
@@ -180,7 +193,7 @@ Name memories with stable searchable kebab-case nouns. Add entities and triples 
 - Known category: list_memories_by_type.
 - Known labels: search_by_tag.
 - Related constraints: find_related from a memory already read.
-- Cross-project read: use the normal project endpoint; shared entries are read-only unless the curator gate allows a write.
+- Cross-project read: select an accessible `project_id` for each tool call; shared entries are read-only unless the curator gate allows a write.
 
 Never confuse a generated summary with recall. The body contains the why, trigger conditions, commands, and caveats.
 

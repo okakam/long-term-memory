@@ -8,7 +8,12 @@ import {
   type SnapshotMemory,
 } from '../../scripts/curator/export-remote-snapshot';
 
-const project: RemoteProject = { id: 'alpha', count: 1, last_update: '2026-09-06T00:00:00.000Z' };
+const project: RemoteProject = {
+  project_id: 'alpha',
+  role: 'owner',
+  created_at: '2026-09-05T00:00:00.000Z',
+  updated_at: '2026-09-06T00:00:00.000Z',
+};
 const memory: SnapshotMemory = {
   projectId: 'alpha',
   id: 'mem_1',
@@ -62,16 +67,33 @@ test('remote snapshotはlist/index/getを呼び、認証ヘッダを転送する
   });
 
   expect(calls).toHaveLength(3);
+  expect(calls.every((call) => call.url === 'https://memory.example/api/mcp')).toBe(true);
   expect(calls.every((call) => typeof call.id === 'string' && call.id.length > 0)).toBe(true);
   expect(calls.every((call) => call.authorization === 'Bearer ltm_test_token_secret')).toBe(true);
-  expect(calls.some((call) => call.body.includes('list_projects'))).toBe(true);
-  expect(calls.some((call) => call.body.includes('get_memory_index'))).toBe(true);
-  expect(calls.some((call) => call.body.includes('get_memory'))).toBe(true);
+  const requests = calls.map((call) => JSON.parse(call.body) as { params?: { name?: string; arguments?: Record<string, unknown> } });
+  const listProjects = requests.find((request) => request.params?.name === 'list_projects');
+  const index = requests.find((request) => request.params?.name === 'get_memory_index');
+  const get = requests.find((request) => request.params?.name === 'get_memory');
+  expect(listProjects?.params?.arguments).toEqual({});
+  expect(index?.params?.arguments).toMatchObject({ project_id: 'alpha', include_shared: false });
+  expect(get?.params?.arguments).toMatchObject({ project_id: 'alpha', id_or_name: memory.name, include_shared: false });
   expect(result).toContain('# Remote memory snapshot');
+  expect(result).toContain('- project_id: alpha');
+  expect(result).toContain('  role: owner');
   expect(result).toContain('deployment-policy');
   expect(result).not.toContain('ltm_live_secret_123456');
   expect(result).toContain('[REDACTED]');
   expect(() => assertSnapshotSafe(result)).not.toThrow();
+});
+
+test('remote snapshotはMCP tool errorを失敗として扱う', async () => {
+  await expect(fetchRemoteSnapshot({
+    baseUrl: 'https://memory.example',
+    token: 'ltm_test_token_secret',
+    fetcher: async () => new Response(JSON.stringify({
+      result: { isError: true, content: [{ type: 'text', text: 'project access denied' }] },
+    })),
+  })).rejects.toThrow('MCP tool error');
 });
 
 test('snapshotの安全検査は未サニタイズのtokenを拒否する', () => {

@@ -3,13 +3,14 @@ import { afterEach, expect, test } from 'vitest';
 import type { MemoryService } from '@/lib/memory/service';
 import { resetSessionState } from '@/lib/mcp/session';
 import { handleMcpRequest } from '@/lib/mcp/transport';
+import { resetTelemetryStore, setTelemetryStoreForTests, TelemetryStore } from '@/lib/telemetry/store';
 
 const service = {
   listProjects: () => [],
 } as unknown as MemoryService;
 
 async function call(message: object, mode: 'local-session' | 'stateless' = 'stateless') {
-  return handleMcpRequest(new Request('https://example.test/api/mcp?project_id=stateless', {
+  return handleMcpRequest(new Request('https://example.test/api/mcp', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(message),
@@ -18,6 +19,7 @@ async function call(message: object, mode: 'local-session' | 'stateless' = 'stat
 
 afterEach(async () => {
   await resetSessionState();
+  resetTelemetryStore();
 });
 
 test('stateless invocation は initialize/list/call を別々に処理する', async () => {
@@ -50,6 +52,8 @@ test('stateless invocation は initialize/list/call を別々に処理する', a
 
 
 test('local-session は外部 initialize 後の後続 request を同じ server で処理する', async () => {
+  const telemetry = TelemetryStore.openDefault();
+  setTelemetryStoreForTests(telemetry);
   const initialized = await call({
     jsonrpc: '2.0', id: 10, method: 'initialize',
     params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'client', version: '1' } },
@@ -58,6 +62,34 @@ test('local-session は外部 initialize 後の後続 request を同じ server �
   const listed = await call({ jsonrpc: '2.0', id: 11, method: 'tools/list', params: {} }, 'local-session');
   expect(listed.status).toBe(200);
   expect((await listed.json()).result.tools).toHaveLength(16);
+  expect(telemetry.rows().find((row) => row.event === 'connect')?.project_id).toBe('__global__');
+});
+
+test('local-session は request ごとの service context を更新する', async () => {
+  const request = (id: number, project: string) => handleMcpRequest(new Request('https://example.test/api/mcp', {
+    method: 'POST',
+    body: JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'list_projects', arguments: {} } }),
+  }), {
+    mode: 'local-session',
+    service: { listProjects: () => [{ id: project, count: 0, updated_at: '', shared: false }] } as unknown as MemoryService,
+  });
+  const first = await request(12, 'alpha');
+  const second = await request(13, 'beta');
+  expect((await first.json()).result.content[0].text).toContain('alpha');
+  expect((await second.json()).result.content[0].text).toContain('beta');
+});
+
+test('local mode の list_projects は service の summary を維持する', async () => {
+  const summary = { id: 'local-project', count: 2, updated_at: '2026-09-26T03:00:00.000Z', shared: false };
+  const response = await handleMcpRequest(new Request('https://example.test/api/mcp', {
+    method: 'POST',
+    body: JSON.stringify({ jsonrpc: '2.0', id: 14, method: 'tools/call', params: { name: 'list_projects', arguments: {} } }),
+  }), {
+    mode: 'stateless',
+    service: { listProjects: () => [summary] } as unknown as MemoryService,
+  });
+  expect(response.status).toBe(200);
+  expect(JSON.parse((await response.json()).result.content[0].text)).toEqual([summary]);
 });
 
 test('notification は 202 で本文を返さない', async () => {
@@ -71,10 +103,10 @@ test('tool response timeout は HTTP 200 の JSON-RPC -32000 を返す', async (
   const hanging = {
     saveAsync: () => new Promise<never>(() => undefined),
   } as unknown as MemoryService;
-  const response = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=timeout', {
+  const response = await handleMcpRequest(new Request('https://example.test/api/mcp', {
     method: 'POST', body: JSON.stringify({
       jsonrpc: '2.0', id: 99, method: 'tools/call',
-      params: { name: 'remember_user_fact', arguments: {
+      params: { name: 'remember_user_fact', arguments: { project_id: 'timeout',
         name: 'timeout-memory', description: 'desc', body: 'body', entities: [{ name: 'Entity' }],
       } },
     }),
@@ -83,9 +115,52 @@ test('tool response timeout は HTTP 200 の JSON-RPC -32000 を返す', async (
   expect(await response.json()).toMatchObject({ id: 99, error: { code: -32000, message: 'timeout waiting for MCP response' } });
 });
 
-test('method guard と project_id guard は HTTP error を返す', async () => {
-  const get = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=stateless'));
+test('local-session timeout後は新しいsessionを使い、遅れた同一id応答を混ぜない', async () => {
+  const telemetry = TelemetryStore.openDefault();
+  setTelemetryStoreForTests(telemetry);
+  let finishOld!: (value: { name: string; id: string }) => void;
+  let finishNew!: (value: { name: string; id: string }) => void;
+  let newStarted!: () => void;
+  const oldResult = new Promise<{ name: string; id: string }>((resolve) => { finishOld = resolve; });
+  const newResult = new Promise<{ name: string; id: string }>((resolve) => { finishNew = resolve; });
+  const newCallStarted = new Promise<void>((resolve) => { newStarted = resolve; });
+  const request = (service: MemoryService, timeoutMs: number) => handleMcpRequest(new Request('https://example.test/api/mcp', {
+    method: 'POST',
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 99, method: 'tools/call',
+      params: { name: 'remember_user_fact', arguments: {
+        project_id: 'project', name: 'memory', description: 'desc', body: 'body', entities: [{ name: 'Entity' }],
+      } },
+    }),
+  }), { mode: 'local-session', service, timeoutMs });
+
+  const timedOut = await request({ saveAsync: () => oldResult } as unknown as MemoryService, 20);
+  expect(await timedOut.json()).toMatchObject({ id: 99, error: { code: -32000 } });
+
+  const nextResponse = request({ saveAsync: () => {
+    newStarted();
+    return newResult;
+  } } as unknown as MemoryService, 1_000);
+  await newCallStarted;
+
+  finishOld({ name: 'old-result', id: 'old' });
+  const afterOldCompletion = await Promise.race([
+    nextResponse.then(() => 'settled'),
+    new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 20)),
+  ]);
+  finishNew({ name: 'new-result', id: 'new' });
+  const response = await nextResponse;
+  expect(telemetry.rows().filter((row) => row.event === 'connect')).toHaveLength(2);
+  expect(afterOldCompletion).toBe('pending');
+  expect((await response.json()).result.content[0].text).toContain('new-result');
+});
+
+test('method guard と legacy project_id query guard は HTTP error を返す', async () => {
+  const get = await handleMcpRequest(new Request('https://example.test/api/mcp'));
   expect(get.status).toBe(405);
-  const missing = await handleMcpRequest(new Request('https://example.test/api/mcp', { method: 'POST', body: '{}' }));
-  expect(missing.status).toBe(400);
+  const legacy = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=legacy', {
+    method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 20, method: 'tools/list', params: {} }),
+  }));
+  expect(legacy.status).toBe(400);
+  expect(await legacy.text()).toContain('project_id');
 });

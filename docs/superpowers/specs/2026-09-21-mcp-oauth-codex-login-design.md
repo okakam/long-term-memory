@@ -6,7 +6,7 @@
 
 ## 1. 目的と完了条件
 
-現在のMCPは `POST /api/mcp?project_id=<slug>` にPAT (`Authorization: Bearer ltm_...`) を要求する。Codex側も `bearer_token_env_var` を持つ設定になっており、OAuth discoveryも認可エンドポイントも提供していない。この構成を、Codex CLIのMCP OAuthログインに対応した構成へ移行する。
+本設計の当初状態（2026-09-21時点）では、MCP接続ごとにprojectを指定する構成で、PAT (`Authorization: Bearer ltm_...`) とCodex側の`bearer_token_env_var`設定を使い、OAuth discoveryも認可endpointも提供していなかった。この記述は複数project対応設計（`docs/superpowers/specs/2026-09-26-multi-project-mcp-connection-design.md`）で置き換えられた。現在はqueryなしの`POST /api/mcp`を一度登録し、toolごとに対象projectを選ぶ。
 
 完了時には、次を満たす。
 
@@ -72,7 +72,7 @@ OAuth専用の`OAuthStoreLike`を新設し、既存PATを持つ`AuthStoreLike`�
 
 authorization code、access token、refresh token、transaction IDは少なくとも256 bitの暗号学的乱数から生成する。永続保存するsecretは既存PATと同様にSHA-256 hashとprefixだけとし、Firestoreではhashをdocument IDにしてMCP request、token exchange、revokeをO(1)参照する。grant失効とrefresh family失効は`oauthGrantCredentials` subcollectionをtransaction内で列挙するため、全OAuth credential collectionの走査を行わない。既存Firestore gatewayにはtransaction内collection readを追加し、credential subcollectionのreadと失効writeを同じFirestore transactionで完結させる。opaque tokenを採用するため、OAuth signing keyやJWT key rotationは追加しない。
 
-access tokenのresourceは`https://ltm.okakam.net/api/mcp`に固定する。MCP URLの`project_id` queryはresource metadataのresourceへ含めず、各リクエストの既存membership検証へ渡す。これにより、同一利用者が所属する複数projectを一つのCodex接続から安全に利用でき、queryの書き換えだけで未所属projectへアクセスすることはできない。
+access tokenのresourceは`https://ltm.okakam.net/api/mcp`に固定する。操作対象の`project_id`はresource URLには含めず、`list_projects`以外のtool callのtop-level argumentsで指定し、invocationごとにmembershipとtool別権限を検証する。旧`project_id` URL queryはHTTP 400で拒否する。複数project対応の接続・認可契約は`docs/superpowers/specs/2026-09-26-multi-project-mcp-connection-design.md`を正本とする。
 
 ## 5. 認証・認可フロー
 
@@ -89,7 +89,7 @@ Browser
 Codex CLI
   -> POST /oauth/token (code + PKCE verifier)
   -> opaque access token / rotating refresh tokenを安全なcredential storeへ保存
-  -> POST /api/mcp?project_id=<slug> (Bearer OAuth access token)
+  -> POST /api/mcp (Bearer OAuth access token; toolごとにproject_idをargumentsへ指定)
 Cloud Run
   -> OAuth token検証 -> userId
   -> 既存のproject membership・tool別権限・shared curator gateを検証
@@ -134,7 +134,7 @@ Codex利用者向けの移行手順は、既存のBearer設定を削除してOAu
 ```bash
 codex mcp remove long-term-memory
 codex mcp add long-term-memory \
-  --url "https://ltm.okakam.net/api/mcp?project_id=<project-slug>"
+  --url "https://ltm.okakam.net/api/mcp"
 codex mcp login long-term-memory
 ```
 

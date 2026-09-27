@@ -9,6 +9,8 @@ const read = (relativePath: string) => readFileSync(resolve(root, relativePath),
 test('Claude CodeとCodexで共有できるskillとinstruction blockを保持する', () => {
   const skill = read('skills/long-term-memory/SKILL.md');
   expect(skill).toContain('mcp__long-term-memory__*');
+  expect(skill).toContain('Every other tool requires the selected `project_id` as a top-level argument');
+  expect(skill).not.toContain('The project_id comes from the MCP URL');
   expect(skill).toContain('search_memories');
   expect(skill).toContain('get_memory');
   expect(skill).toContain('get_memory_index');
@@ -82,8 +84,13 @@ test('設置手順はClaude CodeとCodexの冪等配置と自己検証を定義�
   expect(codexSetup).not.toContain('--bearer-token-env-var LTM_MCP_TOKEN');
   expect(setup).toContain('--bearer-token-env-var LTM_MCP_TOKEN');
   expect(setup).toContain('LTM_MAINTENANCE_TOKEN');
+  expect(setup).toContain('--url "${MCP_PUBLIC_URL%/}/api/mcp"');
+  expect(setup).toContain('list_projects');
+  expect(setup).toContain('"project_id": "your-project-slug"');
+  expect(setup).toContain('"project_id": "__shared__"');
+  expect(setup).not.toContain('/api/mcp?project_id=');
 
-  const jsonFence = setup.match(/```json\n([\s\S]*?)\n```/);
+  const jsonFence = setup.match(/### CodexのAGENTS\.mdとhookを設定する[\s\S]*?```json\n([\s\S]*?)\n```/);
   expect(jsonFence).not.toBeNull();
   const hookConfig = JSON.parse(jsonFence?.[1] ?? '') as {
     hooks?: {
@@ -145,10 +152,14 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   const config = JSON.parse(read('docs/mcp-config.cloud-run.json')) as {
     mcpServers: { 'long-term-memory': { url: string; headers: Record<string, string> } };
   };
-  expect(config.mcpServers['long-term-memory'].url).toContain('$' + '{MCP_PUBLIC_URL}');
+  expect(config.mcpServers['long-term-memory'].url).toBe('$' + '{MCP_PUBLIC_URL}/api/mcp');
   expect(config.mcpServers['long-term-memory'].headers.Authorization).toContain('$' + '{LTM_MCP_TOKEN}');
   expect(config.mcpServers['long-term-memory'].headers['X-LTM-Maintenance-Token']).toContain('$' + '{LTM_MAINTENANCE_TOKEN}');
   expect(config.mcpServers['long-term-memory'].headers).not.toHaveProperty('X-Vercel-Protection-Bypass');
+  const localCurator = JSON.parse(read('scripts/curator/ltm-shared-curator.mcp.json')) as {
+    mcpServers: { 'long-term-memory': { url: string } };
+  };
+  expect(localCurator.mcpServers['long-term-memory'].url).toBe('http://localhost:3939/api/mcp');
   expect(existsSync(resolve(root, 'scripts/curator/install.sh'))).toBe(true);
 
   const workflow = read('.github/workflows/curator.yml');

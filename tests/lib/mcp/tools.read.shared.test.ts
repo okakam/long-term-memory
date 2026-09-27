@@ -38,11 +38,11 @@ function summary(item: Memory): MemorySummary {
 
 async function call(service: MemoryService, name: string, arguments_: object, project = 'project') {
   const response = await handleMcpRequest(new Request(
-    'https://example.test/api/mcp?project_id=' + project,
+    'https://example.test/api/mcp',
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: name, method: 'tools/call', params: { name, arguments: arguments_ } }),
+      body: JSON.stringify({ jsonrpc: '2.0', id: name, method: 'tools/call', params: { name, arguments: { project_id: project, ...arguments_ } } }),
     },
   ), { mode: 'stateless', service });
   const body = await response.json() as { result: { content: Array<{ text: string }>; isError?: boolean } };
