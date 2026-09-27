@@ -2,6 +2,9 @@
 .gitignore
 .codex
 .devcontainer
+!.devcontainer/
+.devcontainer/*
+!.devcontainer/start-devcontainer-sshd
 .long-term-memory
 .next
 node_modules

@@ -2,11 +2,10 @@ import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 import { getMemoryService } from '@/lib/memory/singleton';
 import { authRequired } from '@/lib/auth/config';
-import { assertProjectAccess } from '@/lib/auth/access';
 import { getOAuthConfiguration } from '@/lib/oauth/config';
 import { oauthInsufficientScopeResponse, oauthUnauthorizedResponse } from '@/lib/oauth/http';
 import { OAuthProtocolError } from '@/lib/oauth/service';
-import { extractMaintenanceToken, extractProjectId } from './context';
+import { createProjectAccessGuard, extractMaintenanceToken } from './context';
 import { grantsSharedWrite } from './auth';
 import { requireMcpPrincipal, type McpPrincipal } from './principal';
 import { createMcpSession, getOrCreateSession, McpRequestTimeoutError, type McpSession } from './session';
@@ -69,11 +68,8 @@ async function dispatch(session: McpSession, message: JSONRPCMessage, timeoutMs:
 export async function handleMcpRequest(req: Request, options: McpRequestOptions = {}): Promise<Response> {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
 
-  let projectId: string;
-  try {
-    projectId = extractProjectId(new URL(req.url));
-  } catch (error) {
-    return badRequest(error instanceof Error ? error.message : String(error));
+  if (new URL(req.url).searchParams.has('project_id')) {
+    return badRequest('project_id query is no longer supported; pass project_id in tool arguments');
   }
 
   let message: unknown;
@@ -92,28 +88,10 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
   }
 
   const maintenanceToken = extractMaintenanceToken(req);
-  const writeTools = new Set([
-    'remember_user_fact', 'remember_reference', 'remember_session_summary',
-    'remember_feedback', 'remember_project_fact', 'update_memory',
-    'forget_memory', 'link_memories',
-  ]);
-  const maintenanceTools = new Set(['reindex']);
-  const toolName = typeof message === 'object' && message !== null && 'params' in message
-    && typeof (message as { params?: unknown }).params === 'object'
-    && (message as { params?: { name?: unknown } }).params?.name;
-  const isWrite = typeof toolName === 'string' && writeTools.has(toolName);
-  const isMaintenance = typeof toolName === 'string' && maintenanceTools.has(toolName);
   let principal: McpPrincipal | undefined;
   if (authRequired()) {
     try {
       principal = await requireMcpPrincipal(req);
-      if (isWrite && projectId === '__shared__'
-        && (principal.credentialKind !== 'pat'
-          || !grantsSharedWrite(maintenanceToken)
-          || principal.userId !== process.env.LTM_CURATOR_USER_ID)) {
-        return new Response('project access denied', { status: 403 });
-      }
-      await assertProjectAccess(principal, projectId, isMaintenance ? 'maintain' : (isWrite ? (projectId === '__shared__' ? 'maintain' : 'write') : 'read'));
     } catch (error) {
       return authenticationErrorResponse(error, oauthConfiguration.enabled, oauthConfiguration.metadataUrl);
     }
@@ -122,17 +100,18 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
     && (!authRequired()
       || (principal?.credentialKind === 'pat' && principal.userId === process.env.LTM_CURATOR_USER_ID));
   const ctx: ToolContext = {
-    projectId,
     svc: options.service ?? getMemoryService(),
     canWriteShared,
     principal,
+    maintenanceToken,
+    requireProjectAccess: createProjectAccessGuard({ principal, maintenanceToken }),
   };
   const mode = options.mode ?? defaultMode();
   const timeoutMs = options.timeoutMs ?? 30_000;
   let session: McpSession;
   try {
     session = mode === 'stateless' ? await createMcpSession(ctx) : await getOrCreateSession(ctx);
-    const response = await dispatch(session, message as JSONRPCMessage, timeoutMs);
+    const response = await session.runWithContext(ctx, () => dispatch(session, message as JSONRPCMessage, timeoutMs));
     if (!hasId(message as JSONRPCMessage)) {
       if (mode === 'stateless') await session.close();
       return new Response(null, { status: 202 });

@@ -28,7 +28,7 @@ function collectNamedDescriptions(schema: Record<string, unknown>, result: strin
 }
 
 test('全 MCP tool の description と named input field description が配信される', async () => {
-  const response = await handleMcpRequest(new Request('https://example.test/api/mcp?project_id=descriptions', {
+  const response = await handleMcpRequest(new Request('https://example.test/api/mcp', {
     method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
   }), { mode: 'stateless', service });
   const tools = (await response.json()).result.tools as Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>;
@@ -36,6 +36,12 @@ test('全 MCP tool の description と named input field description が配信�
   expect(tools.every((tool) => tool.description.length > 0)).toBe(true);
   for (const tool of tools) expect(collectNamedDescriptions(tool.inputSchema).every((item) => item.split(':', 2)[1].length > 0)).toBe(true);
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
+  for (const tool of tools.filter((tool) => tool.name !== 'list_projects')) {
+    expect(tool.inputSchema.required).toContain('project_id');
+    expect((tool.inputSchema.properties as Record<string, unknown>)?.project_id).toBeTruthy();
+    expect(tool.description).toContain('list_projects');
+    expect(tool.description).toContain('project_id');
+  }
   for (const name of ['remember_user_fact', 'remember_feedback', 'remember_project_fact']) {
     const tool = byName.get(name)!;
     expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['name', 'description', 'body', 'entities']));

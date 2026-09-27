@@ -19,9 +19,11 @@
 ## 開発環境
 
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
-- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
+- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
 - VS Code Dev Containerでは`remote.autoForwardPorts=true`と`remote.autoForwardPortsSource="process"`を既定にし、Codex OAuthの動的loopback callback portを転送する。callback用の固定port/rangeを`forwardPorts`へ追加せず、自動検出されない場合は`.devcontainer/README.md`の手順で現在のportだけを一時転送する。
+- `.devcontainer/devcontainer.json` の `shutdownAction` は `none` とし、VS Codeを閉じても開発コンテナを停止しない。不要時は明示的に停止する。
+- 開発用 `sshd` は Compose の root PID 1 で foreground 起動し、ホストの `127.0.0.1:2222` からコンテナの22番ポートへ接続できるようにする。VS Codeの通常操作は `remoteUser: node` とし、パスワード・秘密鍵をリポジトリへ記載しない。
 - Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存し、`long-term-memory-codex` volume で永続化する。
 - `/workspace/.codex/config.toml` で Codex CLI の TUI フッターにコンテキスト残量、5時間制限、長期使用制限を表示する。
 - 依存関係は `long-term-memory-node_modules` volume に保存する。ローカル開発では `AUTH_REQUIRED=0` を使い、本番の認証設定と混同しない。
@@ -35,7 +37,7 @@
 - Cloud Run runner imageには、起動時に読み込まれる`next.config.ts`とそのproject module依存を含める。Docker imageの`/api/health`起動確認をdeploy前の回帰ゲートとする。
 
 - YAML/JSON の構文を検証し、`docker compose -f .devcontainer/compose.yaml config --quiet` を実行する。
-- 開発コンテナをビルドし、`node`、`pnpm`、`codex`、`gh`、`gcloud`、`firebase`、`jq` のバージョンとvolumeの書き込み可否を確認する。GCP/Firebaseの認証はコンテナ内でCLIを使って行い、認証情報はnamed volumeに保存する。
+- 開発コンテナをビルドし、`node`、`pnpm`、`codex`、`gh`、`gcloud`、`firebase`、`sshd`、`nc`、`jq` の導入とvolumeの書き込み可否を確認する。GCP/Firebaseの認証はコンテナ内でCLIを使って行い、認証情報はnamed volumeに保存する。
 - 変更前後に `git diff --check` を実行する。
 - 完了を報告する前に、変更内容に応じたテストまたはビルドを実行し、結果を記録する。
 
@@ -44,6 +46,7 @@
 - FirebaseはWeb本人確認のIdentity Provider、Cloud RunのOAuth authorization serverはMCP credential発行者として分離する。`MCP_OAUTH_ENABLED=1`ではHTTPSの`MCP_PUBLIC_URL`と`AUTH_REQUIRED=1`を必須にし、Codexの通常利用は`codex mcp login long-term-memory`のDCR/PKCE OAuthを使う。DCRでは`scope`を省略可能とし、指定時は`mcp:access`だけを許可してresponseには常に`mcp:access`を返す。`application_type`も省略可能とし、指定時は`native`だけを許可してresponseへ返す。それ以外のscope/application typeは拒否する。Native Appのloopback callbackは`http://127.0.0.1[:port]/<path>`とし、port差を許可してpathは一致させる。OAuth grantはSettingsから失効でき、PATはClaude Code curator・CI・Cloud Run smokeなどmachine互換用途に維持する。
 - Cloud Run用GCS Markdown adapter、Firestore metadata/auth store、`/tmp` SQLite cache、Firebase ID token/session cookie、OAuth/PAT Bearer principal、API認可、Invoker公開・アプリ層認証のCloud Run workflow/smoke、認証必須のimage既定値、Firestore memory/name indexを実装する。旧データのexport/import/verifyはfresh start方針のため対象外とする。
 - MCPサーバー名は `long-term-memory` に統一し、Claude Codeのツール名も `mcp__long-term-memory__*` を使用する。curatorのファイル名・launchdラベルは運用サービス識別子として既存の `ltm-shared-curator` を維持する。
+- MCP endpointはqueryなしの`POST /api/mcp`とし、`list_projects`はproject指定なし、それ以外の15 toolsは必須top-level `project_id`で対象を選ぶ。projectの作成とmembership管理はDashboardを唯一の設定画面として維持し、各tool callでFirestore membershipとtool別権限を再評価する。認証主体が不在・無効ならHTTP 401、認証済みtool callのmembership/role拒否はHTTP 200のJSON-RPC tool error (`isError: true`) とする。`__shared__`はread-onlyとし、書き込みはcurator UIDのPATとmaintenance tokenを必要とする。`project_id` queryはHTTP 400で拒否する。
 - production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote service、永続telemetry DBを削除した。旧Vercel Blob/Tursoのmigration専用スクリプト、テスト、devDependenciesも、旧データを移行せず空スタートする方針により削除済みである。
 - ローカル検証時点で全テスト、lint、型検査、`NODE_ENV=production pnpm build`を実行する。Cloud Run smoke scriptはinitialize、tools/list、save、get、update、link、reindex、search、deleteを実行し、renameは`CloudMemoryService`の回帰テストで検証する。Cloud Run/Firebase/GCSの実環境smokeは外部資格情報が必要な未完了ゲートであり、旧データのexport/import/verifyは対象外、旧Vercel Project削除はユーザー報告で完了している。
 - `main`へのPRマージ後は、`push`イベントでGitHub Actionsのverify完了後に`production` Environmentを使ってCloud Runへ自動deployする。手動dispatchもmainブランチだけを許可し、Production deployは同時実行しない。Environmentの設定値は`docs/cloud-run-production-deployment.md`に記録する。

@@ -5,7 +5,7 @@ import { recordToolCall } from './recorder';
 import type { TelemetryKind } from './store';
 
 export interface InstrumentContext {
-  projectId: string;
+  projectIdForInput?: (input: unknown) => string;
   sessionId?: string | null;
   maintenance?: boolean;
 }
@@ -74,7 +74,7 @@ export function instrumentRegistrar(
   server: McpServer,
   kind?: TelemetryKind,
   record: RecordToolCall = recordToolCall,
-  ctx: InstrumentContext = { projectId: '__unknown__' },
+  ctx: InstrumentContext = {},
 ): () => void {
   const original = server.registerTool.bind(server) as RegisterTool;
   const wrapped = ((name: string, config: unknown, handler: (input: unknown, extra: unknown) => unknown) => (
@@ -83,11 +83,14 @@ export function instrumentRegistrar(
       config,
       async (input: unknown, extra: unknown) => {
         const started = performance.now();
+        const projectId = name === 'list_projects'
+          ? '__global__'
+          : ctx.projectIdForInput?.(input) ?? '__global__';
         try {
           const value = await handler(input, extra);
           const measured = measure(value);
           await record({
-            projectId: ctx.projectId,
+            projectId,
             sessionId: ctx.sessionId,
             tool: name,
             kind: toolKind(name, kind),
@@ -100,7 +103,7 @@ export function instrumentRegistrar(
           return value;
         } catch (error) {
           await record({
-            projectId: ctx.projectId,
+            projectId,
             sessionId: ctx.sessionId,
             tool: name,
             kind: toolKind(name, kind),

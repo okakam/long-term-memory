@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 
 export interface RemoteProject {
-  id: string;
-  count?: number;
-  last_update?: string;
+  project_id: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SnapshotMemory {
@@ -29,7 +30,7 @@ export interface SnapshotMemory {
 }
 
 interface JsonRpcResponse {
-  result?: { content?: Array<{ type?: string; text?: string }> };
+  result?: { content?: Array<{ type?: string; text?: string }>; isError?: boolean };
   error?: { code?: number };
 }
 
@@ -41,7 +42,6 @@ interface SnapshotIndexEntry {
 export interface RemoteSnapshotOptions {
   baseUrl: string;
   token: string;
-  scopeProjectId?: string;
   maxMemories?: number;
   fetcher?: typeof fetch;
 }
@@ -84,9 +84,10 @@ export function buildSnapshot(projects: RemoteProject[], memories: SnapshotMemor
   ];
   for (const project of projects) {
     lines.push(
-      '- project_id: ' + oneLine(project.id),
-      '  count: ' + String(project.count ?? 0),
-      '  last_update: ' + oneLine(project.last_update ?? ''),
+      '- project_id: ' + oneLine(project.project_id),
+      '  role: ' + oneLine(project.role),
+      '  created_at: ' + oneLine(project.created_at),
+      '  updated_at: ' + oneLine(project.updated_at),
     );
   }
   lines.push('', '## Memories');
@@ -134,6 +135,7 @@ export function buildSnapshot(projects: RemoteProject[], memories: SnapshotMemor
 
 function resultText(response: JsonRpcResponse): string {
   if (response.error) throw new Error('MCP JSON-RPC error ' + String(response.error.code ?? 'unknown'));
+  if (response.result?.isError) throw new Error('MCP tool error');
   const text = response.result?.content?.find((item) => item.type === 'text')?.text;
   if (!text) throw new Error('MCP result text missing');
   return text;
@@ -141,14 +143,13 @@ function resultText(response: JsonRpcResponse): string {
 
 async function call(
   baseUrl: string,
-  projectId: string,
   token: string,
   method: string,
   params: object,
   fetcher: typeof fetch,
 ): Promise<unknown> {
   const response = await fetcher(
-    baseUrl.replace(/\/+$/, '') + '/api/mcp?project_id=' + encodeURIComponent(projectId),
+    baseUrl.replace(/\/+$/, '') + '/api/mcp',
     {
       method: 'POST',
       headers: {
@@ -165,25 +166,24 @@ async function call(
 
 export async function fetchRemoteSnapshot(options: RemoteSnapshotOptions): Promise<string> {
   const fetcher = options.fetcher ?? fetch;
-  const scopeProjectId = options.scopeProjectId ?? '__shared__';
-  const projects = await call(options.baseUrl, scopeProjectId, options.token, 'tools/call', {
+  const projects = await call(options.baseUrl, options.token, 'tools/call', {
     name: 'list_projects',
     arguments: {},
   }, fetcher) as RemoteProject[];
   const memories: SnapshotMemory[] = [];
   const maxMemories = options.maxMemories ?? 500;
   for (const project of projects) {
-    const index = await call(options.baseUrl, project.id, options.token, 'tools/call', {
+    const index = await call(options.baseUrl, options.token, 'tools/call', {
       name: 'get_memory_index',
-      arguments: { include_shared: false },
+      arguments: { project_id: project.project_id, include_shared: false },
     }, fetcher) as SnapshotIndexEntry[];
     for (const entry of index) {
       if (memories.length >= maxMemories) break;
-      const memory = await call(options.baseUrl, project.id, options.token, 'tools/call', {
+      const memory = await call(options.baseUrl, options.token, 'tools/call', {
         name: 'get_memory',
-        arguments: { id_or_name: entry.name, include_shared: false },
+        arguments: { project_id: project.project_id, id_or_name: entry.name, include_shared: false },
       }, fetcher) as Omit<SnapshotMemory, 'projectId'>;
-      memories.push({ ...memory, projectId: project.id });
+      memories.push({ ...memory, projectId: project.project_id });
     }
     if (memories.length >= maxMemories) break;
   }

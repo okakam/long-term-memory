@@ -1,6 +1,6 @@
 # 開発コンテナのCodex / Google Cloud環境
 
-この開発コンテナには、Node.js開発に加えてOpenAI Codex CLI、GitHub CLI（gh）、Google Cloud CLI（gcloud）、Firebase CLI、jq、xz-utilsを導入しています。Turso CLIは使用しません。
+この開発コンテナには、Node.js開発に加えてOpenAI Codex CLI、GitHub CLI（gh）、Google Cloud CLI（gcloud）、Firebase CLI、OpenSSH Server（sshd）、`nc`（netcat-openbsd）、jq、xz-utilsを導入しています。Turso CLIは使用しません。
 
 ## 初回利用
 
@@ -13,6 +13,8 @@
        gh --version
        gcloud --version
        firebase --version
+       test -x /usr/sbin/sshd && echo /usr/sbin/sshd
+       command -v nc
        jq --version
 
 3. Codexを起動し、表示された案内からChatGPTまたは利用可能な方法でサインインする。
@@ -21,6 +23,20 @@
 6. FirebaseのRules/Indexesを操作する場合は firebase login --no-localhost を実行する。
 
 Codex、gcloud、Firebase CLIの設定はnamed volumeへ保存され、コンテナ再作成後も再利用できます。APIキー、サービスアカウントJSON、PAT、maintenance tokenなどの認証情報はDockerfileやリポジトリへ記述しません。
+
+## 開発コンテナの SSH サーバー
+
+コンテナ起動時に `sshd` を foreground で起動します。Compose の PID 1 は root ですが、VS Code の `remoteUser` は `node` のままです。ホストの `127.0.0.1:2222` がコンテナの SSH ポート `22` に対応します。
+
+リポジトリではパスワードや秘密鍵を設定しません。SSH接続を使う場合は、コンテナ内の `node` ユーザーへ公開鍵を `~/.ssh/authorized_keys` として安全な方法で登録してから、次のように接続します。
+
+       ssh -p 2222 node@127.0.0.1
+
+設定変更を反映するには「Dev Containers: Rebuild Container」を実行してください。
+
+## VS Code終了時のコンテナ動作
+
+`.devcontainer/devcontainer.json` の `shutdownAction` は `none` に設定しています。VS Codeを閉じても開発コンテナは停止しません。コンテナは起動したままになるため、使い終わったらDockerビューから停止するか、リポジトリのルートで `docker compose -f .devcontainer/compose.yaml stop app` を実行してください。設定変更を適用するには「Dev Containers: Rebuild Container」を実行します。
 
 ## Google Cloud操作
 

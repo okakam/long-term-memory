@@ -111,11 +111,17 @@ test('Firebase/Firestore設定とCloud Run smokeをリポジトリ内に用意�
 
 test('Cloud Run smokeはMCPの主要read/write/reindex経路を実際に呼び出す', () => {
   const smoke = read('scripts/cloud-run-smoke.ts');
+  expect(smoke).toContain('`${baseUrl}/api/mcp`');
+  expect(smoke).not.toContain('/api/mcp?project_id=');
+  expect(smoke).toContain("'list_projects'");
+  expect(smoke).toContain('project_id: projectId');
+  expect(smoke).toContain('isError');
+  expect(smoke).toContain("params: { name: 'list_projects', arguments: {} }");
   for (const toolCall of [
-    "callTool(baseUrl, projectId, token, 4, 'get_memory'",
-    "callTool(baseUrl, projectId, token, 5, 'update_memory'",
-    "callTool(baseUrl, projectId, token, 7, 'link_memories'",
-    "callTool(baseUrl, projectId, token, 9, 'reindex'",
-    "callTool(baseUrl, projectId, token, 11, 'forget_memory'",
+    "callTool(baseUrl, projectId, token, 5, 'get_memory'",
+    "callTool(baseUrl, projectId, token, 6, 'update_memory'",
+    "callTool(baseUrl, projectId, token, 8, 'link_memories'",
+    "callTool(baseUrl, projectId, token, 10, 'reindex'",
+    "callTool(baseUrl, projectId, token, 12, 'forget_memory'",
   ]) expect(smoke).toContain(toolCall);
 });

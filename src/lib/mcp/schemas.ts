@@ -1,7 +1,20 @@
 import { z } from 'zod';
 
-import { isValidSlug } from '@/lib/slug';
+import { assertProjectId, isValidSlug } from '@/lib/slug';
 import { MEMORY_TYPES } from '@/lib/memory/types';
+
+export const ProjectId = z.string()
+  .refine((value) => {
+    try {
+      assertProjectId(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'expected a project slug or __shared__')
+  .describe('Target project ID. Call list_projects first to find an accessible project.');
+
+export const ProjectScopedInput = { project_id: ProjectId };
 
 const Name = z.string()
   .refine(isValidSlug, 'expected a slug: lowercase a-z / 0-9, hyphen-separated, 1..64 chars')
@@ -34,6 +47,7 @@ const HowToApply = z.string().min(1).describe('The future trigger or condition f
 const IncludeShared = z.boolean().optional().describe('Whether to append matching read-only memories from the shared scope; defaults to true.');
 
 const KnowledgeMemoryInput = {
+  ...ProjectScopedInput,
   name: Name,
   description: Description,
   body: Body,
@@ -50,6 +64,7 @@ export const RememberFeedbackInput = z.object({ ...KnowledgeMemoryInput, why: Wh
 export const RememberProjectFactInput = z.object({ ...KnowledgeMemoryInput, why: Why, how_to_apply: HowToApply });
 
 const LightweightMemoryInput = {
+  ...ProjectScopedInput,
   name: Name,
   description: Description,
   body: Body,
@@ -79,33 +94,40 @@ const PatchInput = z.object({
 });
 
 export const UpdateMemoryInput = z.object({
+  ...ProjectScopedInput,
   id_or_name: z.string().min(1).describe('Existing memory ID or memory name to patch.'),
   patch: PatchInput.describe('Optional fields to replace wholesale on the existing memory.'),
 });
 export const ForgetMemoryInput = z.object({
+  ...ProjectScopedInput,
   id_or_name: z.string().min(1).describe('Existing memory ID or memory name to permanently delete.'),
   reason: z.string().optional().describe('Optional reason for the permanent deletion.'),
 });
 export const LinkMemoriesInput = z.object({
+  ...ProjectScopedInput,
   src: z.string().min(1).describe('Source memory name or ID; it must already exist.'),
   dst: z.string().min(1).describe('Destination memory name (slug), not an ID; it may be created later.'),
 });
 export const ListByTypeInput = z.object({
+  ...ProjectScopedInput,
   type: z.enum(MEMORY_TYPES).describe('Memory type to list.'),
   limit: z.number().int().positive().max(500).optional().describe('Maximum project results to return, from 1 through 500.'),
   include_shared: IncludeShared,
 });
 export const SearchByTagInput = z.object({
+  ...ProjectScopedInput,
   tags: z.array(z.string()).min(1).describe('One or more tags to match.'),
   match: z.enum(['any', 'all']).optional().describe('Use any for union matching or all for intersection matching; defaults to any.'),
   include_shared: IncludeShared,
 });
 export const FindRelatedInput = z.object({
+  ...ProjectScopedInput,
   id_or_name: z.string().min(1).describe('Existing memory ID or name from which to walk directional links.'),
   depth: z.number().int().min(1).max(3).optional().describe('Link traversal depth from 1 through 3; defaults to 1.'),
   include_shared: IncludeShared,
 });
 export const SearchMemoriesInput = z.object({
+  ...ProjectScopedInput,
   query: z.string().min(1).describe('Keyword query searched across memory name, description, and body.'),
   type: z.enum(MEMORY_TYPES).optional().describe('Optional memory type filter.'),
   tags: z.array(z.string()).optional().describe('Optional tag filter applied before ranking.'),
@@ -113,13 +135,15 @@ export const SearchMemoriesInput = z.object({
   include_shared: IncludeShared,
 });
 export const GetMemoryInput = z.object({
+  ...ProjectScopedInput,
   id_or_name: z.string().min(1).describe('Existing memory ID or name to fetch in full.'),
   include_shared: IncludeShared,
 });
 export const GetMemoryIndexInput = z.object({
+  ...ProjectScopedInput,
   include_shared: IncludeShared,
 });
-export const ReindexInput = z.object({}).strict();
+export const ReindexInput = z.object(ProjectScopedInput).strict();
 
 export type RememberUserFactArgs = z.infer<typeof RememberUserFactInput>;
 export type RememberFeedbackArgs = z.infer<typeof RememberFeedbackInput>;

@@ -25,7 +25,7 @@ Dashboardは「利用状況」と「アクセス管理」を一つの画面で�
 1. 利用者が`新しいプロジェクト`を選び、slugを入力して作成する。成功時にownerとして一覧へ追加し、そのprojectを選択する。
 2. ownerが選択projectの`メンバーを管理`を開く。登録済み`@okakam.net`メールアドレスと`member`/`owner` roleを指定して追加する。
 3. ownerはroleを変更でき、他者を削除できる。最後のownerを消す、または自分自身のowner roleを下げる操作はUIでは禁止する。APIは既存のrole保存契約を保ち、最後のowner保護はこの変更で追加する。
-4. 空の状態では「projectを作成するとCodex OAuth MCPの接続先にできる」ことと、`codex mcp add` URLの`project_id`がslugであることだけを説明する。token、OAuth code、callback URLは表示しない。
+4. 空の状態では、projectを作成した後に一つのCodex OAuth MCP接続から利用できることを説明する。接続URLにprojectを指定せず、`list_projects`で選び、15個のscope toolのtop-level `project_id`で対象を渡す。token、OAuth code、callback URLは表示しない。
 
 ### ログイン／サインアップ
 
@@ -80,7 +80,7 @@ Dashboardは「利用状況」と「アクセス管理」を一つの画面で�
 - React rendering testでDashboardにproject管理、空状態、roleに応じた操作制御、auth formのOAuth continuationを描画することを確認する。
 - OAuth page rendering testで新しい表示要素を確認しつつ、hidden fields、form action、許可/拒否button、HTML escapeを回帰させる。CSP testはloopback originだけを`form-action`へ入れる既存ケースを維持する。
 - `pnpm test`、`pnpm lint`、`pnpm exec tsc --noEmit`、`NODE_ENV=production pnpm build`、`git diff --check`を通す。
-- main deploy後は、ownerがDashboardで`long-term-memory`を作成し、`codex mcp add ...?project_id=long-term-memory`、`codex mcp login long-term-memory`、`/mcp verbose`で16 toolsが公開されることを手動確認する。これはローカルCIとは別の本番受入ゲートである。
+- main deploy後は、ownerがDashboardでprojectを作成し、`codex mcp add long-term-memory --url 'https://ltm.okakam.net/api/mcp'`、`codex mcp login long-term-memory`、`list_projects`、`/mcp verbose`で16 toolsが公開されることを手動確認する。read/write callにはprojectごとのtop-level `project_id`を渡す。これはローカルCIとは別の本番受入ゲートである。
 
 ## 非目標
 
