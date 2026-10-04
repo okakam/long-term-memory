@@ -1,106 +1,112 @@
-# MCP Client Setup Tool Implementation Plan
+# MCP クライアント setup tool 実装計画
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` to implement this plan task-by-task. Keep the tasks sequential because each task establishes interfaces used by the next. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **実装エージェント向け:** この計画は `superpowers:subagent-driven-development` を使い、Task 1 から順に実行する。各 task が次の task の interface を作るため、並行実装しない。各手順の完了状態はチェックボックスで記録する。
 
-**Goal:** Add an authenticated, project-independent MCP tool that gives Claude Code or Codex the canonical post-connection setup guide and assets for local application.
+**目的:** Claude Code または Codex CLI に、接続後の設定手順と資産を返す認証済み・project 非依存の MCP tool を追加する。
 
-**Architecture:** Generate a static setup manifest from `docs/post-mcp-setup.md` and its three canonical assets so the Cloud Run runtime does not need repository docs. Register `setup_client_environment` as a meta tool with a required client enum and no `project_id`; the calling agent applies the returned data to its own client environment.
+**構成:** `docs/post-mcp-setup.md` と3つの正本資産から静的 setup manifest を生成し、Cloud Run runtime がrepository docsを読む必要をなくす。必須の client enum を受け取る meta tool `setup_client_environment` を登録し、返却データは呼び出し側の client agent が適用する。
 
-**Tech Stack:** TypeScript, Zod, MCP SDK, Node.js `crypto`, Vitest, pnpm.
+**技術:** TypeScript、Zod、MCP SDK、Node.js `crypto`、Vitest、pnpm。
 
-**Spec:** `docs/superpowers/specs/2026-10-04-mcp-client-setup-tool-design.md`
+**正本設計:** `docs/superpowers/specs/2026-10-04-mcp-client-setup-tool-design.md`
 
-## Global Constraints
+## 共通制約
 
-- Use Node.js 22 and pnpm 11.1.3.
-- The MCP endpoint remains queryless `POST /api/mcp`; do not add `project_id` to its URL.
-- `list_projects` and `setup_client_environment` do not take `project_id`; the other 15 tools keep required top-level `project_id`.
-- The Cloud Run handler returns setup data only and never writes to the caller's filesystem.
-- Use only the repository's `docs/post-mcp-setup.md` and canonical skill, hook, and instruction-block sources; do not place secrets or PAT values in output.
-- Dashboard project/member management stays in the Dashboard; machine-only curator/CI PAT setup stays out of ordinary client configuration.
-- Keep repository documentation in Japanese and update `AGENTS.md` with the changed MCP contract.
+- Node.js 22 と pnpm 11.1.3 を使う。
+- MCP endpoint は引き続き query なしの `POST /api/mcp` とし、URLへ `project_id` を追加しない。
+- `list_projects` と `setup_client_environment` は `project_id` を受け取らない。それ以外の15 toolsは、top-level 必須 `project_id` を受け取る。
+- Cloud Run handler は setup data を返すだけとし、呼び出し側の filesystem へ書き込まない。
+- `docs/post-mcp-setup.md` と canonical な skill、hook、instruction block のみを使う。出力へsecretやPAT値を含めない。
+- Dashboardでのproject/member管理は維持し、curator/CI専用PATの手順を通常client設定へ含めない。
+- repositoryの仕様書・計画書・運用文書は日本語で記述し、MCP契約変更に合わせて `AGENTS.md` を更新する。
 
-## Review Focus
+## レビューで確認する点
 
-- **Generated payload integrity:** Unicode, backticks, and newlines must survive TypeScript generation; compare content and SHA-256 values against sources in Task 1.
-- **Wrong or missing client:** reject missing/unknown `client` values and extra `project_id` input in Task 2.
-- **Wrong target scope:** assert Claude uses its config directory and Codex uses the current repository in Task 2.
-- **Oversized tool output:** assert the serialized setup payload stays below 64 KiB in Task 2.
-- **Accidental project/auth coupling:** call the tool without `project_id`, and verify the deployed smoke uses normal Bearer authentication in Task 3.
+- **生成payloadの完全性:** Unicode、backtick、改行をTypeScript生成後も保持し、Task 1でsource内容とSHA-256を比較する。
+- **client入力の拒否:** `client` の欠落・未知値と、余分な `project_id` をTask 2で拒否する。
+- **対象scope:** Claude Codeはconfig directory、Codexは現在のrepositoryを使うことをTask 2で確認する。
+- **出力サイズ:** serialized setup payloadが64 KiB未満であることをTask 2で確認する。
+- **project/authとの誤結合:** `project_id` なしのtool callと通常のBearer認証を使うsmokeをTask 3で確認する。
 
-## Worktree and delegation
+## worktree と委譲
 
-Before implementation, use `superpowers:using-git-worktrees` to create a clean worktree from the current `origin/develop` commit on `feature/mcp-client-setup-tool`. The approved spec and plan currently exist only as untracked files in the current worktree; copy both into the feature worktree and commit them before Task 1. Preserve all existing changes in the current worktree, including `.codex/.ltm-config-version` and the staged hook mode change. The feature worktree was first created at `/workspace/long-term-memory-client-setup`, then relocated to `/tmp/long-term-memory-client-setup` after Vitest worker I/O stalled on the 9p mount; keep commits and the SDD ledger in that local-overlay worktree. Use `superpowers:subagent-driven-development`; every delegated agent must search long-term-memory and read full relevant results before acting.
+実装前に `superpowers:using-git-worktrees` を使い、`origin/develop` の現在のcommitから `feature/mcp-client-setup-tool` のclean worktreeを作る。承認済みの設計書と計画書は元worktreeで未追跡だったため、feature worktreeへコピーしてTask 1前にcommitする。元worktreeの既存変更 `.codex/.ltm-config-version` とhookのstaged mode変更を保全し、feature worktreeへコピーしない。当初のfeature worktree `/workspace/long-term-memory-client-setup` ではVitest workerの9p I/Oが停滞したため、`/tmp/long-term-memory-client-setup` へ移動済み。以後のcommitとSDD ledgerはこのlocal-overlay worktreeに保存する。`superpowers:subagent-driven-development` を使い、各委譲先へ作業前に long-term-memory を検索し関連memory本文を取得するよう明示する。
 
-### Task 1: Generate the runtime setup manifest
+### Task 1: runtime setup manifestを生成する
 
-**Files:**
-- Modify: `scripts/sync-embedded-docs.mjs`
-- Create: `src/lib/mcp/setup-manifest.generated.ts`
-- Test: `tests/lib/mcp/setup-manifest.test.ts`
+**対象ファイル:**
 
-**Interfaces:**
-- Produces `SETUP_MANIFEST` with `schema_version: 1`, `config_version`, `guide_markdown`, and three `{ path, sha256, content }` assets.
-- `config_version` is `sha256:<hex>` over JSON containing the rendered guide plus each asset path and asset SHA-256. Asset hashes are SHA-256 of exact UTF-8 source content.
+- 変更: `scripts/sync-embedded-docs.mjs`
+- 作成: `src/lib/mcp/setup-manifest.generated.ts`
+- テスト: `tests/lib/mcp/setup-manifest.test.ts`
 
-- [ ] **Step 1: Write the failing manifest tests.** First assert that `src/lib/mcp/setup-manifest.generated.ts` exists; only after that assertion, parse the JSON literal assigned to `SETUP_MANIFEST`. Assert the three asset paths, exact source content, per-asset SHA-256, deterministic `config_version`, and that the rendered guide includes the generated embeds.
-- [ ] **Step 2: Run `pnpm exec vitest run tests/lib/mcp/setup-manifest.test.ts`.** Confirm an assertion failure because the generated module does not exist, rather than a test-import or module-resolution error.
-- [ ] **Step 3: Extend `scripts/sync-embedded-docs.mjs`.** Generate the TypeScript module from the rendered `docs/post-mcp-setup.md` plus `skills/long-term-memory/SKILL.md`, `claude-config/hooks/ltm-init-reminder.sh`, and `claude-config/claude-md-block.md`. Make normal mode write both docs and module; make `--check` fail if either is stale. Serialize string values with `JSON.stringify`.
-- [ ] **Step 4: Run the manifest test and `node scripts/sync-embedded-docs.mjs --check`.** Confirm both pass and a second normal sync leaves the generated files unchanged.
-- [ ] **Step 5: Commit the generator, manifest, and test** with `feat: generate MCP client setup manifest`.
+**interface:**
 
-### Task 2: Add the client setup MCP tool
+- `schema_version: 1`、`config_version`、`guide_markdown`、3つの `{ path, sha256, content }` assetを持つ `SETUP_MANIFEST` を出力する。
+- `config_version` は、render後guideと各assetのpath・SHA-256を含むJSONに対する `sha256:<hex>`。各asset hashはUTF-8 source内容そのものから計算する。
 
-**Files:**
-- Modify: `src/lib/mcp/schemas.ts`
-- Modify: `src/lib/mcp/tools/meta.ts`
-- Create: `src/lib/mcp/tools/setup.ts`
-- Modify: `tests/lib/mcp/server.test.ts`
-- Test: `tests/lib/mcp/tools.setup.test.ts`
+- [x] **手順1: manifest testを先に追加する。** `src/lib/mcp/setup-manifest.generated.ts` の存在を最初にassertし、その後で `SETUP_MANIFEST` に代入されたJSON literalをparseする。3 assetのpath、sourceとの完全一致、assetごとのSHA-256、決定的な `config_version`、render後guide内のembedを確認する。
+- [x] **手順2: `corepack pnpm exec vitest run tests/lib/mcp/setup-manifest.test.ts` を実行する。** module解決エラーではなく、生成moduleがないことを示すassertion failureを確認する。
+- [x] **手順3: `scripts/sync-embedded-docs.mjs` を拡張する。** render済みの `docs/post-mcp-setup.md` と `skills/long-term-memory/SKILL.md`、`claude-config/hooks/ltm-init-reminder.sh`、`claude-config/claude-md-block.md` からTypeScript moduleを生成する。通常実行ではdocsとmoduleの両方を書き込み、`--check` はどちらかがstaleなら失敗させる。文字列のserializationには `JSON.stringify` を使う。
+- [x] **手順4: manifest testと `node scripts/sync-embedded-docs.mjs --check` を実行する。** 両方の成功を確認し、通常syncを続けて2回実行しても生成ファイルが変わらないことを確認する。
+- [x] **手順5: generator、manifest、testを `feat: generate MCP client setup manifest` でcommitする。**
 
-**Interfaces:**
-- `SetupClientEnvironmentInput = z.object({ client: z.enum(['claude-code', 'codex']) }).strict()`.
-- `registerClientSetupTool(server: McpServer): void` registers `setup_client_environment` and returns JSON text with `schema_version`, `config_version`, `client`, `target_scope`, `setup_instructions`, `guide_markdown`, `assets`, and `post_setup_actions`.
-- `target_scope` is `claude-user-config` or `codex-current-repository`. Claude uses `CLAUDE_CONFIG_DIR` or `$HOME/.claude`; Codex uses `git rev-parse --show-toplevel`.
+### Task 2: client setup MCP toolを追加する
 
-- [ ] **Step 1: Write failing tool tests.** Exercise both clients through `handleMcpRequest`; assert no `project_id` is needed, the client-specific scope/actions are returned, all asset hashes match, and payload size is below 64 KiB. Assert missing, unknown, and extra fields are rejected.
-- [ ] **Step 2: Run `pnpm exec vitest run tests/lib/mcp/tools.setup.test.ts tests/lib/mcp/server.test.ts`.** Confirm failures identify the missing tool and 17-tool catalog.
-- [ ] **Step 3: Implement the schema and `src/lib/mcp/tools/setup.ts`.** Return the generated manifest and explicit client-specific local-application instructions. State that MCP add/login are already complete, the agent must apply files locally, Dashboard gaps require manual action, and curator PAT instructions must not be applied. Do not read project data or call `requireProjectAccess`.
-- [ ] **Step 4: Register the tool from `registerMetaTools`, update the server test from 16 to 17 tools, and rerun the focused tests.** Verify `tools/list` exposes only `client` as the required setup argument.
-- [ ] **Step 5: Commit the tool and tests** with `feat: add MCP client setup tool`.
+**対象ファイル:**
 
-### Task 3: Update client guidance and Cloud Run smoke
+- 変更: `src/lib/mcp/schemas.ts`
+- 変更: `src/lib/mcp/tools/meta.ts`
+- 作成: `src/lib/mcp/tools/setup.ts`
+- 変更: `tests/lib/mcp/server.test.ts`
+- テスト: `tests/lib/mcp/tools.setup.test.ts`
+- 追加の契約test保守: `tests/lib/mcp/stateless.test.ts`、`tests/lib/mcp/descriptions.test.ts`
 
-**Files:**
-- Modify: `AGENTS.md`
-- Modify: `docs/reproduction-spec.md`
-- Modify: `docs/post-mcp-setup.md`
-- Modify: `skills/long-term-memory/SKILL.md`
-- Modify: `.agents/skills/long-term-memory/SKILL.md`
-- Modify: `scripts/cloud-run-smoke.ts`
-- Modify: `tests/docs/post-mcp-setup.test.ts`
-- Modify: `tests/deploy/task8.test.ts`
+**interface:**
 
-**Interfaces:**
-- The setup tool appears in the canonical skill tool list and in the guide's post-connection instructions.
-- Cloud Run smoke calls `setup_client_environment` with `{ client: 'codex' }` and no `project_id`, then checks the returned client, schema version, asset hashes, and guide content.
+- `SetupClientEnvironmentInput = z.object({ client: z.enum(['claude-code', 'codex']) }).strict()`。
+- `registerClientSetupTool(server: McpServer): void` は `setup_client_environment` を登録し、`schema_version`、`config_version`、`client`、`target_scope`、`setup_instructions`、`guide_markdown`、`assets`、`post_setup_actions` を含むJSON textを返す。
+- `target_scope` は `claude-user-config` または `codex-current-repository`。Claude Codeは `CLAUDE_CONFIG_DIR` または `$HOME/.claude` を使う。Codexのrepository rootはcaller側で `git rev-parse --show-toplevel` を実行して解決する。
 
-- [ ] **Step 1: Extend the documentation and smoke tests.** Assert the 17-tool inventory, unscoped setup call, client-specific behavior, and updated setup tool description in their owning tests.
-- [ ] **Step 2: Run `pnpm exec vitest run tests/docs/post-mcp-setup.test.ts tests/deploy/task8.test.ts`.** Confirm failures identify stale tool counts and missing smoke coverage.
-- [ ] **Step 3: Update the docs and skills.** Document that a connected client invokes the tool and its agent applies returned data locally; retain manual Dashboard and machine-only PAT boundaries. Update the reproduction spec and `AGENTS.md` so only `list_projects` and setup omit `project_id`; add the tool to both canonical and repository-local skill inventories. Run `node scripts/sync-embedded-docs.mjs` to refresh the guide and manifest.
-- [ ] **Step 4: Extend `scripts/cloud-run-smoke.ts`.** Add `setup_client_environment` to `EXPECTED_TOOLS`; make an unscoped, Bearer-authenticated call and validate its manifest response without writing local files. Run the documentation/smoke tests and `node scripts/sync-embedded-docs.mjs --check`.
-- [ ] **Step 5: Commit docs, smoke, and generated outputs** with `docs: document MCP client setup tool`.
+- [x] **手順1: tool testを先に追加する。** `handleMcpRequest` 経由で両clientを実行し、`project_id` なしの呼び出し、client別scope/action、asset hashを確認する。payload sizeを64 KiB未満とし、`client` 欠落・未知値・余分なfieldを拒否する。
+- [x] **手順2: `corepack pnpm exec vitest run tests/lib/mcp/tools.setup.test.ts tests/lib/mcp/server.test.ts` を実行する。** tool欠落とcatalog 17件への更新不足を示すfailureを確認する。
+- [x] **手順3: schemaと `src/lib/mcp/tools/setup.ts` を実装する。** generated manifestとclient別の明確なローカル適用手順を返す。MCP add/loginは完了済み、呼び出し側agentがローカル適用、Dashboard上の不足設定は手動、curator PAT手順は適用禁止と案内する。project dataを読まず、`requireProjectAccess` を呼ばない。
+- [x] **手順4: `registerMetaTools` からtoolを登録し、server testを16から17 toolsに更新してfocused testsを再実行する。** `tools/list` でsetupの必須引数が `client` のみであることを確認する。statelessとdescription testの既存catalog契約も17 toolsのscopeに合わせて更新する。
+- [x] **手順5: toolとtestsを `feat: add MCP client setup tool` でcommitする。**
 
-### Task 4: Run repository gates and open the PR
+### Task 3: client guidanceとCloud Run smokeを更新する
 
-**Files:**
-- Verify the files changed in Tasks 1–3.
+**対象ファイル:**
 
-- [ ] **Step 1: Run focused tests** for the setup manifest, setup tool, MCP server catalog, post-MCP documentation, and deployment smoke contract.
-- [ ] **Step 2: Run repository gates:** `pnpm test`, `pnpm lint`, `pnpm exec tsc --noEmit`, `NODE_ENV=production pnpm build`, `node scripts/sync-embedded-docs.mjs --check`, and `git diff --check`.
-- [ ] **Step 3: Inspect the final diff.** Confirm there are no runtime reads of `docs/`, client secrets, PATs, unintended `project_id` changes, or changes copied from the pre-existing dirty worktree.
-- [ ] **Step 4: Push `feature/mcp-client-setup-tool` and open a PR to `develop`.** Include focused behavior, validation results, and the Cloud Run smoke as a post-deployment acceptance check; do not deploy directly.
+- 変更: `AGENTS.md`
+- 変更: `docs/reproduction-spec.md`
+- 変更: `docs/post-mcp-setup.md`
+- 変更: `skills/long-term-memory/SKILL.md`
+- 変更: `.agents/skills/long-term-memory/SKILL.md`
+- 変更: `scripts/cloud-run-smoke.ts`
+- 変更: `tests/docs/post-mcp-setup.test.ts`
+- 変更: `tests/deploy/task8.test.ts`
 
-## Verification boundaries
+**interface:**
 
-The authenticated production Cloud Run smoke runs only after the PR is merged and deployed through the existing main/deploy workflow. Local tests and build do not claim that the production MCP endpoint has received the new tool.
+- canonical skillのtool一覧とguideの接続後手順にsetup toolを掲載する。
+- Cloud Run smokeは `{ client: 'codex' }` で `setup_client_environment` を呼び、`project_id` なしでclient、schema version、asset hash、guide内容を検証する。
+
+- [x] **手順1: docsとsmokeの契約testを拡張する。** 17 toolsの一覧、scopeなしsetup call、client別動作、新setup tool descriptionを各testで確認する。
+- [x] **手順2: `corepack pnpm exec vitest run tests/docs/post-mcp-setup.test.ts tests/deploy/task8.test.ts` を実行する。** 古いtool数とsmoke coverage不足を示すfailureを確認する。
+- [x] **手順3: docsとskillsを更新する。** 接続済みclientからsetup toolを呼び、返却データをclient agentがローカル適用することを説明する。Dashboardの手動操作とmachine-only PATの境界を維持する。`AGENTS.md` と `docs/reproduction-spec.md` では `list_projects` とsetupだけが `project_id` を省略し、他の15 toolsは必須とする。canonical skillとrepository-local skillの両方へtoolを追加する。`node scripts/sync-embedded-docs.mjs` でguideとmanifestを同期する。
+- [x] **手順4: `scripts/cloud-run-smoke.ts` を拡張する。** `EXPECTED_TOOLS` にsetupを加え、通常のBearer認証で `project_id` なしのcallを実行する。local fileを書き込まずにmanifest応答を検証し、docs/smoke testsと `node scripts/sync-embedded-docs.mjs --check` を実行する。
+- [x] **手順5: docs、smoke、generated outputsを `docs: document MCP client setup tool` でcommitする。**
+
+### Task 4: repository gatesを実行してPRを作成する
+
+**対象:** Task 1–3で変更したファイル。
+
+- [x] **手順1: focused testsを実行する。** setup manifest、setup tool、MCP server catalog、post-MCP docs、deployment smoke contractを確認する。
+- [x] **手順2: repository gatesを実行する。** `corepack pnpm test`、`corepack pnpm lint`、`corepack pnpm exec tsc --noEmit`、`NODE_ENV=production corepack pnpm build`、`node scripts/sync-embedded-docs.mjs --check`、`git diff --check`。
+- [x] **手順3: 最終diffを確認する。** runtimeの `docs/` 読み込み、client secrets/PAT、意図しない `project_id` 契約変更、元worktreeからの既存変更混入がないことを確認する。独立したwhole-branch reviewを実施する。
+- [ ] **手順4: `feature/mcp-client-setup-tool` をpushし、`develop` 向けPRを作成する。** 主な動作、検証結果、deploy後に行うCloud Run smokeを記載し、直接deployしない。
+
+## 検証範囲
+
+認証済みproduction Cloud Run smokeは、PRがmergeされ既存のmain/deploy workflowでdeployされた後にのみ実施する。ローカルtests/buildの成功をproduction MCP endpointへの反映とみなさない。
