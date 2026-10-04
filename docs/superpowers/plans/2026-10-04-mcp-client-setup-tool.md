@@ -30,7 +30,7 @@
 
 ## Worktree and delegation
 
-Before implementation, use `superpowers:using-git-worktrees` to create a clean worktree from the current `origin/develop` commit on `feature/mcp-client-setup-tool`. The approved spec and plan currently exist only as untracked files in the current worktree; copy both into the feature worktree and commit them before Task 1. Preserve all existing changes in the current worktree, including `.codex/.ltm-config-version` and the staged hook mode change. Use `superpowers:subagent-driven-development`; every delegated agent must search long-term-memory and read full relevant results before acting.
+Before implementation, use `superpowers:using-git-worktrees` to create a clean worktree from the current `origin/develop` commit on `feature/mcp-client-setup-tool`. The approved spec and plan currently exist only as untracked files in the current worktree; copy both into the feature worktree and commit them before Task 1. Preserve all existing changes in the current worktree, including `.codex/.ltm-config-version` and the staged hook mode change. The feature worktree was first created at `/workspace/long-term-memory-client-setup`, then relocated to `/tmp/long-term-memory-client-setup` after Vitest worker I/O stalled on the 9p mount; keep commits and the SDD ledger in that local-overlay worktree. Use `superpowers:subagent-driven-development`; every delegated agent must search long-term-memory and read full relevant results before acting.
 
 ### Task 1: Generate the runtime setup manifest
 
