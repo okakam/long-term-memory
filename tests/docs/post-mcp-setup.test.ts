@@ -9,12 +9,16 @@ const read = (relativePath: string) => readFileSync(resolve(root, relativePath),
 test('Claude CodeとCodexで共有できるskillとinstruction blockを保持する', () => {
   const skill = read('skills/long-term-memory/SKILL.md');
   expect(skill).toContain('mcp__long-term-memory__*');
-  expect(skill).toContain('Every other tool requires the selected `project_id` as a top-level argument');
+  expect(skill).toContain('Only `list_projects` and `setup_client_environment` omit `project_id`');
   expect(skill).not.toContain('The project_id comes from the MCP URL');
   expect(skill).toContain('search_memories');
   expect(skill).toContain('get_memory');
   expect(skill).toContain('get_memory_index');
   expect(skill).toContain('subagent');
+  expect(skill).toContain('setup_client_environment');
+  expect(skill).toContain('after MCP add/login');
+  expect(skill).toContain('apply the returned guide/assets locally');
+  expect(read('.agents/skills/long-term-memory/SKILL.md')).toBe(skill);
 
   const block = read('claude-config/claude-md-block.md');
   for (const rule of [
@@ -170,4 +174,20 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   expect(workflow).not.toContain('VERCEL_AUTOMATION_BYPASS_SECRET');
   expect(workflow).toContain('cat > "$LTM_CURATOR_ENV" <<ENV');
   expect(workflow).not.toContain('cat > "$LTM_CURATOR_ENV" <<' + "'ENV'");
+});
+
+test('接続後setupは17-tool契約とクライアント側適用を案内する', () => {
+  const setup = read('docs/post-mcp-setup.md');
+  for (const requirement of [
+    'setup_client_environment', '"client": "codex"', '"client": "claude-code"',
+    'MCP add/loginが完了した後', '呼び出し側agentがローカル',
+    'schema_version', 'config_version', 'assets', 'sha256',
+    'Dashboardでの手動操作', '通常client設定へ適用しません',
+  ]) expect(setup).toContain(requirement);
+  for (const file of ['docs/reproduction-spec.md', 'AGENTS.md']) {
+    const doc = read(file);
+    expect(doc).toContain('17');
+    expect(doc).toContain('`list_projects`と`setup_client_environment`');
+    expect(doc).toContain('15 tools');
+  }
 });

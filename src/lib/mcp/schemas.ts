@@ -143,6 +143,10 @@ export const GetMemoryIndexInput = z.object({
   ...ProjectScopedInput,
   include_shared: IncludeShared,
 });
+export const SetupClientEnvironmentInput = z.object({
+  client: z.enum(['claude-code', 'codex']).describe('The calling client whose local environment should be configured.'),
+}).strict();
+
 export const ReindexInput = z.object(ProjectScopedInput).strict();
 
 export type RememberUserFactArgs = z.infer<typeof RememberUserFactInput>;

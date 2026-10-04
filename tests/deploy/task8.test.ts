@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
+import { assertTools, smoke } from '../../scripts/cloud-run-smoke';
+import { SETUP_MANIFEST } from '../../src/lib/mcp/setup-manifest.generated';
 
 import nextConfig from '../../next.config';
 
@@ -124,4 +126,65 @@ test('Cloud Run smokeはMCPの主要read/write/reindex経路を実際に呼び�
     "callTool(baseUrl, projectId, token, 10, 'reindex'",
     "callTool(baseUrl, projectId, token, 12, 'forget_memory'",
   ]) expect(smoke).toContain(toolCall);
+});
+
+const expectedTools = [
+  'list_memories_by_type', 'search_by_tag', 'find_related', 'search_memories', 'get_memory', 'get_memory_index',
+  'remember_user_fact', 'remember_reference', 'remember_session_summary', 'remember_feedback', 'remember_project_fact',
+  'update_memory', 'forget_memory', 'link_memories', 'list_projects', 'reindex', 'setup_client_environment',
+];
+
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+test('Cloud Run smokeのinventoryはsetupを含む17 toolsを要求する', () => {
+  expect(() => assertTools({ result: { tools: expectedTools.map((name) => ({ name })) } })).not.toThrow();
+  expect(() => assertTools({ result: { tools: expectedTools.slice(0, -1).map((name) => ({ name })) } })).toThrow('unexpected MCP tool catalog');
+});
+
+function stubSmoke(setup: object) {
+  vi.stubEnv('CLOUD_RUN_URL', 'https://smoke.example');
+  vi.stubEnv('LTM_MCP_TOKEN', 'test-bearer');
+  vi.stubEnv('LTM_SMOKE_PROJECT_ID', 'smoke');
+  const requests: Array<{ name: string; arguments: Record<string, unknown>; authorization: string | null }> = [];
+  let savedName = '';
+  let targetName = '';
+  vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
+    if (!init) return Response.json({ ok: true });
+    const request = JSON.parse(String(init.body));
+    if (request.method === 'tools/list') return Response.json({ result: { tools: expectedTools.map((name) => ({ name })) } });
+    if (request.method === 'initialize') return Response.json({ result: {} });
+    const { name, arguments: args } = request.params;
+    requests.push({ name, arguments: args, authorization: new Headers(init.headers).get('authorization') });
+    let value: unknown = {};
+    if (name === 'setup_client_environment') value = setup;
+    if (name === 'list_projects') value = [{ project_id: 'smoke' }];
+    if (name === 'remember_reference') {
+      if (!savedName) savedName = args.name; else targetName = args.name;
+    }
+    if (name === 'get_memory') value = { name: savedName, links: [targetName] };
+    if (name === 'search_memories') value = [{ name: savedName }];
+    return Response.json({ result: { content: [{ type: 'text', text: JSON.stringify(value) }] } });
+  });
+  return requests;
+}
+
+test('Cloud Run smokeはBearerでproject_idなしのCodex setupと既存project toolsを呼ぶ', async () => {
+  const requests = stubSmoke({ ...SETUP_MANIFEST, client: 'codex' });
+  await smoke();
+  expect(requests.find((request) => request.name === 'setup_client_environment')).toEqual({
+    name: 'setup_client_environment', arguments: { client: 'codex' }, authorization: 'Bearer test-bearer',
+  });
+  const projectCalls = requests.filter((request) => !['list_projects', 'setup_client_environment'].includes(request.name));
+  expect(projectCalls.length).toBeGreaterThan(0);
+  for (const request of projectCalls) expect(request.arguments.project_id).toBe('smoke');
+});
+
+test.each([
+  { client: 'claude-code' },
+  { schema_version: 2 },
+  { guide_markdown: '' },
+  { assets: SETUP_MANIFEST.assets.map((asset, index) => index === 0 ? { ...asset, content: 'tampered' } : asset) },
+])('Cloud Run smokeは不正setup応答 %j を拒否する', async (patch) => {
+  stubSmoke({ ...SETUP_MANIFEST, client: 'codex', ...patch });
+  await expect(smoke()).rejects.toThrow('smoke setup');
 });

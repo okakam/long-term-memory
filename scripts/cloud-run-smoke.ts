@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 const EXPECTED_TOOLS = [
   'list_memories_by_type', 'search_by_tag', 'find_related', 'search_memories', 'get_memory', 'get_memory_index',
   'remember_user_fact', 'remember_reference', 'remember_session_summary', 'remember_feedback', 'remember_project_fact',
-  'update_memory', 'forget_memory', 'link_memories', 'list_projects', 'reindex',
+  'update_memory', 'forget_memory', 'link_memories', 'list_projects', 'reindex', 'setup_client_environment',
 ];
 
 interface JsonRpcResponse {
@@ -48,6 +49,31 @@ async function callTool(baseUrl: string, projectId: string, token: string, id: n
   }));
 }
 
+function assertSetup(text: string): void {
+  const setup = JSON.parse(text) as {
+    client?: string; schema_version?: number; config_version?: string; guide_markdown?: string;
+    assets?: Array<{ path?: string; sha256?: string; content?: string }>;
+  };
+  const paths = ['skills/long-term-memory/SKILL.md', 'claude-config/hooks/ltm-init-reminder.sh', 'claude-config/claude-md-block.md'];
+  const sha256 = (content: string) => createHash('sha256').update(content, 'utf8').digest('hex');
+  if (setup.client !== 'codex' || setup.schema_version !== 1) throw new Error('smoke setup client/schema mismatch');
+  const guide = setup.guide_markdown;
+  const assets = setup.assets;
+  if (typeof guide !== 'string' || ![
+    '# Claude Code / Codex', 'setup_client_environment', 'git rev-parse --show-toplevel',
+  ].every((part) => guide.includes(part))) throw new Error('smoke setup guide missing');
+  if (!Array.isArray(assets) || assets.length !== paths.length || paths.some((path, index) => {
+    const asset = assets[index];
+    return asset?.path !== path || typeof asset.content !== 'string' || !asset.content ||
+      !/^[a-f0-9]{64}$/.test(asset.sha256 ?? '') || sha256(asset.content) !== asset.sha256;
+  })) throw new Error('smoke setup asset hash mismatch');
+  const version = `sha256:${sha256(JSON.stringify({
+    guide_markdown: setup.guide_markdown,
+    assets: assets.map(({ path, sha256 }) => ({ path, sha256 })),
+  }))}`;
+  if (setup.config_version !== version) throw new Error('smoke setup config version mismatch');
+}
+
 export async function smoke(): Promise<void> {
   const baseUrl = required('CLOUD_RUN_URL').replace(/\/+$/, '');
   const token = required('LTM_MCP_TOKEN');
@@ -59,6 +85,9 @@ export async function smoke(): Promise<void> {
     params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'cloud-run-smoke', version: '1' } },
   });
   assertTools(await call(baseUrl, token, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }));
+  assertSetup(resultText(await call(baseUrl, token, {
+    jsonrpc: '2.0', id: 14, method: 'tools/call', params: { name: 'setup_client_environment', arguments: { client: 'codex' } },
+  })));
   const projects = JSON.parse(resultText(await call(baseUrl, token, {
     jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'list_projects', arguments: {} },
   }))) as Array<{ project_id?: string }>;
