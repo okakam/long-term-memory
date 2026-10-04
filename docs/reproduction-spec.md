@@ -33,7 +33,7 @@ Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret 
 | Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hash、OAuth client/grant/token hashの永続保存 |
 | GCS | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
 | `/tmp` SQLite | FTS5・KG・検索用の再構築可能cache。コンテナ再起動で消える前提 |
-| MCP | サーバー名は `long-term-memory`。`POST /api/mcp`、16 tools、OAuth access tokenまたはPATを `Authorization: Bearer` で受け付ける。project scopeはtool inputで選ぶ |
+| MCP | サーバー名は `long-term-memory`。`POST /api/mcp`、17 tools、OAuth access tokenまたはPATを `Authorization: Bearer` で受け付ける。project scopeはtool inputで選ぶ |
 
 Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全文を永続保存しない。Firestoreのmemory metadataはGCS keyとhashを持ち、reindex時にGCS本文・hash・frontmatter・tombstoneを照合する。
 
@@ -48,7 +48,7 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 - API routeへ直接ID tokenを送る場合だけ `Authorization: Bearer <Firebase ID token>` を許可する。MCPはFirebase ID tokenではなくOAuth access tokenまたはMCP PATを使う。
 - MCP OAuthはDCR、authorization code、PKCE S256、15分access token、30日refresh tokenを使い、Firebase sessionで本人確認した同意画面から発行する。DCRはscopeを省略可能とし、指定時は`mcp:access`だけを許可して登録responseには常に`mcp:access`を返す。`application_type`も省略可能とし、指定時は`native`だけを許可して登録responseへ返す。それ以外のscope/application typeは拒否する。Codex loopback callbackは`http://127.0.0.1[:port]/<path>`を使い、認可時はportだけ可変、pathは完全一致とする。VS Code Dev Container内の利用ではprocessベースの自動port転送を使い、必要な場合は現在のcallback portだけを一時転送する。OAuthは `mcp:access` scopeだけを持ち、project roleをtokenへ複製しない。
 - PAT本文は発行レスポンスで一度だけ返し、FirestoreにはSHA-256 hash、prefix、所有UID、期限、失効日時だけを保存する。OAuth client、authorization code、access/refresh tokenも本文を保存せずhashとprefixだけを保存する。
-- project accessはtool invocationごとにFirestore membershipで判定する。`list_projects`は認証主体がowner/memberであるprojectを返し、空projectも含める。残り15 toolsは必須top-level `project_id`で対象を指定する。`__shared__` はread-onlyで、writeはcurator UIDのPAT principalと`LTM_MAINTENANCE_TOKEN`を満たすcuratorだけに限定し、OAuth credentialでは許可しない。
+- project accessはtool invocationごとにFirestore membershipで判定する。`list_projects`は認証主体がowner/memberであるprojectを返し、空projectも含める。`list_projects`と`setup_client_environment`だけがproject指定を省略し、残り15 toolsは必須top-level `project_id`で対象を指定する。`__shared__` はread-onlyで、writeはcurator UIDのPAT principalと`LTM_MAINTENANCE_TOKEN`を満たすcuratorだけに限定し、OAuth credentialでは許可しない。
 - Firestore client SDKからの直接read/writeは `firestore.rules` で全拒否し、Admin SDK経由だけでアクセスする。
 
 ## 4. 環境変数
@@ -88,16 +88,18 @@ OAuth consentの`/oauth/authorize`では、transaction保存済みのredirect UR
 - `/api/auth/session`: Firebase ID tokenを短期session cookieへ交換。余計なquery parameterは拒否。
 - `/api/projects`、`/api/projects/:id/members`、`/api/auth/tokens`、`/api/memories/:id`: Firebase principalとFirestore membershipをservice呼び出し前に検証する。
 - `/.well-known/oauth-protected-resource/api/mcp`、`/.well-known/oauth-authorization-server`、`/oauth/register`、`/oauth/authorize`、`/oauth/token`、`/oauth/revoke`: Codex向けDCR/PKCE OAuth endpoint。metadataとOAuth endpointは`Cache-Control: no-store`を返す。
-- `/api/mcp`: queryなしのStreamable HTTP endpoint。`project_id` queryがあるrequestはHTTP 400で拒否する。`initialize`、`tools/list`、`list_projects`はproject scopeを取らず、それ以外の15 toolsはtop-level必須`project_id`を受ける。requestごとにOAuth access tokenまたはPATを検証し、tool invocationごとにmembershipとtool別権限を再評価する。principal不在・無効はHTTP 401、認証済みtool callのmembership/role拒否はJSON-RPC tool error (`isError: true`) をHTTP 200で返す。失効済みgrantを拒否し、認証主体やproject stateをmodule globalへ保存しない。
+- `/api/mcp`: queryなしのStreamable HTTP endpoint。`project_id` queryがあるrequestはHTTP 400で拒否する。`initialize`、`tools/list`、`list_projects`と`setup_client_environment`はproject scopeを取らず、それ以外の15 toolsはtop-level必須`project_id`を受ける。requestごとにOAuth access tokenまたはPATを検証し、projectを扱う15 toolsのinvocationごとにmembershipとtool別権限を再評価する。principal不在・無効はHTTP 401、認証済みtool callのmembership/role拒否はJSON-RPC tool error (`isError: true`) をHTTP 200で返す。失効済みgrantを拒否し、認証主体やproject stateをmodule globalへ保存しない。
 - `/api/auth/oauth-grants`: Firebase session本人のOAuth接続一覧と失効だけを許可し、token本文・hash・refresh familyは返さない。
 - `/dashboard`: Firebaseでログインした作成者がprojectを作成するとFirestore membershipの`owner`になる。ownerだけが登録済み許可ドメインのメールアドレスをmemberへ追加し、role変更・削除を行える。OAuth同意はmembershipを変更せず、MCP requestごとにmembershipを再評価する。
 - Web UIは `/sign-in` と `/sign-up` をpublicにし、Firebase client SDKのemail/password・Google providerを使う。Firebase公開設定は `/api/auth/config` からno-storeで取得でき、client bundleへ秘密値を埋め込まない。共有scopeでは編集・削除を表示しない。
 
-MCP toolsは次の16個を維持する。
+MCP toolsは次の17個を維持する。
 
-`list_memories_by_type`、`search_by_tag`、`find_related`、`search_memories`、`get_memory`、`get_memory_index`、`remember_user_fact`、`remember_reference`、`remember_session_summary`、`remember_feedback`、`remember_project_fact`、`update_memory`、`forget_memory`、`link_memories`、`list_projects`、`reindex`。
+`list_memories_by_type`、`search_by_tag`、`find_related`、`search_memories`、`get_memory`、`get_memory_index`、`remember_user_fact`、`remember_reference`、`remember_session_summary`、`remember_feedback`、`remember_project_fact`、`update_memory`、`forget_memory`、`link_memories`、`list_projects`、`setup_client_environment`、`reindex`。
 
-`list_projects`で利用可能projectを確認してから、その他のtoolでは同じcallのtop-level `project_id`へ対象slugを渡す。Dashboardがprojectのallowlistとowner/member管理の正本であり、MCP接続ごとのproject設定はない。認証済み利用者の`list_projects`応答は`project_id`、`role`、`created_at`、`updated_at`のみを含み、`owner_user_id`は公開しない。
+`list_projects`で利用可能projectを確認してから、projectを扱う15 toolsでは同じcallのtop-level `project_id`へ対象slugを渡す。Dashboardがprojectのallowlistとowner/member管理の正本であり、MCP接続ごとのproject設定はない。認証済み利用者の`list_projects`応答は`project_id`、`role`、`created_at`、`updated_at`のみを含み、`owner_user_id`は公開しない。
+
+利用者が初期設定・更新を依頼した場合、`setup_client_environment`はMCP add/login完了後に`client: "claude-code"`又は`client: "codex"`で呼び、project_idは渡さない。schema_version、config_version、guide_markdown、SHA-256付きassetsを返し、呼び出し側agentがローカルへ適用する。Claude Codeはuser config directory、Codexはagent自身が`git rev-parse --show-toplevel`で解決したcurrent repositoryを対象にする。Cloud Runはclient filesystemへ書き込まない。Dashboardのproject/member変更は手動で行い、curator/CI用PAT設定を通常clientへ適用しない。
 
 ## 7. 初期セットアップと旧環境の扱い
 
@@ -105,7 +107,7 @@ MCP toolsは次の16個を維持する。
 2. 旧providerのcredential、環境変数、GitHub連携を削除する。新しいCloud Run/Firebase/GCS/Firestoreの設定と混同しない。
 3. Cloud Run、Firebase Authentication with Identity Platform、Firestore、GCSを新規作成し、空のプロジェクトと`@okakam.net`のsmoke用ユーザーを用意する。
 4. `firebase deploy --project="$LTM_PROJECT_ID" --only functions`でAuth Blocking Functionsをデプロイし、Firebase Consoleでbefore user created / before user signed inの登録を確認する。
-5. Cloud Run smokeでhealth、initialize、tools/list 16件、save、search、get、update、link、reindex、deleteを確認する。renameはMCP公開tool対象外のため`CloudMemoryService`の回帰テストで確認する。
+5. Cloud Run smokeでhealth、initialize、tools/list 17件、project_idなしのCodex setup（client、schema version、asset hashes、guide content）、save、search、get、update、link、reindex、deleteを確認する。renameはMCP公開tool対象外のため`CloudMemoryService`の回帰テストで確認する。
 6. 初期データは新環境で作成し、以後のバックアップ・復旧手順をrepository外へ保存する。
 
 ## 8. CI/CD
