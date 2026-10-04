@@ -5,8 +5,10 @@ import { getAuthStore } from '@/lib/auth/store';
 import type { ToolContext } from '../context';
 import { ReindexInput } from '../schemas';
 import { json, text } from './util';
+import { registerClientSetupTool } from './setup';
 
 export function registerMetaTools(server: McpServer, ctx: ToolContext): void {
+  registerClientSetupTool(server);
   server.registerTool('list_projects', {
     description: 'Call this first to find accessible projects, then pass the chosen project_id to other tools.',
   }, async () => {

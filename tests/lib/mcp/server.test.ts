@@ -4,10 +4,10 @@ import { createMcpServer } from '@/lib/mcp/server';
 
 const context = { svc: {} as never, requireProjectAccess: async () => undefined };
 
-test('createMcpServer は 16 ツールを登録する', async () => {
+test('createMcpServer は 17 ツールを登録する', async () => {
   const server = createMcpServer(context);
   const result = await server.server['_requestHandlers'].get('tools/list')?.({ method: 'tools/list', params: {} }, {} as never);
-  expect(result?.tools).toHaveLength(16);
+  expect(result?.tools).toHaveLength(17);
 });
 
 test('Codex 向けの書き込みスキーマは tuple 形式を公開せず、triples を固定長文字列配列で表す', async () => {
