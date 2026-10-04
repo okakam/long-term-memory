@@ -38,7 +38,7 @@ test('stateless invocation は initialize/list/call を別々に処理する', a
 
   const listed = await call({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
   expect(listed.status).toBe(200);
-  expect((await listed.json()).result.tools).toHaveLength(16);
+  expect((await listed.json()).result.tools).toHaveLength(17);
 
   const called = await call({
     jsonrpc: '2.0',
@@ -61,7 +61,7 @@ test('local-session は外部 initialize 後の後続 request を同じ server �
   expect(initialized.status).toBe(200);
   const listed = await call({ jsonrpc: '2.0', id: 11, method: 'tools/list', params: {} }, 'local-session');
   expect(listed.status).toBe(200);
-  expect((await listed.json()).result.tools).toHaveLength(16);
+  expect((await listed.json()).result.tools).toHaveLength(17);
   expect(telemetry.rows().find((row) => row.event === 'connect')?.project_id).toBe('__global__');
 });
 
