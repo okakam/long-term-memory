@@ -1,10 +1,17 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const documents = ['docs/post-mcp-setup.md'];
+const manifestPath = 'src/lib/mcp/setup-manifest.generated.ts';
+const assetPaths = [
+  'skills/long-term-memory/SKILL.md',
+  'claude-config/hooks/ltm-init-reminder.sh',
+  'claude-config/claude-md-block.md',
+];
 const markerPattern = /^<!-- ltm:embed src="([^"]+)" fence="([0-9]+)" lang="([^"]+)" -->$/gm;
 const endMarker = '<!-- /ltm:embed -->';
 const fenceCharacter = String.fromCharCode(96);
@@ -39,16 +46,40 @@ function renderDocument(documentPath) {
 }
 
 let changed = false;
-for (const document of documents) {
-  const result = renderDocument(document);
+const renderedDocuments = documents.map(renderDocument);
+for (const result of renderedDocuments) {
   if (result.original !== result.output) {
     changed = true;
     if (!checkOnly) writeFileSync(result.absolute, result.output);
   }
 }
+
+const sha256 = (content) => createHash('sha256').update(content, 'utf8').digest('hex');
+const assets = assetPaths.map((path) => {
+  const content = readFileSync(resolve(root, path), 'utf8');
+  return { path, sha256: sha256(content), content };
+});
+const guideMarkdown = renderedDocuments[0].output;
+const versionInput = JSON.stringify({
+  guide_markdown: guideMarkdown,
+  assets: assets.map(({ path, sha256 }) => ({ path, sha256 })),
+});
+const manifest = {
+  schema_version: 1,
+  config_version: 'sha256:' + sha256(versionInput),
+  guide_markdown: guideMarkdown,
+  assets,
+};
+const moduleContent = '// scripts/sync-embedded-docs.mjs が生成します。直接編集しないでください。\n'
+  + 'export const SETUP_MANIFEST = ' + JSON.stringify(manifest, null, 2) + ' as const;\n';
+const manifestAbsolute = resolve(root, manifestPath);
+if (!existsSync(manifestAbsolute) || readFileSync(manifestAbsolute, 'utf8') !== moduleContent) {
+  changed = true;
+  if (!checkOnly) writeFileSync(manifestAbsolute, moduleContent);
+}
 if (checkOnly && changed) {
-  console.error('embedded docs are out of date');
+  console.error('embedded docs or setup manifest are out of date');
   process.exitCode = 1;
 } else if (!checkOnly) {
-  console.log('embedded docs synchronized');
+  console.log('embedded docs and setup manifest synchronized');
 }
