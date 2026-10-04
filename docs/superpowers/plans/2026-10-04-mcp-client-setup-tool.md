@@ -105,7 +105,7 @@
 - [x] **手順1: focused testsを実行する。** setup manifest、setup tool、MCP server catalog、post-MCP docs、deployment smoke contractを確認する。
 - [x] **手順2: repository gatesを実行する。** `corepack pnpm test`、`corepack pnpm lint`、`corepack pnpm exec tsc --noEmit`、`NODE_ENV=production corepack pnpm build`、`node scripts/sync-embedded-docs.mjs --check`、`git diff --check`。
 - [x] **手順3: 最終diffを確認する。** runtimeの `docs/` 読み込み、client secrets/PAT、意図しない `project_id` 契約変更、元worktreeからの既存変更混入がないことを確認する。独立したwhole-branch reviewを実施する。
-- [ ] **手順4: `feature/mcp-client-setup-tool` をpushし、`develop` 向けPRを作成する。** 主な動作、検証結果、deploy後に行うCloud Run smokeを記載し、直接deployしない。
+- [x] **手順4: `feature/mcp-client-setup-tool` をpushし、`develop` 向けPRを作成する。** 主な動作、検証結果、deploy後に行うCloud Run smokeを記載し、直接deployしない（PR #53）。
 
 ## 検証範囲
 
