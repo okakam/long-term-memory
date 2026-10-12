@@ -4,6 +4,7 @@
 
 - このリポジトリの仕様書・計画書・運用ドキュメントは日本語で記述する。
 - 実装前に `docs/reproduction-spec.md` と、対象タスクに対応する `docs/superpowers/plans/` の計画を確認する。
+- 自動棚卸し・出典記録・共通情報集約の承認済み設計は `docs/superpowers/specs/2026-10-12-automated-memory-review-and-provenance-design.md`、実装計画の入口は `docs/superpowers/plans/2026-10-12-automated-memory-operations.md` とする。通常projectの自動見直しと日時指定の共有集約は分割計画に沿って実装する。現時点では計画段階であり、本番の既存17 tools・curator挙動を実装済みとして扱わない。
 - 仕様、構成、開発手順、運用ルールに変更があった場合は、関連するドキュメントとこの `AGENTS.md` を随時更新する。特に、このファイル自体も開発の進行に合わせて随時更新すること。
 - 認証情報、API キー、実在する `.env` ファイルはコミットしない。
 - `.gitignore` で依存関係、生成物、ローカル記憶データ、認証を含むローカル設定を除外する。`.env.example` と `pnpm-lock.yaml` はバージョン管理する。
