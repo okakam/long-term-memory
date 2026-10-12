@@ -57,7 +57,7 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 
 ### Cloud Run runtime
 
-`LTM_STORAGE_DRIVER=cloud`、`AUTH_REQUIRED=1`、`MCP_OAUTH_ENABLED`、`PORT`、`LTM_GCS_BUCKET`、`LTM_GCS_PREFIX`、`FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、`NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`LTM_CURATOR_USER_ID`、`LTM_MAINTENANCE_TOKEN` を設定する。OAuth有効時は `MCP_OAUTH_ENABLED=1`、`AUTH_REQUIRED=1`、HTTPSの `MCP_PUBLIC_URL` を必須とする。
+`LTM_STORAGE_DRIVER=cloud`、`AUTH_REQUIRED=1`、`MCP_OAUTH_ENABLED`、`PORT`、`LTM_GCS_BUCKET`、`LTM_GCS_PREFIX`、`FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、`NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`LTM_CURATOR_USER_ID`、`LTM_MAINTENANCE_TOKEN`、`LTM_AUTO_MAINTENANCE_TOKEN` を設定する。後者は通常project棚卸し専用で、curator PATやshared用maintenance tokenと共有しない。OAuth有効時は `MCP_OAUTH_ENABLED=1`、`AUTH_REQUIRED=1`、HTTPSの `MCP_PUBLIC_URL` を必須とする。
 
 GCSとFirestoreへのアクセスはCloud RunランタイムサービスアカウントのIAMとApplication Default Credentialsを使う。Firebase Adminのservice account JSONをrepositoryやコンテナへコピーしない。
 
@@ -90,7 +90,9 @@ OAuth consentの`/oauth/authorize`では、transaction保存済みのredirect UR
 - `/.well-known/oauth-protected-resource/api/mcp`、`/.well-known/oauth-authorization-server`、`/oauth/register`、`/oauth/authorize`、`/oauth/token`、`/oauth/revoke`: Codex向けDCR/PKCE OAuth endpoint。metadataとOAuth endpointは`Cache-Control: no-store`を返す。
 - `/api/mcp`: queryなしのStreamable HTTP endpoint。`project_id` queryがあるrequestはHTTP 400で拒否する。`initialize`、`tools/list`、`list_projects`と`setup_client_environment`はproject scopeを取らず、それ以外の15 toolsはtop-level必須`project_id`を受ける。requestごとにOAuth access tokenまたはPATを検証し、projectを扱う15 toolsのinvocationごとにmembershipとtool別権限を再評価する。principal不在・無効はHTTP 401、認証済みtool callのmembership/role拒否はJSON-RPC tool error (`isError: true`) をHTTP 200で返す。失効済みgrantを拒否し、認証主体やproject stateをmodule globalへ保存しない。
 - `/api/auth/oauth-grants`: Firebase session本人のOAuth接続一覧と失効だけを許可し、token本文・hash・refresh familyは返さない。
-- `/dashboard`: Firebaseでログインした作成者がprojectを作成するとFirestore membershipの`owner`になる。ownerだけが登録済み許可ドメインのメールアドレスをmemberへ追加し、role変更・削除を行える。OAuth同意はmembershipを変更せず、MCP requestごとにmembershipを再評価する。
+- `/dashboard`: Firebaseでログインした作成者がprojectを作成するとFirestore membershipの`owner`になる。ownerだけが登録済み許可ドメインのメールアドレスをmemberへ追加し、role変更・削除を行える。OAuth同意はmembershipを変更せず、MCP requestごとにmembershipを再評価する。ownerは通常project単位で自動棚卸しを有効化し、memory type別review日数とsession archive日数を設定できる。設定はversion付きで保存し、更新競合はHTTP 409として再読み込みを促す。初期状態はdisabledとする。
+- Dashboardの`/api/projects/:id/maintenance/history`はowner向けにeventとarchive一覧をページングし、選択した記憶のrevision metadataと現在hashを返す。本文・source URL・内部GCS keyは返さない。`/api/projects/:id/maintenance/restore`はsame-originとowner membershipを再確認してからrevisionを復元し、hash競合時はHTTP 409を返す。
+- `__shared__`の履歴GETと`/api/projects/__shared__/maintenance/restore-requests`はcurator UIDだけに許可する。Dashboardから共有restore requestを作成できるが、本文やrevision内容を直接書き込まない。共有curator jobはcurator PATと`LTM_MAINTENANCE_TOKEN`を専用curation registryで再検証し、現在hashとrevisionを照合してrequestを適用し、pending/succeeded/failedを記録する。
 - Web UIは `/sign-in` と `/sign-up` をpublicにし、Firebase client SDKのemail/password・Google providerを使う。Firebase公開設定は `/api/auth/config` からno-storeで取得でき、client bundleへ秘密値を埋め込まない。共有scopeでは編集・削除を表示しない。
 
 MCP toolsは次の17個を維持する。
@@ -113,6 +115,8 @@ MCP toolsは次の17個を維持する。
 ## 8. CI/CD
 
 `.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にrootのtest・lint・production build・Docker build・built image上の`/api/health`起動確認に加えてFunctions専用のinstall・test・buildを実行し、runtime secretを渡さない。Next.jsは`next start`時にも`next.config.ts`を読み込むため、runner imageにはそこから参照するproject module依存を含める。Firebase Functionsの本番デプロイはFirebase CLIの認証済み操作としてCloud Run deployとは分離する。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS/OAuth flagはEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
+
+`.github/workflows/curator.yml` は毎日01:00 UTCに通常projectの自動棚卸しと共通記憶集約を同一runner上で順に実行し、workflow concurrencyで直列化する。通常棚卸しはownerが有効化したprojectだけを専用`LTM_AUTO_MAINTENANCE_TOKEN`で処理する。shared集約はcurator PATと`LTM_MAINTENANCE_TOKEN`を使い、curator principalから読めるprojectのactive記憶を作成日時のUTC半開期間で全type（sessionを含む）読み、元projectを変更せず`__shared__`に`source_refs`付きで反映する。runnerは25件単位で全pageを処理し、各pageのoutcome確認後にのみ完了扱いとする。日次cursorとhash manifestは`__shared__`配下へ保存し、本文は保存しない。手動dispatchはUTC `YYYY-MM-DD`の`from_date`/`to_date`を対で受け、`dry_run=true`が既定値。手動処理とdry-runは日次cursorを更新しない。手順は`docs/memory-automation.md`を正本とする。
 
 deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase設定はproduction environmentからsmokeへ渡し、OAuth tokenはCodex CLIのlogin storeで扱い、ログへ出力しない。flag offのPAT smoke後にだけOAuth flagをonへ切り替え、失敗時はoffへ戻してPAT経路を確認する。
 

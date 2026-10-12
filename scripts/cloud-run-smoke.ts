@@ -6,6 +6,7 @@ const EXPECTED_TOOLS = [
   'remember_user_fact', 'remember_reference', 'remember_session_summary', 'remember_feedback', 'remember_project_fact',
   'update_memory', 'forget_memory', 'link_memories', 'list_projects', 'reindex', 'setup_client_environment',
 ];
+const EXPECTED_MAINTENANCE_TOOLS = ['maintenance_list_projects', 'maintenance_snapshot', 'maintenance_apply'];
 
 interface JsonRpcResponse {
   result?: { content?: Array<{ type?: string; text?: string }>; tools?: Array<{ name?: string }>; isError?: boolean };
@@ -17,10 +18,10 @@ function required(name: string): string {
   return value;
 }
 
-async function call(baseUrl: string, token: string, message: object): Promise<JsonRpcResponse> {
+async function call(baseUrl: string, token: string, message: object, extraHeaders: Record<string, string> = {}): Promise<JsonRpcResponse> {
   const response = await fetch(`${baseUrl}/api/mcp`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', ...extraHeaders },
     body: JSON.stringify(message),
   });
   if (!response.ok) throw new Error(`MCP HTTP ${response.status}`);
@@ -40,6 +41,14 @@ export function assertTools(response: JsonRpcResponse): void {
   const names = (response.result?.tools ?? []).map((tool) => tool.name);
   if (names.length !== EXPECTED_TOOLS.length || EXPECTED_TOOLS.some((name) => !names.includes(name))) {
     throw new Error('unexpected MCP tool catalog');
+  }
+}
+
+export function assertMaintenanceTools(response: JsonRpcResponse): void {
+  const names = (response.result?.tools ?? []).map((tool) => tool.name);
+  if (names.length !== EXPECTED_MAINTENANCE_TOOLS.length
+    || EXPECTED_MAINTENANCE_TOOLS.some((name) => !names.includes(name))) {
+    throw new Error('unexpected maintenance MCP tool catalog');
   }
 }
 
@@ -88,6 +97,16 @@ export async function smoke(): Promise<void> {
   assertSetup(resultText(await call(baseUrl, token, {
     jsonrpc: '2.0', id: 14, method: 'tools/call', params: { name: 'setup_client_environment', arguments: { client: 'codex' } },
   })));
+  const autoMaintenanceToken = required('LTM_AUTO_MAINTENANCE_TOKEN');
+  const maintenanceHeaders = { 'x-ltm-operation-mode': 'maintenance' };
+  assertMaintenanceTools(await call(baseUrl, autoMaintenanceToken, {
+    jsonrpc: '2.0', id: 15, method: 'tools/list', params: {},
+  }, maintenanceHeaders));
+  const optedIn = JSON.parse(resultText(await call(baseUrl, autoMaintenanceToken, {
+    jsonrpc: '2.0', id: 16, method: 'tools/call',
+    params: { name: 'maintenance_list_projects', arguments: {} },
+  }, maintenanceHeaders))) as unknown;
+  if (!Array.isArray(optedIn)) throw new Error('maintenance project registry response is invalid');
   const projects = JSON.parse(resultText(await call(baseUrl, token, {
     jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'list_projects', arguments: {} },
   }))) as Array<{ project_id?: string }>;

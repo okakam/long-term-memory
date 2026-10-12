@@ -128,18 +128,14 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   for (const requirement of [
     'DRY_RUN_WAS_SET',
     'DRY_RUN_VALUE',
-    '--mcp-config',
-    '--strict-mcp-config',
-    '--add-dir',
-    '--tools\n  Read\n  Grep\n  Glob',
-    '--setting-sources user',
-    '--disallowedTools',
-    'CURATION SUMMARY',
-    'awk',
+    'LTM_MODE',
+    'pnpm exec tsx scripts/curator/run-dated-curation.ts',
     'last-success',
   ]) {
     expect(wrapper).toContain(requirement);
   }
+  expect(wrapper).not.toContain('LTM_SNAPSHOT');
+  expect(wrapper).not.toContain('LTM_CURATOR_MCP_CONFIG');
   expect(wrapper).not.toContain('pkill');
 
   const env = read('scripts/curator/env.example');
@@ -149,6 +145,7 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
 
   const plist = read('launchd/com.user.ltm-shared-curator.plist');
   expect(plist).toContain('__LIBEXEC__/run-curation.sh');
+  expect(plist).toContain('LTM_CURATOR_REPO_ROOT');
   expect(plist).toContain('<integer>10</integer>');
   expect(plist).toContain('<integer>0</integer>');
   expect(plist).not.toContain('Documents');
@@ -169,11 +166,13 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   const workflow = read('.github/workflows/curator.yml');
   expect(workflow).toContain("cron: '0 1 * * *'");
   expect(workflow).toContain('runs-on: [self-hosted, ltm-curator]');
-  expect(workflow).toContain('scripts/curator/export-remote-snapshot.ts');
+  expect(workflow).toContain('scripts/curator/run-dated-curation.ts');
   expect(workflow.match(/^\s*MCP_PUBLIC_URL:/gm) ?? []).toHaveLength(2);
+  expect(workflow).toContain("default: true");
+  expect(workflow).toContain('FROM_DATE: ${{ inputs.from_date }}');
+  expect(workflow).toContain('TO_DATE: ${{ inputs.to_date }}');
   expect(workflow).not.toContain('VERCEL_AUTOMATION_BYPASS_SECRET');
-  expect(workflow).toContain('cat > "$LTM_CURATOR_ENV" <<ENV');
-  expect(workflow).not.toContain('cat > "$LTM_CURATOR_ENV" <<' + "'ENV'");
+  expect(workflow).not.toContain('cat > "$LTM_CURATOR_ENV"');
 });
 
 test('接続後setupは17-tool契約とクライアント側適用を案内する', () => {

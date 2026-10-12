@@ -49,19 +49,27 @@ function upsertMemory(db: Database.Database, projectId: string, filePath: string
     db.prepare('DELETE FROM links WHERE src_id = ?').run(memory.id);
     db.prepare('DELETE FROM supersedes WHERE src_id = ?').run(memory.id);
     db.prepare(`UPDATE memories SET project_id = ?, name = ?, type = ?, description = ?, body_chars = ?,
-      file_path = ?, content_hash = ?, created_at = ?, updated_at = ? WHERE id = ?`)
+      file_path = ?, content_hash = ?, status = ?, last_reviewed_at = ?, next_review_at = ?, archived_at = ?,
+      archive_reason = ?, archived_by = ?, created_at = ?, updated_at = ? WHERE id = ?`)
       .run(projectId, memory.name, memory.type, memory.description, [...memory.body].length, filePath,
-        computeHash(raw), memory.created_at, memory.updated_at, memory.id);
+        computeHash(raw), memory.status ?? 'active', memory.last_reviewed_at ?? null, memory.next_review_at ?? null,
+        memory.archived_at ?? null, memory.archive_reason ?? null, memory.archived_by ?? null,
+        memory.created_at, memory.updated_at, memory.id);
   } else {
     db.prepare(`INSERT INTO memories
-      (id, project_id, name, type, description, body_chars, file_path, content_hash, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, project_id, name, type, description, body_chars, file_path, content_hash, status, last_reviewed_at,
+        next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(memory.id, projectId, memory.name, memory.type, memory.description, [...memory.body].length,
-        filePath, computeHash(raw), memory.created_at, memory.updated_at);
+        filePath, computeHash(raw), memory.status ?? 'active', memory.last_reviewed_at ?? null, memory.next_review_at ?? null,
+        memory.archived_at ?? null, memory.archive_reason ?? null, memory.archived_by ?? null,
+        memory.created_at, memory.updated_at);
   }
-  insertCollections(db, memory);
-  insertFts(db, memory);
-  applyMemoryKg(db, projectId, memory.id, { entities: memory.entities, triples: memory.triples });
+  if ((memory.status ?? 'active') === 'active') {
+    insertCollections(db, memory);
+    insertFts(db, memory);
+    applyMemoryKg(db, projectId, memory.id, { entities: memory.entities, triples: memory.triples, status: 'active' });
+  }
 }
 
 function deleteMemoryIndex(db: Database.Database, projectId: string, memoryId: string): void {

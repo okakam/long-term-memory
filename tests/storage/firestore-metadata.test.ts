@@ -6,6 +6,7 @@ import type {
   FirestoreTransaction,
   MemoryIndexRecord,
 } from '@/lib/storage/firestore-metadata';
+import { FirestoreCurationStore } from '@/lib/curation/firestore-store';
 import {
   FirestoreDataError,
   FirestoreMetadataStore,
@@ -97,13 +98,57 @@ function record(overrides: Partial<MemoryIndexRecord> = {}): MemoryIndexRecord {
 }
 
 describe('FirestoreMetadataStore', () => {
+  test('shared restore requests persist only audit metadata and complete once', async () => {
+    const gateway = new FakeFirestore();
+    const store = new FirestoreCurationStore(gateway);
+    const request = await store.createRestoreRequest({
+      memory_id: 'memory-1', revision_id: 'revision-1', expected_hash: 'a'.repeat(64),
+      requested_by: 'curator-uid', requested_at: '2026-10-12T00:00:00.000Z',
+    });
+    expect([...gateway.documents.keys()].some((path) => path.startsWith('projects/__shared__/sharedRestoreRequests/'))).toBe(true);
+    await expect(store.listRestoreRequests()).resolves.toEqual([request]);
+    await expect(store.completeRestoreRequest(request.id, {
+      state: 'succeeded', completed_at: '2026-10-12T01:00:00.000Z',
+    })).resolves.toMatchObject({ state: 'succeeded' });
+    await expect(store.completeRestoreRequest(request.id, {
+      state: 'failed', completed_at: '2026-10-12T02:00:00.000Z', failure_reason: 'restore_conflict',
+    })).resolves.toMatchObject({ state: 'succeeded', completed_at: '2026-10-12T01:00:00.000Z' });
+  });
+
+  test('pages_all_records_with_same_timestamp', async () => {
+    const store = new FirestoreMetadataStore(new FakeFirestore());
+    stores.push(store);
+    await store.createProject('demo', 'owner');
+    for (let index = 0; index < 501; index += 1) {
+      const suffix = String(index).padStart(4, '0');
+      await store.putMemoryIndex('demo', record({
+        id: `memory-${suffix}`,
+        name: `memory-${suffix}`,
+        content_key: `projects/demo/memories/memory-${suffix}.md`,
+        created_at: '2026-09-19T00:00:00.000Z',
+      }));
+    }
+    const all: string[] = [];
+    let after: { created_at: string; id: string } | null = null;
+    do {
+      const page = await store.listMemoryIndexPage('demo', {
+        from: '2026-09-19T00:00:00.000Z', to: '2026-09-20T00:00:00.000Z', after, limit: 25,
+      });
+      all.push(...page.items.map((item) => item.id));
+      after = page.next;
+    } while (after !== null);
+    expect(all).toHaveLength(501);
+    expect(new Set(all).size).toBe(501);
+    expect(all).toEqual([...all].sort());
+  });
+
   test('save transactionはmemoryとname indexを同時に作成する', async () => {
     const store = new FirestoreMetadataStore(new FakeFirestore());
     stores.push(store);
     await store.createProject('demo', 'owner');
     await store.putMemoryIndex('demo', record());
 
-    expect(await store.getMemoryIndex('demo', 'memory-1')).toEqual(record());
+    expect(await store.getMemoryIndex('demo', 'memory-1')).toEqual({ ...record(), status: 'active' });
     expect(await store.getNameIndex('demo', 'note')).toMatchObject({ memory_id: 'memory-1' });
     expect((await store.getProject('demo'))?.revision).toBe(1);
   });

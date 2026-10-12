@@ -15,7 +15,9 @@ export type McpPrincipal = {
 function bearerToken(request: Request): string {
   const header = request.headers.get('authorization');
   const match = header ? /^Bearer\s+(\S+)$/i.exec(header.trim()) : null;
-  if (!match || !match[1] || !match[1].startsWith('ltm_')) throw new UnauthorizedMcpError();
+  if (!match || !match[1] || !match[1].startsWith('ltm_') || match[1].startsWith('ltm_auto_')) {
+    throw new UnauthorizedMcpError();
+  }
   return match[1];
 }
 
