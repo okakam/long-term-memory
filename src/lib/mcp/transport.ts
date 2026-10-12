@@ -109,11 +109,15 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
     && !automationCredential
     && (!authRequired()
       || (principal?.credentialKind === 'pat' && principal.userId === process.env.LTM_CURATOR_USER_ID));
+  if (operationMode === 'curation' && !canWriteShared) {
+    return new Response('curator access required', { status: 403 });
+  }
   const ctx: ToolContext = {
     svc: options.service ?? getMemoryService(),
     canWriteShared,
     principal,
     automationCredential,
+    operationMode: operationMode === 'maintenance' || operationMode === 'curation' ? operationMode : 'ordinary',
     maintenanceToken,
     requireProjectAccess: createProjectAccessGuard({ principal, automationCredential, maintenanceToken }),
   };

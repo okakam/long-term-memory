@@ -20,6 +20,7 @@ export interface ToolContext {
   canWriteShared?: boolean;
   principal?: McpPrincipal;
   automationCredential?: AutomationCredential;
+  operationMode?: 'ordinary' | 'maintenance' | 'curation';
   maintenanceToken?: string | null;
   requireProjectAccess: RequireProjectAccess;
   sessionId?: string;

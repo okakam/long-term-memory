@@ -214,6 +214,16 @@ export class LocalMaintenanceStore implements MaintenanceStore {
         return this.conflict(data.request.operation_id);
       }
 
+      if (data.request.max_active_memories !== undefined) {
+        if (project !== SHARED_PROJECT_ID || data.request.action.type !== 'create'
+          || !Number.isSafeInteger(data.request.max_active_memories) || data.request.max_active_memories < 1) {
+          return this.conflict(data.request.operation_id);
+        }
+        const count = this.db.prepare("SELECT COUNT(*) AS count FROM memories WHERE project_id = ? AND COALESCE(status, 'active') = 'active'")
+          .get(project) as { count: number };
+        if (count.count >= data.request.max_active_memories) return this.conflict(data.request.operation_id);
+      }
+
       for (const [memoryId, expectedHash] of Object.entries(data.before_hashes)) {
         const current = this.db.prepare('SELECT content_hash FROM memories WHERE project_id = ? AND id = ?').get(project, memoryId) as { content_hash: string } | undefined;
         if (!current || current.content_hash !== expectedHash) return this.conflict(data.request.operation_id);

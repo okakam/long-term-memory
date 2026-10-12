@@ -14,6 +14,7 @@ export function mutationPayloadHash(request: MutationRequest): string {
     project_id: request.project_id,
     expected_hashes: request.expected_hashes,
     expected_settings_version: request.expected_settings_version,
+    max_active_memories: request.max_active_memories,
     action: request.action,
     reason_code: request.reason_code,
   };

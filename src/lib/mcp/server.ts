@@ -5,6 +5,7 @@ import { registerMetaTools } from './tools/meta';
 import { registerReadTools } from './tools/read';
 import { registerWriteTools } from './tools/write';
 import { registerMaintenanceTools } from './tools/maintenance';
+import { registerCurationTools } from './tools/curation';
 import { instrumentRegistrar } from '@/lib/telemetry/instrument';
 
 export type { ToolContext } from './context';
@@ -20,7 +21,9 @@ export function createMcpServer(ctx: ToolContext): McpServer {
     sessionId: ctx.sessionId,
     maintenance: ctx.canWriteShared || Boolean(ctx.automationCredential),
   });
-  if (ctx.automationCredential) {
+  if (ctx.operationMode === 'curation') {
+    registerCurationTools(server, ctx);
+  } else if (ctx.automationCredential) {
     registerMaintenanceTools(server, ctx);
   } else {
     registerWriteTools(server, ctx);

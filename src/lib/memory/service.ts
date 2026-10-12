@@ -26,8 +26,11 @@ import { assertMemoryName, assertProjectId, SHARED_PROJECT_ID } from '@/lib/slug
 import { reconcile, reindex } from '@/lib/memory/reconcile';
 import { DEFAULT_MAINTENANCE_SETTINGS, reviewSchedule } from '@/lib/maintenance/policy';
 import { LocalMaintenanceStore } from '@/lib/maintenance/local-store';
+import { LocalCurationStore } from '@/lib/curation/local-store';
+import type { CurationStore } from '@/lib/curation/store';
 import { mutationMemoryIds, mutationPayloadHash, prepareMutation } from '@/lib/maintenance/mutations';
 import type { MaintenanceMemoryPage, MaintenanceMemorySource, MaintenanceStore, MutationCommitData, MutationRequest, MutationResult } from '@/lib/maintenance/store';
+import type { CurationMemoryCursor, CurationSourcePage, CurationWindow } from '@/lib/curation/types';
 import type { Storage } from '@/lib/paths';
 import { resolveStorage } from '@/lib/paths';
 
@@ -102,9 +105,11 @@ function selectRow(db: Database.Database, projectId: string, idOrName: string): 
 
 export class MemoryService implements MaintenanceMemorySource {
   readonly maintenanceStore: MaintenanceStore;
+  readonly curationStore: CurationStore;
 
   private constructor(private readonly db: Database.Database, private readonly storage: Storage) {
     this.maintenanceStore = new LocalMaintenanceStore(db, storage);
+    this.curationStore = new LocalCurationStore(db);
   }
 
   static open(db: Database.Database, storage = resolveStorage()): MemoryService {
@@ -229,6 +234,38 @@ export class MemoryService implements MaintenanceMemorySource {
       return { memory, content_hash: computeHash(raw) };
     });
     return { items, next_after: hasMore ? pageRows[pageRows.length - 1]!.id : null };
+  }
+
+  async listCurationMemories(
+    projectId: string,
+    window: Pick<CurationWindow, 'from' | 'to'>,
+    after: CurationMemoryCursor | null,
+    limit = 25,
+  ): Promise<CurationSourcePage> {
+    const project = this.requireProject(projectId);
+    const bounded = Math.min(25, Math.max(1, Math.floor(limit)));
+    const rows = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path, content_hash,
+      status, last_reviewed_at, next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at
+      FROM memories WHERE project_id = ? AND created_at < ? AND (? IS NULL OR created_at >= ?)
+        AND (? IS NULL OR created_at > ? OR (created_at = ? AND id > ?))
+      ORDER BY created_at ASC, id ASC LIMIT ?`)
+      .all(project, window.to, window.from, window.from, after?.created_at ?? null,
+        after?.created_at ?? null, after?.created_at ?? null, after?.id ?? null, bounded + 1) as MemoryRow[];
+    const hasMore = rows.length > bounded;
+    const pageRows = rows.slice(0, bounded);
+    const items = pageRows.filter((row) => (row.status ?? 'active') === 'active').map((row) => {
+      const raw = readFileSync(row.file_path, 'utf8');
+      const memory = parseMemoryString(raw);
+      if ((memory.status ?? 'active') !== 'active' || memory.created_at !== row.created_at) {
+        throw new Error('curation memory snapshot is inconsistent');
+      }
+      return { memory, content_hash: computeHash(raw) };
+    });
+    const last = pageRows.at(-1);
+    return {
+      items,
+      next_after: hasMore && last ? { created_at: last.created_at, id: last.id } : null,
+    };
   }
 
   async listArchivedMaintenanceMemories(projectId: string, after?: string, limit = 100): Promise<MaintenanceMemoryPage> {

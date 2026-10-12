@@ -1,4 +1,4 @@
-import { getFirestore, type Firestore, type Transaction } from 'firebase-admin/firestore';
+import { FieldPath, getFirestore, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 
 import type { MemberRecord, ProjectRecord, TokenRecord } from '@/lib/auth/store';
@@ -33,10 +33,21 @@ export interface FirestoreGateway {
   update(path: string, data: Record<string, unknown>): Promise<void>;
   delete(path: string): Promise<void>;
   runTransaction<T>(fn: (transaction: FirestoreTransaction) => Promise<T>): Promise<T>;
+  listMemoryPage?(collectionPath: string, options: {
+    from: string | null;
+    to: string;
+    after: { created_at: string; id: string } | null;
+    limit: number;
+  }): Promise<FirestoreDocument[]>;
 }
 
 export interface FirestoreProjectRecord extends ProjectRecord {
   revision: number;
+}
+
+export interface MemoryIndexPageResult {
+  items: MemoryIndexRecord[];
+  next: { created_at: string; id: string } | null;
 }
 
 export interface MemoryIndexRecord {
@@ -94,6 +105,22 @@ export class AdminFirestoreGateway implements FirestoreGateway {
   async list(collectionPath: string): Promise<FirestoreDocument[]> {
     const snapshot = await this.firestore.collection(collectionPath).get();
     return snapshot.docs.map((doc) => this.snapshot(doc));
+  }
+
+  async listMemoryPage(collectionPath: string, options: {
+    from: string | null;
+    to: string;
+    after: { created_at: string; id: string } | null;
+    limit: number;
+  }): Promise<FirestoreDocument[]> {
+    let query = this.firestore.collection(collectionPath)
+      .where('created_at', '<', options.to)
+      .orderBy('created_at', 'asc')
+      .orderBy(FieldPath.documentId(), 'asc');
+    if (options.from !== null) query = query.where('created_at', '>=', options.from);
+    if (options.after) query = query.startAfter(options.after.created_at, options.after.id);
+    const snapshot = await query.limit(options.limit).get();
+    return snapshot.docs.map((document) => this.snapshot(document));
   }
 
   async set(path: string, data: Record<string, unknown>, merge = false): Promise<void> {
@@ -562,6 +589,20 @@ export class FirestoreMetadataStore {
         return { operation_id: data.request.operation_id, outcome: 'conflict', memory_ids: [], revision_ids: [] };
       }
 
+      if (data.request.max_active_memories !== undefined) {
+        if (projectId !== '__shared__' || data.request.action.type !== 'create'
+          || !Number.isSafeInteger(data.request.max_active_memories) || data.request.max_active_memories < 1) {
+          return { operation_id: data.request.operation_id, outcome: 'conflict', memory_ids: [], revision_ids: [] };
+        }
+        const currentSharedMemories = await transaction.list(memoriesPath(projectId));
+        const activeCount = currentSharedMemories.filter((document) => document.exists)
+          .map(memoryRecord)
+          .filter((record) => (record.status ?? 'active') === 'active').length;
+        if (activeCount >= data.request.max_active_memories) {
+          return { operation_id: data.request.operation_id, outcome: 'conflict', memory_ids: [], revision_ids: [] };
+        }
+      }
+
       const currentDocuments = new Map<string, FirestoreDocument>();
       for (const memoryId of Object.keys(data.before_hashes)) {
         const document = await transaction.get(documentPath(memoriesPath(projectId), safeDocumentId(memoryId)));
@@ -714,6 +755,41 @@ export class FirestoreMetadataStore {
   async listMemoryIndexes(projectId: string): Promise<MemoryIndexRecord[]> {
     const documents = await this.gateway.list(memoriesPath(projectId));
     return documents.filter((document) => document.exists).map(memoryRecord).sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async listMemoryIndexPage(
+    projectId: string,
+    options: { from: string | null; to: string; after: { created_at: string; id: string } | null; limit: number },
+  ): Promise<MemoryIndexPageResult> {
+    const bounded = Math.min(25, Math.max(1, Math.floor(options.limit)));
+    if (!Number.isFinite(Date.parse(options.to))
+      || (options.from !== null && (!Number.isFinite(Date.parse(options.from)) || options.from >= options.to))) {
+      throw new FirestoreDataError('curation page window is invalid');
+    }
+    const collection = memoriesPath(assertProjectId(projectId));
+    let documents: FirestoreDocument[];
+    if (this.gateway.listMemoryPage) {
+      documents = await this.gateway.listMemoryPage(collection, { ...options, limit: bounded + 1 });
+    } else {
+      documents = (await this.gateway.list(collection)).filter((document) => document.exists)
+        .map(memoryRecord)
+        .filter((record) => (options.from === null || record.created_at >= options.from)
+          && record.created_at < options.to
+          && (options.after === null || record.created_at > options.after.created_at
+            || (record.created_at === options.after.created_at && record.id > options.after.id)))
+        .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id))
+        .slice(0, bounded + 1)
+        .map((record) => ({
+          id: record.id,
+          path: documentPath(collection, record.id),
+          exists: true,
+          data: () => ({ ...record }),
+        }));
+    }
+    const hasMore = documents.length > bounded;
+    const items = documents.slice(0, bounded).map(memoryRecord);
+    const last = items.at(-1);
+    return { items, next: hasMore && last ? { created_at: last.created_at, id: last.id } : null };
   }
 
   async listNameIndexes(projectId: string): Promise<NameIndexRecord[]> {

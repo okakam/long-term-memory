@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 export type MaintenanceToolName = 'maintenance_list_projects' | 'maintenance_snapshot' | 'maintenance_apply';
+export type CurationToolName = 'list_projects' | 'curation_snapshot' | 'curation_apply' | 'curation_checkpoint';
+export type McpToolName = MaintenanceToolName | CurationToolName;
 
 export interface McpClientOptions {
   baseUrl: string;
   bearerToken: string;
+  operationMode?: 'maintenance' | 'curation';
+  maintenanceToken?: string;
   headers?: Record<string, string>;
   fetcher?: typeof fetch;
   timeoutMs?: number;
@@ -36,7 +40,9 @@ interface JsonRpcResponse {
 function endpoint(baseUrl: string): string {
   let parsed: URL;
   try { parsed = new URL(baseUrl); } catch { throw new McpClientError(); }
-  if (parsed.protocol !== 'https:' || (parsed.port !== '' && parsed.port !== '443')
+  const localHttp = parsed.protocol === 'http:'
+    && ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname.toLowerCase());
+  if ((!localHttp && parsed.protocol !== 'https:') || (parsed.port !== '' && parsed.port !== '443' && !localHttp)
     || parsed.username !== '' || parsed.password !== '' || parsed.search !== '' || parsed.hash !== ''
     || parsed.pathname !== '/' || parsed.hostname.length === 0) throw new McpClientError();
   return parsed.origin + '/api/mcp';
@@ -66,7 +72,7 @@ async function readBounded(body: ReadableStream<Uint8Array> | null, maxBytes: nu
 
 export async function callMcpTool<T>(
   options: McpClientOptions,
-  name: MaintenanceToolName,
+  name: McpToolName,
   args: Record<string, unknown>,
 ): Promise<T> {
   const controller = new AbortController();
@@ -75,10 +81,16 @@ export async function callMcpTool<T>(
     const headers = new Headers(options.headers);
     headers.set('authorization', `Bearer ${options.bearerToken}`);
     headers.set('content-type', 'application/json');
-    headers.set('x-ltm-operation-mode', 'maintenance');
+    const operationMode = options.operationMode ?? 'maintenance';
+    headers.set('x-ltm-operation-mode', operationMode);
+    if (operationMode === 'curation') {
+      if (!options.maintenanceToken) throw new McpClientError();
+      headers.set('x-ltm-maintenance-token', options.maintenanceToken);
+    }
     const response = await (options.fetcher ?? fetch)(endpoint(options.baseUrl), {
       method: 'POST',
       headers,
+      redirect: 'error',
       signal: controller.signal,
       body: JSON.stringify({
         jsonrpc: '2.0',

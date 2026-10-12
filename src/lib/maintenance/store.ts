@@ -24,6 +24,7 @@ export interface MutationRequest {
   idempotency_hash?: string;
   expected_hashes: Record<string, string>;
   expected_settings_version?: number;
+  max_active_memories?: number;
   action: MutationAction;
   reason_code: MaintenanceReasonCode;
   now: string;

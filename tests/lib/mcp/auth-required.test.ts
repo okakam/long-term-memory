@@ -73,6 +73,33 @@ test('maintenance header の有無は protocol request の先行認可に使わ�
   } finally { db.close(); }
 });
 
+test('shared curation requires the curator PAT and maintenance token together', async () => {
+  process.env.AUTH_REQUIRED = '1';
+  process.env.LTM_CURATOR_USER_ID = 'curator';
+  process.env.LTM_MAINTENANCE_TOKEN = 'shared-maintenance';
+  const { db } = await setup();
+  try {
+    const ordinaryPat = await createPat('user-1', 'ordinary');
+    const curatorPat = await createPat('curator', 'curator');
+    const invoke = (authorization?: string, maintenance = 'shared-maintenance') => handleMcpRequest(new Request('https://example.test/api/mcp', {
+      method: 'POST',
+      headers: {
+        'x-ltm-operation-mode': 'curation',
+        'x-ltm-maintenance-token': maintenance,
+        ...(authorization ? { authorization: `Bearer ${authorization}` } : {}),
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 22, method: 'tools/list', params: {} }),
+    }), { mode: 'stateless', service });
+
+    expect((await invoke()).status).toBe(401);
+    expect((await invoke(ordinaryPat.token)).status).toBe(403);
+    expect((await invoke(curatorPat.token, 'wrong-token')).status).toBe(403);
+    const allowed = await invoke(curatorPat.token);
+    expect(allowed.status).toBe(200);
+    expect((await allowed.json()).result.tools.map((tool: { name: string }) => tool.name)).toContain('curation_apply');
+  } finally { db.close(); }
+});
+
 test('member PAT も project 指定なしで tools/list できる', async () => {
   process.env.AUTH_REQUIRED = '1';
   const { db } = await setup();

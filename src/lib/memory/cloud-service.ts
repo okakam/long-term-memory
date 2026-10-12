@@ -21,6 +21,7 @@ import { createMarkdownStore } from '@/lib/storage/factory';
 import type { IndexStore, MarkdownStore } from '@/lib/storage/contracts';
 import {
   createFirestoreMetadataStore,
+  createFirestoreGateway,
   type FirestoreMetadataStore,
   type MemoryIndexRecord,
   type TombstoneRecord,
@@ -29,8 +30,11 @@ import { openEphemeralIndex } from '@/lib/storage/sqlite-index';
 import { rerank } from '@/lib/memory/rerank';
 import { DEFAULT_MAINTENANCE_SETTINGS, reviewSchedule } from '@/lib/maintenance/policy';
 import { FirestoreMaintenanceStore } from '@/lib/maintenance/firestore-store';
+import { FirestoreCurationStore } from '@/lib/curation/firestore-store';
+import type { CurationStore } from '@/lib/curation/store';
 import { mutationMemoryIds, mutationPayloadHash, prepareMutation } from '@/lib/maintenance/mutations';
 import type { MaintenanceMemoryPage, MaintenanceMemorySource, MaintenanceStore, MutationCommitData, MutationRequest, MutationResult } from '@/lib/maintenance/store';
+import type { CurationMemoryCursor, CurationSourcePage, CurationWindow } from '@/lib/curation/types';
 
 interface MemoryRow {
   id: string;
@@ -210,6 +214,7 @@ export class CloudMemoryService implements MaintenanceMemorySource {
   private closed = false;
   private readonly readyPromise: Promise<void>;
   readonly maintenanceStore: MaintenanceStore;
+  readonly curationStore: CurationStore;
 
   constructor(
     private readonly indexPromise: Promise<IndexStore>,
@@ -220,6 +225,7 @@ export class CloudMemoryService implements MaintenanceMemorySource {
     autoReindex = false,
   ) {
     this.maintenanceStore = new FirestoreMaintenanceStore(metadata, markdown, gcsPrefix);
+    this.curationStore = new FirestoreCurationStore(createFirestoreGateway());
     this.readyPromise = autoReindex
       ? this.indexPromise.then((store) => this.mutex.run(SHARED_PROJECT_ID, () => this.reindexUnlocked(undefined, store)))
       : Promise.resolve();
@@ -368,6 +374,25 @@ export class CloudMemoryService implements MaintenanceMemorySource {
       return { memory, content_hash: hash };
     }));
     return { items, next_after: hasMore ? page[bounded - 1]!.id : null };
+  }
+
+  async listCurationMemories(
+    projectId: string,
+    window: Pick<CurationWindow, 'from' | 'to'>,
+    after: CurationMemoryCursor | null,
+    limit = 25,
+  ): Promise<CurationSourcePage> {
+    const project = this.requireProject(projectId);
+    const page = await this.metadata.listMemoryIndexPage(project, { from: window.from, to: window.to, after, limit });
+    const items = await Promise.all(page.items.filter((record) => (record.status ?? 'active') === 'active').map(async (record) => {
+      const raw = await this.markdown.read(record.content_key);
+      const hash = computeHash(raw);
+      const memory = parseMemoryString(raw);
+      if (hash !== record.content_hash || memory.id !== record.id || (memory.status ?? 'active') !== 'active'
+        || memory.created_at !== record.created_at) throw new Error('curation memory snapshot is inconsistent');
+      return { memory, content_hash: hash };
+    }));
+    return { items, next_after: page.next };
   }
 
   async listArchivedMaintenanceMemories(projectId: string, after?: string, limit = 100): Promise<MaintenanceMemoryPage> {
