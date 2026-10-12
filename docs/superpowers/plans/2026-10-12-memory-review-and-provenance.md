@@ -1,6 +1,6 @@
 # 出典記録・自動棚卸し・復元 実装計画
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 出典と見直し日を自動記録し、ownerが有効化したprojectで復元可能な日次棚卸しを実行する。
 
@@ -42,7 +42,7 @@
 
 **Interfaces:** `reviewSchedule(type: MemoryType, anchor: string, settings: MaintenanceSettings): { last_reviewed_at: string; next_review_at: string }`、`deriveLegacyReview(memory: Memory, settings: MaintenanceSettings): string`。Memoryにsources/status/review/archive metadataを追加。sourceは`{ kind:'url'|'conversation'; url?:string; captured_at:string; last_checked_at?:string; content_hash?:string }`で判別検証する。
 
-- [ ] 失敗テスト`sets_type_defaults_and_preserves_legacy`を追加する。以下の期待値と、session初回期限がcreated_at由来、legacy URL行とsource_refsを混同しないことを固定する。
+- [x] 失敗テスト`sets_type_defaults_and_preserves_legacy`を追加する。以下の期待値と、session初回期限がcreated_at由来、legacy URL行とsource_refsを混同しないことを固定する。
 
 ```ts
 expect(reviewSchedule('project', '2026-01-01T00:00:00.000Z', defaults).next_review_at)
@@ -51,9 +51,9 @@ expect(parseMemoryString(legacyMarkdown).status).toBe('active');
 expect(roundTrip.source_refs).toEqual(original.source_refs);
 ```
 
-- [ ] `pnpm exec vitest run tests/lib/maintenance/policy.test.ts tests/lib/markdown/frontmatter.test.ts tests/lib/mcp/schemas.test.ts`を実行し、新規契約に対するFAILを確認する。
-- [ ] 型とfrontmatterを実装し、全save入口で出典なしならconversation、reference.urlは構造化出典＋現行URL行を保存する。利用者の本文変更時だけ周期をリセットし、tagだけの変更で確認済み扱いにしない。sessionのarchive期限は本文更新後もcreated_at由来とする。通常のwrite schemaから内部status/revision/operation_idを設定させない。
-- [ ] 同じコマンドでPASSを確認し、`feat: 出典と見直し日の保存契約を追加`をcommitする。
+- [x] `pnpm exec vitest run tests/lib/maintenance/policy.test.ts tests/lib/markdown/frontmatter.test.ts tests/lib/mcp/schemas.test.ts`を実行し、新規契約に対するFAILを確認する。
+- [x] 型とfrontmatterを実装し、全save入口で出典なしならconversation、reference.urlは構造化出典＋現行URL行を保存する。利用者の本文変更時だけ周期をリセットし、tagだけの変更で確認済み扱いにしない。sessionのarchive期限は本文更新後もcreated_at由来とする。通常のwrite schemaから内部status/revision/operation_idを設定させない。
+- [x] 同じコマンドでPASSを確認し、`feat: 出典と見直し日の保存契約を追加`をcommitする。
 
 ### タスク2: 原子的な変更・revision・archive検索を実装する
 
@@ -61,13 +61,13 @@ expect(roundTrip.source_refs).toEqual(original.source_refs);
 
 **Interfaces:** 上記MemoryMutationPort。`MaintenanceStore.getSettings(projectId): Promise<MaintenanceSettings>`、`saveSettings(projectId, settings, expectedVersion): Promise<MaintenanceSettings>`、`listEvents(projectId, after?, limit?): Promise<MaintenanceEvent[]>`。metadata commitはoperation、revision pointer、current memory/name indexを同一Firestore transactionで更新する。mergeは最大2 memoryの変更を一単位とする。
 
-- [ ] 失敗テスト`preserves_revision_and_rejects_stale_hash`、`retry_does_not_duplicate_revision`、`reindex_keeps_archive_hidden`を追加。hash競合で本文不変、GCS旧key存続、同じoperation_id二度適用でrevision数不変、archive後のFTS/KG/listに戻らないことをassertする。
+- [x] 失敗テスト`preserves_revision_and_rejects_stale_hash`、`retry_does_not_duplicate_revision`、`reindex_keeps_archive_hidden`を追加。hash競合で本文不変、GCS旧key存続、同じoperation_id二度適用でrevision数不変、archive後のFTS/KG/listに戻らないことをassertする。
   テストの期待値は`expect(replayed.outcome).toBe('already_applied')`、`expect(currentHash).toBe(manualEditHash)`、`expect(searchResults.map(m=>m.id)).not.toContain(archivedId)`。
-- [ ] `pnpm exec vitest run tests/lib/maintenance/mutations.test.ts tests/lib/memory/cloud-service.test.ts tests/lib/memory/service.reconcile.test.ts tests/storage/atomic-failure.test.ts`を実行してFAILを確認する。
-- [ ] GCS新objectを先にimmutable writeし、transactionで現在hashとoperation payload hashを検証してcommitする。maintenance操作では同じtransactionでenabledとsettings_versionを再確認する。失敗時は未参照の新objectだけをcleanupし、旧revision objectを削除しない。SQLite更新失敗時はcache再構築扱いにし、正本commit済み操作を再適用しない。localはproject lock、atomic fileとoperation journalで同じ契約にする。
-- [ ] statusと見直し日時をSQLiteへ追加し、通常search/list/tag/related/KGはactiveに限定する。明示getはstatusを返せる。reindexはcurrent metadata pointerだけを使い、retained revisionを現行memoryとして取り込まない。rename後もrevision参照keyを保護する。restoreは過去本文を新しい現行name/IDで保存する。
-- [ ] 手動forgetはrevision本文も削除し、全対象keyへtombstoneを記録する。forget後のrestoreは404とし、復活を防ぐ。正常updateやrenameでもrevision参照objectをcleanupしない。
-- [ ] 故障注入テストを加え、GCS失敗、Firestore失敗、cache失敗、rename後restore、欠損revision、同一ID別payload拒否をPASSにし、`feat: 記憶変更履歴と復元可能なアーカイブを追加`をcommitする。
+- [x] `pnpm exec vitest run tests/lib/maintenance/mutations.test.ts tests/lib/memory/cloud-service.test.ts tests/lib/memory/service.reconcile.test.ts tests/storage/atomic-failure.test.ts`を実行してFAILを確認する。
+- [x] GCS新objectを先にimmutable writeし、transactionで現在hashとoperation payload hashを検証してcommitする。maintenance操作では同じtransactionでenabledとsettings_versionを再確認する。失敗時は未参照の新objectだけをcleanupし、旧revision objectを削除しない。SQLite更新失敗時はcache再構築扱いにし、正本commit済み操作を再適用しない。localはproject lock、atomic fileとoperation journalで同じ契約にする。
+- [x] statusと見直し日時をSQLiteへ追加し、通常search/list/tag/related/KGはactiveに限定する。明示getはstatusを返せる。reindexはcurrent metadata pointerだけを使い、retained revisionを現行memoryとして取り込まない。rename後もrevision参照keyを保護する。restoreは過去本文を新しい現行name/IDで保存する。
+- [x] 手動forgetはrevision本文も削除し、全対象keyへtombstoneを記録する。forget後のrestoreは404とし、復活を防ぐ。正常updateやrenameでもrevision参照objectをcleanupしない。
+- [x] 故障注入テストを加え、GCS失敗、Firestore失敗、cache失敗、rename後restore、欠損revision、同一ID別payload拒否をPASSにし、`feat: 記憶変更履歴と復元可能なアーカイブを追加`をcommitする。
 
 ### タスク3: 公開HTTPS出典を制限付きで取得する
 
@@ -77,11 +77,11 @@ expect(roundTrip.source_refs).toEqual(original.source_refs);
 
 FetchFailureCodeは`unsupported_url|blocked_address|redirect_limit|timeout|size_limit|content_type|http_error|network_error|parse_error`。SourceFetchDependenciesは`now:()=>number`、`resolve:(host:string)=>Promise<Array<{address:string;family:4|6}>>`、`request:(options:https.RequestOptions)=>https.ClientRequest`を持つ。factoryでNode.js clock/resolver/requestを既定にし、テストはfakeを注入する。
 
-- [ ] 失敗テスト`blocks_redirect_and_rebinding`、`limits_total_time_and_decoded_bytes`を追加する。private/mixed A+AAAA、IPv4 mapped IPv6、IP literal、userinfo、443以外、HTTPS→HTTP、4回目redirectを拒否する。10,000msの総期限と1,048,577byteの展開後本文を拒否することをassertする。
+- [x] 失敗テスト`blocks_redirect_and_rebinding`、`limits_total_time_and_decoded_bytes`を追加する。private/mixed A+AAAA、IPv4 mapped IPv6、IP literal、userinfo、443以外、HTTPS→HTTP、4回目redirectを拒否する。10,000msの総期限と1,048,577byteの展開後本文を拒否することをassertする。
   期待値は`expect(redirectToPrivate).toMatchObject({status:'failed',reason_code:'blocked_address'})`、`expect(tooLarge.reason_code).toBe('size_limit')`、`expect(expired.reason_code).toBe('timeout')`。
-- [ ] `pnpm exec vitest run tests/lib/maintenance/source-fetcher.test.ts`でFAILを確認する。
-- [ ] Node.jsのDNS/HTTPS/zlibを使い、全解決先がpublicなことを確認して接続IPを固定する。TLSのhostname検証とSNIはURLのhostを使う。全redirectを同じdeadlineで追跡し、stream展開後にsizeを制限する。content-typeはtext/htmlとtext/plain（charset parameter可）、HTMLはscriptを実行せずtextへ変換する。本文・URLを例外やlogへ埋め込まない。
-- [ ] HTML中の命令が実行されないfixtureとtimeout/stream中断回帰をPASSにし、`feat: 出典の安全なHTTPS取得を追加`をcommitする。
+- [x] `pnpm exec vitest run tests/lib/maintenance/source-fetcher.test.ts`でFAILを確認する。
+- [x] Node.jsのDNS/HTTPS/zlibを使い、全解決先がpublicなことを確認して接続IPを固定する。TLSのhostname検証とSNIはURLのhostを使う。全redirectを同じdeadlineで追跡し、stream展開後にsizeを制限する。content-typeはtext/htmlとtext/plain（charset parameter可）、HTMLはscriptを実行せずtextへ変換する。本文・URLを例外やlogへ埋め込まない。
+- [x] HTML中の命令が実行されないfixtureとtimeout/stream中断回帰をPASSにし、`feat: 出典の安全なHTTPS取得を追加`をcommitする。
 
 ### タスク4: 棚卸し判断を検証して操作へ変換する
 
@@ -89,12 +89,12 @@ FetchFailureCodeは`unsupported_url|blocked_address|redirect_limit|timeout|size_
 
 **Interfaces:** `MaintenanceService.snapshot(projectId: string, now: string, after?: string): Promise<MaintenancePage>`、`apply(projectId: string, proposal: MaintenanceProposal): Promise<MutationResult>`。pageはactive memoryとhash、settings_version、due状態、next_pageを持つ。proposalはoperation、expected_hashes、action、enum理由、根拠memory ID/hashと本文引用範囲を持つ。
 
-- [ ] 失敗テスト`merges_only_compatible_memories`、`archives_sessions_after_configured_age`、`removes_links_after_30_days_missing`を追加する。最古created_at/IDでtarget選択、metadata union、同種別の無矛盾統合、矛盾・架空根拠・無関係引用の拒否、30日未満の未来link維持をassertする。
+- [x] 失敗テスト`merges_only_compatible_memories`、`archives_sessions_after_configured_age`、`removes_links_after_30_days_missing`を追加する。最古created_at/IDでtarget選択、metadata union、同種別の無矛盾統合、矛盾・架空根拠・無関係引用の拒否、30日未満の未来link維持をassertする。
   期待値は`expect(before30.links).toContain('future-memory')`、`expect(after30.links).not.toContain('future-memory')`、`expect(conflictingMerge.outcome).toBe('conflict')`。
-- [ ] `pnpm exec vitest run tests/lib/maintenance/service.test.ts tests/lib/maintenance/proposal.test.ts`でFAILを確認する。
-- [ ] 完全重複と日時条件はcodeで判定する。意味的統合・出典置換はClaudeの構造化提案を受け、引用の実在、hash一致、対象scope、graph整合、理由enum、許可actionを検証する。意味の含意をhashだけで保証できるとは扱わず、矛盾/低確信/根拠なしは本文を変えず7日retryにする。
-- [ ] fetch失敗はlast_reviewed_atを進めず7日retry、曖昧判断はlast_reviewed_at更新＋7日retry、有効なら種別周期を更新する。link未解決first_seenはmetadataに置き、解決時に解除する。archive対象にも変更前revisionを保持する。
-- [ ] settings変更、injection本文、監査reasonに生の本文を渡す提案の拒否をPASSにし、`feat: 自動棚卸しの適用規則を追加`をcommitする。
+- [x] `pnpm exec vitest run tests/lib/maintenance/service.test.ts tests/lib/maintenance/proposal.test.ts`でFAILを確認する。
+- [x] 完全重複と日時条件はcodeで判定する。意味的統合・出典置換はClaudeの構造化提案を受け、引用の実在、hash一致、対象scope、graph整合、理由enum、許可actionを検証する。意味の含意をhashだけで保証できるとは扱わず、矛盾/低確信/根拠なしは本文を変えず7日retryにする。
+- [x] fetch失敗はlast_reviewed_atを進めず7日retry、曖昧判断はlast_reviewed_at更新＋7日retry、有効なら種別周期を更新する。link未解決first_seenはmetadataに置き、解決時に解除する。archive対象にも変更前revisionを保持する。
+- [x] settings変更、injection本文、監査reasonに生の本文を渡す提案の拒否をPASSにし、`feat: 自動棚卸しの適用規則を追加`をcommitする。
 
 ### タスク5: 専用MCP registryと毎回のopt-in認可を追加する
 
@@ -102,7 +102,7 @@ FetchFailureCodeは`unsupported_url|blocked_address|redirect_limit|timeout|size_
 
 **Interfaces:** `requireAutomationCredential(req: Request): Promise<AutomationCredential>`は専用Bearerをconstant-timeで検証する。`AutomationCredential = { kind:'maintenance' }`を通常McpPrincipalと区別する。registryは`maintenance_list_projects({})`、`maintenance_snapshot({project_id,after?})`、`maintenance_apply({project_id,proposal})`だけを登録する。
 
-- [ ] 失敗テスト`normal_registry_stays_17`、`automation_cannot_call_generic_write`、`opt_out_revokes_inflight_apply`を追加する。
+- [x] 失敗テスト`normal_registry_stays_17`、`automation_cannot_call_generic_write`、`opt_out_revokes_inflight_apply`を追加する。
 
 ```ts
 expect(normalTools).toHaveLength(17);
@@ -110,9 +110,9 @@ expect(automationTools.map(t => t.name)).not.toContain('forget_memory');
 expect((await applyAfterOwnerDisabled()).result.isError).toBe(true);
 ```
 
-- [ ] `pnpm exec vitest run tests/lib/mcp/maintenance.test.ts tests/lib/mcp/server.test.ts tests/lib/mcp/stateless.test.ts`でFAILを確認する。
-- [ ] 自動tokenは通常PAT/OAuthとして受理しない。snapshot/applyの各callでproject存在、enabled、settings_versionを再検証する。`__shared__`と任意projectへの汎用書き込みは拒否する。HTTP401と認証済みtool error HTTP200の区別を維持する。local-sessionもmode/credential間でregistryやcontextを再利用しない。
-- [ ] 通常PAT/OAuth、curator token、無効/取消token、project query拒否、前request principal混入なしをPASSにし、`feat: 自動メンテナンス専用MCP操作を追加`をcommitする。
+- [x] `pnpm exec vitest run tests/lib/mcp/maintenance.test.ts tests/lib/mcp/server.test.ts tests/lib/mcp/stateless.test.ts`でFAILを確認する。
+- [x] 自動tokenは通常PAT/OAuthとして受理しない。snapshot/applyの各callでproject存在、enabled、settings_versionを再検証する。`__shared__`と任意projectへの汎用書き込みは拒否する。HTTP401と認証済みtool error HTTP200の区別を維持する。local-sessionもmode/credential間でregistryやcontextを再利用しない。
+- [x] 通常PAT/OAuth、curator token、無効/取消token、project query拒否、前request principal混入なしをPASSにし、`feat: 自動メンテナンス専用MCP操作を追加`をcommitする。
 
 ### タスク6: owner設定・履歴・復元をDashboardへ追加する
 
@@ -120,11 +120,11 @@ expect((await applyAfterOwnerDisabled()).result.isError).toBe(true);
 
 **Interfaces:** settings GET/PATCHはMaintenanceSettings、history GETはpage付きevents/revisions、restore POSTは`{ memory_id, revision_id, expected_hash, operation_id }`。通常projectの設定/復元はowner-only、CSRFを既存same-origin guardで検証する。shared履歴GETはcurator UID限定、shared復元requestは第2段階で追加する。
 
-- [ ] 失敗テスト`member_cannot_change_or_restore`と`owner_can_restore_archived_memory`を追加。非owner403、無認証401、不正日数400、hash競合409、historyに本文なし、disabled初期値をassertする。
+- [x] 失敗テスト`member_cannot_change_or_restore`と`owner_can_restore_archived_memory`を追加。非owner403、無認証401、不正日数400、hash競合409、historyに本文なし、disabled初期値をassertする。
   期待値は`expect(memberResponse.status).toBe(403)`、`expect(restored.status).toBe('active')`、`expect(history.revisions[0]).not.toHaveProperty('body')`。historyには復元用current_hashを返し、content_keyを返さない。
-- [ ] `pnpm exec vitest run tests/app/maintenance.routes.test.ts tests/components/maintenance-panel.test.ts`でFAILを確認する。
-- [ ] 設定・実行状況・archive一覧・revision選択を実装する。POST/PATCH直前にFirestore membershipを再確認し、localは合成UIDを使う。UIの待機/成功/エラーを表示し、tokenや内部GCS keyをブラウザへ返さない。日数変更は次のsnapshotで期限を再計算し、未処理提案はsettings_version競合で破棄する。
-- [ ] 対象テストPASSを確認し、`feat: Dashboardの自動棚卸し設定と復元を追加`をcommitする。
+- [x] `pnpm exec vitest run tests/app/maintenance.routes.test.ts tests/components/maintenance-panel.test.ts`でFAILを確認する。
+- [x] 設定・実行状況・archive一覧・revision選択を実装する。POST/PATCH直前にFirestore membershipを再確認し、localは合成UIDを使う。UIの待機/成功/エラーを表示し、tokenや内部GCS keyをブラウザへ返さない。日数変更は次のsnapshotで期限を再計算し、未処理提案はsettings_version競合で破棄する。
+- [x] 対象テストPASSを確認し、`feat: Dashboardの自動棚卸し設定と復元を追加`をcommitする。
 
 ### タスク7: runner・workflow・運用と受入を接続する
 
@@ -134,11 +134,11 @@ expect((await applyAfterOwnerDisabled()).result.isError).toBe(true);
 
 `McpClientOptions = { baseUrl:string; bearerToken:string; headers?:Record<string,string>; fetcher?:typeof fetch }`、`RunnerOptions = { client:McpClientOptions; dry_run:boolean; now:()=>string; fetchSource:typeof fetchPublicSource; propose:(page:MaintenancePage,sourceResults:Record<string,SourceFetchResult>)=>Promise<MaintenanceProposal[]> }`。sourceResultsのkeyはmemory IDとsource配列index。RunSummaryはscanned_projects/applied/skipped/failedの数値のみ。fetch結果をproposalへ付加するのはrunner codeであり、Claudeが返したURL取得結果やhashを信頼しない。
 
-- [ ] 失敗テスト`dry_run_has_no_mutations`、`workflow_serializes_jobs`、`stdout_contains_only_summary`を追加。Claudeが本文/secretをstdoutへ出してもGitHub logへ転送されないこと、project単位の失敗をまとめることをassertする。
+- [x] 失敗テスト`dry_run_has_no_mutations`、`workflow_serializes_jobs`、`stdout_contains_only_summary`を追加。Claudeが本文/secretをstdoutへ出してもGitHub logへ転送されないこと、project単位の失敗をまとめることをassertする。
   期待値は`expect(applySpy).not.toHaveBeenCalled()`、`expect(publicStdout).not.toContain(secretFixture)`、`expect(summary.failed).toBe(1)`。
-- [ ] `pnpm exec vitest run tests/curator/maintenance-runner.test.ts tests/deploy/memory-maintenance.test.ts tests/curator/curator-skill.test.ts`でFAILを確認する。
-- [ ] runnerにはRead以外の汎用shell/write/toolを与えず、snapshot/temp/stdoutはmode600、終了時cleanupとする。生Claude出力をcatせず、codeでschema検証した件数とreason_codeだけを出力する。scheduleは自動反映、dispatchはdry_run=true。workflow concurrencyでrunを排他し、job依存で通常棚卸し→共有curationを順に実行する。shared jobは`always() && !cancelled()`で先行jobの部分失敗後にも実行できるようにする。
-- [ ] Claudeは構造化proposalの出力だけを担当し、MCP writeはtrusted Node runnerが検証後に呼ぶ。外部出典を根拠にするpatchはrunner保有の取得text/hashに引用を照合してから適用し、modelが返す取得済みという自己申告は受け入れない。
-- [ ] `LTM_AUTO_MAINTENANCE_TOKEN`をCloud Run Secret ManagerとGitHub secretへ設定する手順を文書化する。稼働前に旧curatorのforget allowlistと上限時forget指示を取り除く。deploy設定のsecret参照を追加しても実secretは作成しない。
-- [ ] 対象テストと総合計画のローカル受入を実行して記録する。Cloud smokeにopt-in→save→review→archive→reindex→restore→opt-outを追加し、資格情報がなければ実環境を未実行として残す。
-- [ ] `docs: 自動棚卸しの運用と受入手順を追加`をcommitし、第1段階をレビュー可能な状態にする。
+- [x] `pnpm exec vitest run tests/curator/maintenance-runner.test.ts tests/deploy/memory-maintenance.test.ts tests/curator/curator-skill.test.ts`でFAILを確認する。
+- [x] runnerにはRead以外の汎用shell/write/toolを与えず、snapshot/temp/stdoutはmode600、終了時cleanupとする。生Claude出力をcatせず、codeでschema検証した件数とreason_codeだけを出力する。scheduleは自動反映、dispatchはdry_run=true。workflow concurrencyでrunを排他し、job依存で通常棚卸し→共有curationを順に実行する。shared jobは`always() && !cancelled()`で先行jobの部分失敗後にも実行できるようにする。
+- [x] Claudeは構造化proposalの出力だけを担当し、MCP writeはtrusted Node runnerが検証後に呼ぶ。外部出典を根拠にするpatchはrunner保有の取得text/hashに引用を照合してから適用し、modelが返す取得済みという自己申告は受け入れない。
+- [x] `LTM_AUTO_MAINTENANCE_TOKEN`をCloud Run Secret ManagerとGitHub secretへ設定する手順を文書化する。稼働前に旧curatorのforget allowlistと上限時forget指示を取り除く。deploy設定のsecret参照を追加しても実secretは作成しない。
+- [x] 対象テストと総合計画のローカル受入を実行して記録する。Cloud smokeにopt-in→save→review→archive→reindex→restore→opt-outを追加し、資格情報がなければ実環境を未実行として残す。
+- [x] `docs: 自動棚卸しの運用と受入手順を追加`をcommitし、第1段階をレビュー可能な状態にする。

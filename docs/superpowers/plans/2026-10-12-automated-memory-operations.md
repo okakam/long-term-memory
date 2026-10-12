@@ -61,13 +61,13 @@ Dashboardの通常project復元はowner認可で直接行う。shared復元はFi
 
 ## 最終受入
 
-- [ ] 各段階の対象テスト、全`pnpm test`、`pnpm lint`、`pnpm exec tsc --noEmit`、`NODE_ENV=production pnpm build`を実装時に実行して記録する。
-- [ ] YAML/JSON構文、shell構文、`git diff --check`、`docker compose -f .devcontainer/compose.yaml config --quiet`を確認する。runner imageのhealth checkは既存CIを使う。
-- [ ] Functionsコード・devcontainerを変更した場合だけ、それぞれの既存build/testとコンテナ導入確認を追加する。
-- [ ] 認証情報を使うCloud Run/GCS/Firestore/Claude実環境smokeは別ゲートとして記録する。fake成功を本番動作確認としない。
-- [ ] 通常17 tools、owner opt-in、専用認証、URL取得、archive/reindex/restore、共有手動期間・cursor・secret非露出を本番有効化前に確認する。
-- [ ] `AGENTS.md`、再現仕様、運用説明、`.env.example`、curator skillとclient setup配布assetを更新する。skill変更時はwriting-skillsを使用し、生成assetを既存生成手順で同期する。
+- [x] 各段階の対象テスト、全`pnpm test`、`pnpm lint`、`pnpm exec tsc --noEmit`、`NODE_ENV=production pnpm build`を実装時に実行して記録する。
+- [x] YAML/JSON構文、shell構文、`git diff --check`を確認した。`docker compose -f .devcontainer/compose.yaml config --quiet`も試したが、この環境のDocker CLIにCompose pluginがなく実行できなかった。runner imageのhealth checkは既存CIの対象とする。
+- [x] Dev ContainerのpnpmがpackageManagerの11.1.3に一致するよう修正した。正しいbuild contextからimageを再構築し、Node.js、pnpm、Codex、Git/Flow、gh、gcloud、Firebase、sshd、nc、jq、xzと3つのnamed volume書き込みを検証した。
+- [x] 認証情報を使うCloud Run/GCS/Firestore/Claude実環境smokeは別ゲートとして記録する。fake成功を本番動作確認としない。
+- [x] 通常17 tools、owner opt-in、専用認証、URL取得、archive/reindex/restore、共有手動期間・cursor・secret非露出を自動テストで確認した。本番有効化前の実環境smokeは別ゲートに残す。
+- [x] `AGENTS.md`、再現仕様、運用説明、`.env.example`、curator skillとclient setup配布assetを更新した。skill変更にはwriting-skillsを適用し、生成assetを既存手順で同期した。
 
 ## 今回の到達点
 
-計画作成のみ。コード、依存関係、実環境設定、workflowの稼働状態は変更しない。計画レビューと実行方法の選択後に実装へ移る。
+第1段階は`10ef659`〜`4146300`で実装済み。第2段階の共通curation・shared restore・workflow・運用資料も実装し、ローカル受入を完了した。Cloud Runへのdeploy、GitHub/self-hosted runner secrets設定、credentialed smoke、PRは未実施。Docker Compose検証はCLI pluginがないため未実行。

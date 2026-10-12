@@ -10,7 +10,7 @@
 - Codexの通常利用はDCR/PKCE OAuthで行い、PAT本文を入力・環境変数へ保存しません。ブラウザのFirebaseログインと同意画面を完了すると、Codexがaccess/refresh tokenを管理します。
 - PATは`/settings/tokens`で発行します。本文は発行直後に一度だけ表示され、Claude Code curator・CI・Cloud Run smokeの機械接続だけで使います。チャット、repository、ログへ貼り付けません。
 - OAuth接続は`/settings/tokens`の`Codex / OAuth 接続`から失効できます。失効後はOAuth grantのaccess tokenとrefresh tokenが使えなくなります。
-- `docs/mcp-config.cloud-run.json`はGitHub ActionsのClaude Code remote curatorが読むPAT設定例です。Codexの`~/.codex/config.toml`へそのまま追加するファイルではありません。
+- `docs/mcp-config.cloud-run.json`はcurator接続の設定例です。GitHub Actionsはこのファイルを読み込まず、環境変数を`run-dated-curation.ts`へ渡します。Codexの`~/.codex/config.toml`へそのまま追加するファイルではありません。
 
 ## Dashboardでプロジェクトを作成する
 
@@ -137,7 +137,7 @@ codex mcp add long-term-memory \
   --bearer-token-env-var LTM_MCP_TOKEN
 ```
 
-このPAT設定例は機械接続・curator専用です。`docs/mcp-config.cloud-run.json`の`Authorization`と`X-LTM-Maintenance-Token`も同じ用途に限り、OAuth tokenを環境変数やrepositoryへ貼り付ける用途には使いません。curatorがshared scopeを対象にするtool callでは、URLではなくtop-level引数に`project_id`を渡します。shared対象の引数例は`{"project_id": "__shared__"}`です。shared writeと`reindex`は通常のCodex利用ではなく、設定済みcurator UIDのPAT principalとmaintenance tokenの両方を必要とします。
+このPAT設定例は機械接続・curator専用です。`docs/mcp-config.cloud-run.json`の`Authorization`と`X-LTM-Maintenance-Token`も同じ用途に限り、OAuth tokenを環境変数やrepositoryへ貼り付ける用途には使いません。GitHub Actionsの自動共有集約は、専用runnerがPATとmaintenance tokenを環境変数から読み、専用curation registryへ直接接続します。curatorがshared scopeを対象にするtool callでは、URLではなくtop-level引数に`project_id`を渡します。shared対象の引数例は`{"project_id": "__shared__"}`です。shared writeと`reindex`は通常のCodex利用ではなく、設定済みcurator UIDのPAT principalとmaintenance tokenの両方を必要とします。
 
 ## クライアント別の補助資産
 

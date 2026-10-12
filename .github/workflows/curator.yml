@@ -10,6 +10,14 @@ on:
         required: false
         default: true
         type: boolean
+      from_date:
+        description: 'Shared curation UTC start date (YYYY-MM-DD); provide with to_date'
+        required: false
+        type: string
+      to_date:
+        description: 'Shared curation UTC end date, exclusive (YYYY-MM-DD); provide with from_date'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -64,37 +72,16 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Export sanitized remote snapshot
-        env:
-          MCP_PUBLIC_URL: ${{ secrets.MCP_PUBLIC_URL }}
-          LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
-        run: |
-          mkdir -m 700 -p "$RUNNER_TEMP/ltm-curator"
-          pnpm tsx scripts/curator/export-remote-snapshot.ts --output "$RUNNER_TEMP/ltm-curator/snapshot.md"
-      - name: Run headless curator
+      - name: Run dated shared curation
         env:
           MCP_PUBLIC_URL: ${{ secrets.MCP_PUBLIC_URL }}
           LTM_MCP_TOKEN: ${{ secrets.LTM_MCP_TOKEN }}
           LTM_MAINTENANCE_TOKEN: ${{ secrets.LTM_MAINTENANCE_TOKEN }}
-          LTM_SNAPSHOT: ${{ runner.temp }}/ltm-curator/snapshot.md
-          LTM_CURATOR_MCP_CONFIG: ${{ github.workspace }}/docs/mcp-config.cloud-run.json
-          LTM_CURATOR_LOG_DIR: ${{ runner.temp }}/ltm-curator/logs
-          LTM_CURATOR_ENV: ${{ runner.temp }}/ltm-curator/env
-          LTM_MODE: remote
           DRY_RUN: ${{ env.CURATOR_DRY_RUN }}
-          LTM_STORE: ${{ runner.temp }}/ltm-curator
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          FROM_DATE: ${{ inputs.from_date }}
+          TO_DATE: ${{ inputs.to_date }}
           CLAUDE_BIN: claude
         run: |
           umask 077
-          cat > "$LTM_CURATOR_ENV" <<ENV
-          LTM_MODE=remote
-          DRY_RUN=$DRY_RUN
-          LTM_STORE=$LTM_STORE
-          LTM_SNAPSHOT=$LTM_SNAPSHOT
-          LTM_CURATOR_MCP_CONFIG=$LTM_CURATOR_MCP_CONFIG
-          LTM_CURATOR_LOG_DIR=$LTM_CURATOR_LOG_DIR
-          CLAUDE_BIN=$CLAUDE_BIN
-          LTM_CURATOR_PATH=$PATH
-          ENV
-          bash -n scripts/curator/run-curation.sh
-          DRY_RUN="$DRY_RUN" LTM_CURATOR_ENV="$LTM_CURATOR_ENV" bash scripts/curator/run-curation.sh
+          pnpm exec tsx scripts/curator/run-dated-curation.ts
