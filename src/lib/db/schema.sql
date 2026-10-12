@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS memories (
   body_chars   INTEGER NOT NULL DEFAULT 0,
   file_path    TEXT NOT NULL,
   content_hash TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'active',
+  last_reviewed_at TEXT,
+  next_review_at   TEXT,
+  archived_at      TEXT,
+  archive_reason   TEXT,
+  archived_by      TEXT,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL,
   UNIQUE(project_id, name)
@@ -62,6 +68,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
 );
 
 CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project_id, type);
+CREATE INDEX IF NOT EXISTS idx_memories_project_status_type ON memories(project_id, status, type);
 CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
 CREATE INDEX IF NOT EXISTS idx_supersedes_dst ON supersedes(dst_name);
 
@@ -106,3 +113,50 @@ CREATE INDEX IF NOT EXISTS idx_entity_aliases_asserted ON entity_aliases(asserte
 CREATE INDEX IF NOT EXISTS idx_entity_edges_asserted ON entity_edges(asserted_by);
 CREATE INDEX IF NOT EXISTS idx_entity_edges_src ON entity_edges(src_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entity_edges_dst ON entity_edges(dst_entity_id);
+
+-- Maintenance settings, audit events, operation idempotency and revision pointers
+-- are durable metadata. Revision Markdown bodies live outside the rebuildable index.
+CREATE TABLE IF NOT EXISTS maintenance_settings (
+  project_id TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL,
+  review_days TEXT NOT NULL,
+  session_archive_days INTEGER NOT NULL,
+  version INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_revisions (
+  project_id TEXT NOT NULL,
+  memory_id TEXT NOT NULL,
+  revision_id TEXT NOT NULL,
+  content_key TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  reason_code TEXT NOT NULL,
+  PRIMARY KEY(project_id, memory_id, revision_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_revisions_key ON memory_revisions(content_key);
+CREATE INDEX IF NOT EXISTS idx_memory_revisions_memory ON memory_revisions(project_id, memory_id, created_at);
+
+CREATE TABLE IF NOT EXISTS maintenance_events (
+  project_id TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  memory_ids TEXT NOT NULL,
+  revision_ids TEXT NOT NULL,
+  action TEXT NOT NULL,
+  reason_code TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(project_id, operation_id)
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_operations (
+  project_id TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  memory_ids TEXT NOT NULL,
+  revision_ids TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(project_id, operation_id)
+);

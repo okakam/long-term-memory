@@ -15,10 +15,10 @@ import {
   type SaveInput,
   type UpdateInput,
 } from '@/lib/memory/types';
-import { assertMemoryName, assertProjectId, isReservedProjectId, isValidSlug, SHARED_PROJECT_ID } from '@/lib/slug';
+import { assertMemoryName, assertProjectId, SHARED_PROJECT_ID } from '@/lib/slug';
 import { memoryObjectKey as gcsMemoryObjectKey, gcsStoragePrefix } from '@/lib/storage/gcs-markdown';
 import { createMarkdownStore } from '@/lib/storage/factory';
-import type { IndexStore, MarkdownStore, StoredObject } from '@/lib/storage/contracts';
+import type { IndexStore, MarkdownStore } from '@/lib/storage/contracts';
 import {
   createFirestoreMetadataStore,
   type FirestoreMetadataStore,
@@ -28,6 +28,9 @@ import {
 import { openEphemeralIndex } from '@/lib/storage/sqlite-index';
 import { rerank } from '@/lib/memory/rerank';
 import { DEFAULT_MAINTENANCE_SETTINGS, reviewSchedule } from '@/lib/maintenance/policy';
+import { FirestoreMaintenanceStore } from '@/lib/maintenance/firestore-store';
+import { mutationMemoryIds, mutationPayloadHash, prepareMutation } from '@/lib/maintenance/mutations';
+import type { MaintenanceStore, MemoryMutationPort, MutationCommitData, MutationRequest, MutationResult } from '@/lib/maintenance/store';
 
 interface MemoryRow {
   id: string;
@@ -38,6 +41,12 @@ interface MemoryRow {
   body_chars: number;
   file_path: string;
   content_hash: string;
+  status?: Memory['status'];
+  last_reviewed_at?: string;
+  next_review_at?: string;
+  archived_at?: string;
+  archive_reason?: string;
+  archived_by?: string;
   created_at: string;
   updated_at: string;
 }
@@ -140,6 +149,11 @@ async function applyMemoryKg(store: IndexStore, projectId: string, memoryId: str
   await store.exec('DELETE FROM entity_aliases WHERE asserted_by = ?', [memoryId]);
   await store.exec('DELETE FROM memory_entities WHERE memory_id = ?', [memoryId]);
 
+  if (memory.status === 'archived') {
+    await pruneOrphanEntities(store, projectId);
+    return;
+  }
+
   const declaredNames = new Set(memory.entities.map((entity) => entity.name));
   for (const [subject, , object] of memory.triples) {
     if (!declaredNames.has(subject)) throw new Error(`triple references unknown entity (not in entities list): ${subject}`);
@@ -166,11 +180,16 @@ async function applyMemoryKg(store: IndexStore, projectId: string, memoryId: str
 async function insertMemoryIndex(store: IndexStore, projectId: string, key: string, raw: string, memory: Memory): Promise<void> {
   const contentHash = computeHash(raw);
   await store.exec(`INSERT INTO memories
-    (id, project_id, name, type, description, body_chars, file_path, content_hash, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [memory.id, projectId, memory.name, memory.type, memory.description,
-    bodyChars(memory.body), key, contentHash, memory.created_at, memory.updated_at]);
-  await insertCollections(store, memory);
-  await insertFts(store, memory);
+    (id, project_id, name, type, description, body_chars, file_path, content_hash, status, last_reviewed_at,
+      next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [memory.id, projectId, memory.name, memory.type, memory.description,
+    bodyChars(memory.body), key, contentHash, memory.status ?? 'active', memory.last_reviewed_at ?? null,
+    memory.next_review_at ?? null, memory.archived_at ?? null, memory.archive_reason ?? null, memory.archived_by ?? null,
+    memory.created_at, memory.updated_at]);
+  if ((memory.status ?? 'active') === 'active') {
+    await insertCollections(store, memory);
+    await insertFts(store, memory);
+  }
   await applyMemoryKg(store, projectId, memory.id, memory);
 }
 
@@ -187,9 +206,10 @@ async function deleteIndex(store: IndexStore, projectId: string, memoryId: strin
   await store.exec('DELETE FROM memories WHERE id = ?', [memoryId]);
 }
 
-export class CloudMemoryService {
+export class CloudMemoryService implements MemoryMutationPort {
   private closed = false;
   private readonly readyPromise: Promise<void>;
+  readonly maintenanceStore: MaintenanceStore;
 
   constructor(
     private readonly indexPromise: Promise<IndexStore>,
@@ -199,6 +219,7 @@ export class CloudMemoryService {
     private readonly gcsPrefix: string = gcsStoragePrefix(),
     autoReindex = false,
   ) {
+    this.maintenanceStore = new FirestoreMaintenanceStore(metadata, markdown, gcsPrefix);
     this.readyPromise = autoReindex
       ? this.indexPromise.then((store) => this.mutex.run(SHARED_PROJECT_ID, () => this.reindexUnlocked(undefined, store)))
       : Promise.resolve();
@@ -332,7 +353,7 @@ export class CloudMemoryService {
   async listByType(projectId: string, type: Memory['type'], limit = 100): Promise<Memory[]> {
     const project = this.requireProject(projectId);
     const rows = await (await this.index()).query<MemoryRow>(`SELECT id, project_id, name, type, description, body_chars, file_path,
-      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND type = ?
+      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND type = ? AND status = 'active'
       ORDER BY updated_at DESC, name ASC LIMIT ?`, [project, type, safeLimit(limit, 100)]);
     return Promise.all(rows.map((row) => this.hydrate(row)));
   }
@@ -341,7 +362,7 @@ export class CloudMemoryService {
     const project = this.requireProject(projectId);
     const params: Array<string | number> = [project];
     let sql = `SELECT id, project_id, name, type, description, body_chars, file_path,
-      content_hash, created_at, updated_at FROM memories WHERE project_id = ?`;
+      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND status = 'active'`;
     if (options.type) { sql += ' AND type = ?'; params.push(options.type); }
     sql += ' ORDER BY updated_at DESC, name ASC LIMIT ?';
     params.push(safeLimit(options.limit, 100));
@@ -364,7 +385,7 @@ export class CloudMemoryService {
     const rows = await store.query<MemoryRow>(`SELECT m.id, m.project_id, m.name, m.type, m.description, m.body_chars,
       m.file_path, m.content_hash, m.created_at, m.updated_at FROM memories m
       JOIN tags t ON t.memory_id = m.id
-      WHERE m.project_id = ? AND t.tag IN (${placeholders})
+      WHERE m.project_id = ? AND m.status = 'active' AND t.tag IN (${placeholders})
       GROUP BY m.id${having} ORDER BY m.updated_at DESC, m.name ASC`, [project, ...uniqueTags]);
     return this.summaries(store, rows);
   }
@@ -372,7 +393,10 @@ export class CloudMemoryService {
   async findRelated(projectId: string, idOrName: string, depth = 1): Promise<{ nodes: Memory[]; truncated: boolean }> {
     const project = this.requireProject(projectId);
     const store = await this.index();
-    const start = await selectRow(store, project, idOrName);
+    const startRows = await store.query<MemoryRow>(`SELECT id, project_id, name, type, description, body_chars, file_path,
+      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND status = 'active'
+      AND (id = ? OR name = ?) LIMIT 1`, [project, idOrName, idOrName]);
+    const start = startRows[0];
     if (!start) throw new MemoryNotFoundError(idOrName);
     const requestedDepth = Number.isFinite(depth) ? Math.floor(depth) : 1;
     const cappedDepth = Math.min(Math.max(requestedDepth, 1), 3);
@@ -383,7 +407,7 @@ export class CloudMemoryService {
       if (current.depth >= cappedDepth) continue;
       const links = await store.query<MemoryRow>(`SELECT m.id, m.project_id, m.name, m.type, m.description, m.body_chars,
         m.file_path, m.content_hash, m.created_at, m.updated_at FROM links l JOIN memories m
-        ON m.project_id = ? AND m.name = l.dst_name WHERE l.src_id = ?
+        ON m.project_id = ? AND m.name = l.dst_name WHERE l.src_id = ? AND m.status = 'active'
         ORDER BY m.updated_at DESC, m.name ASC`, [project, current.row.id]);
       for (const row of links) {
         if (rows.has(row.id)) continue;
@@ -445,16 +469,21 @@ export class CloudMemoryService {
         const currentRow = await selectRow(tx, project, idOrName);
         if (!currentRow) throw new MemoryNotFoundError(idOrName);
         const fts = await tx.query<{ rowid: number }>('SELECT rowid FROM memories WHERE id = ?', [updated.id]);
-        await tx.exec('UPDATE memories SET description = ?, body_chars = ?, file_path = ?, content_hash = ?, updated_at = ? WHERE id = ?', [
-          updated.description, bodyChars(updated.body), key, contentHash, updated.updated_at, updated.id,
+        await tx.exec(`UPDATE memories SET description = ?, body_chars = ?, file_path = ?, content_hash = ?, status = ?,
+          last_reviewed_at = ?, next_review_at = ?, archived_at = ?, archive_reason = ?, archived_by = ?, updated_at = ? WHERE id = ?`, [
+          updated.description, bodyChars(updated.body), key, contentHash, updated.status ?? 'active',
+          updated.last_reviewed_at ?? null, updated.next_review_at ?? null, updated.archived_at ?? null,
+          updated.archive_reason ?? null, updated.archived_by ?? null, updated.updated_at, updated.id,
         ]);
         await tx.exec('DELETE FROM tags WHERE memory_id = ?', [updated.id]);
         await tx.exec('DELETE FROM links WHERE src_id = ?', [updated.id]);
         await tx.exec('DELETE FROM supersedes WHERE src_id = ?', [updated.id]);
         if (fts[0]) await tx.exec('DELETE FROM memories_fts WHERE rowid = ?', [fts[0].rowid]);
         await applyMemoryKg(tx, project, updated.id, updated);
-        await insertCollections(tx, updated);
-        await insertFts(tx, updated);
+        if ((updated.status ?? 'active') === 'active') {
+          await insertCollections(tx, updated);
+          await insertFts(tx, updated);
+        }
       });
     } catch (error) {
       if (metadataCommitted) {
@@ -515,8 +544,9 @@ export class CloudMemoryService {
     try {
       await this.markdown.remove(row.file_path);
     } catch {
-      return;
+      // The Firestore tombstone remains until object cleanup succeeds.
     }
+    await this.maintenanceStore.deleteRevisions(project, row.id);
   }
 
   async linkMemories(projectId: string, src: string, dstName: string): Promise<Memory> {
@@ -691,7 +721,7 @@ export class CloudMemoryService {
 
   private async filteredMemoryRows(projectId: string, options: RemoteSearchOptions = {}): Promise<MemoryRow[]> {
     const params: Array<string | number> = [projectId];
-    let where = 'm.project_id = ?';
+    let where = "m.project_id = ? AND m.status = 'active'";
     if (options.type) { where += ' AND m.type = ?'; params.push(options.type); }
     const tags = uniqueStrings(options.tags);
     if (tags.length > 0) {
@@ -708,7 +738,7 @@ export class CloudMemoryService {
     const tokens = ftsTokens(query);
     if (tokens.length === 0) return [];
     const params: Array<string | number> = [projectId];
-    let filter = 'm.project_id = ?';
+    let filter = "m.project_id = ? AND m.status = 'active'";
     if (options.type) { filter += ' AND m.type = ?'; params.push(options.type); }
     const tags = uniqueStrings(options.tags);
     if (tags.length > 0) {
@@ -744,7 +774,8 @@ export class CloudMemoryService {
   private async supersededByMapFor(store: IndexStore, projectId: string): Promise<Map<string, string>> {
     const rows = await store.query<{ dst: string; src: string }>(`SELECT s.dst_name AS dst, src.name AS src FROM supersedes s
       JOIN memories src ON src.id = s.src_id JOIN memories dst_memory ON dst_memory.project_id = src.project_id AND dst_memory.name = s.dst_name
-      WHERE src.project_id = ? AND s.dst_name != src.name ORDER BY src.updated_at ASC, src.name ASC`, [projectId]);
+      WHERE src.project_id = ? AND src.status = 'active' AND dst_memory.status = 'active' AND s.dst_name != src.name
+      ORDER BY src.updated_at ASC, src.name ASC`, [projectId]);
     return new Map(rows.map((row) => [row.dst, row.src]));
   }
 
@@ -791,16 +822,17 @@ export class CloudMemoryService {
     const project = this.requireProject(projectId);
     const store = await this.index();
     const memoryRows = await store.query<MemoryRow>(`SELECT id, project_id, name, type, description, body_chars, file_path,
-      content_hash, created_at, updated_at FROM memories WHERE project_id = ? ORDER BY name`, [project]);
+      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND status = 'active' ORDER BY name`, [project]);
     const summaries = await this.summaries(store, memoryRows);
     const memories = summaries.map(({ id, name, type, description, tags }) => ({ id, name, type, description, tags }));
     const entities = await store.query<{ id: string; name: string }>('SELECT id, name FROM entities WHERE project_id = ? ORDER BY name', [project]);
     const memberships = await store.query<{ memoryId: string; entityId: string }>(`SELECT me.memory_id AS memoryId, me.entity_id AS entityId
-      FROM memory_entities me JOIN memories m ON m.id = me.memory_id WHERE m.project_id = ?`, [project]);
+      FROM memory_entities me JOIN memories m ON m.id = me.memory_id WHERE m.project_id = ? AND m.status = 'active'`, [project]);
     const edges = await store.query<{ srcEntityId: string; dstEntityId: string; relation: string }>(`SELECT ee.src_entity_id AS srcEntityId,
-      ee.dst_entity_id AS dstEntityId, ee.relation FROM entity_edges ee JOIN entities src ON src.id = ee.src_entity_id WHERE src.project_id = ?`, [project]);
+      ee.dst_entity_id AS dstEntityId, ee.relation FROM entity_edges ee JOIN entities src ON src.id = ee.src_entity_id
+      JOIN memories asserted ON asserted.id = ee.asserted_by WHERE src.project_id = ? AND asserted.status = 'active'`, [project]);
     const links = await store.query<{ srcMemoryId: string; dstName: string }>(`SELECT l.src_id AS srcMemoryId, l.dst_name AS dstName
-      FROM links l JOIN memories m ON m.id = l.src_id WHERE m.project_id = ?`, [project]);
+      FROM links l JOIN memories m ON m.id = l.src_id WHERE m.project_id = ? AND m.status = 'active'`, [project]);
     return { memories, entities, memberships, edges, links };
   }
 
@@ -808,9 +840,11 @@ export class CloudMemoryService {
     const project = this.requireProject(projectId);
     const store = await this.index();
     const [entities, memberships, edges] = await Promise.all([
-      store.query<{ count: number }>('SELECT COUNT(*) AS count FROM entities WHERE project_id = ?', [project]),
-      store.query<{ count: number }>('SELECT COUNT(*) AS count FROM memory_entities me JOIN memories m ON m.id = me.memory_id WHERE m.project_id = ?', [project]),
-      store.query<{ count: number }>('SELECT COUNT(*) AS count FROM entity_edges ee JOIN entities e ON e.id = ee.src_entity_id WHERE e.project_id = ?', [project]),
+      store.query<{ count: number }>(`SELECT COUNT(*) AS count FROM entities e WHERE e.project_id = ? AND EXISTS
+        (SELECT 1 FROM memory_entities me JOIN memories m ON m.id = me.memory_id WHERE me.entity_id = e.id AND m.status = 'active')`, [project]),
+      store.query<{ count: number }>("SELECT COUNT(*) AS count FROM memory_entities me JOIN memories m ON m.id = me.memory_id WHERE m.project_id = ? AND m.status = 'active'", [project]),
+      store.query<{ count: number }>(`SELECT COUNT(*) AS count FROM entity_edges ee JOIN entities e ON e.id = ee.src_entity_id
+        JOIN memories asserted ON asserted.id = ee.asserted_by WHERE e.project_id = ? AND asserted.status = 'active'`, [project]),
     ]);
     return { entities: Number(entities[0]?.count ?? 0), edges: Number(edges[0]?.count ?? 0), memberships: Number(memberships[0]?.count ?? 0) };
   }
@@ -821,32 +855,30 @@ export class CloudMemoryService {
 
   private async reindexUnlocked(projectId?: string, readyStore?: IndexStore): Promise<void> {
     const store = readyStore ?? await this.index();
-    const rootPrefix = this.gcsPrefix;
-    const objects = await this.markdown.list(rootPrefix + '/');
-    const snapshots = new Map<string, { projectId: string; object: StoredObject; raw: string; memory: Memory }>();
-    for (const object of objects) {
-      if (!object.key.startsWith(rootPrefix + '/')) continue;
-      const relative = object.key.slice(rootPrefix.length + 1).split('/');
-      if (relative.length !== 4 || relative[1] !== 'memories' || !relative[3].endsWith('.md')) continue;
-      const [objectProject, , objectName, hashFile] = relative;
-      if ((!isValidSlug(objectProject) && !isReservedProjectId(objectProject))
-        || (projectId !== undefined && objectProject !== projectId)
-        || !isValidSlug(objectName)) continue;
-      const contentHash = hashFile.slice(0, -3);
-      if (!/^[a-f0-9]{64}$/.test(contentHash)) continue;
-      try {
-        const raw = await this.markdown.read(object.key);
-        if (computeHash(raw) !== contentHash) continue;
-        const memory = parseMemoryString(raw);
-        if (await this.metadata.isTombstoned(objectProject, object.key)) continue;
-        if (cloudMemoryObjectKey(objectProject, memory.name, contentHash, rootPrefix) !== object.key) continue;
-        const key = objectProject + ':' + memory.name;
-        const previous = snapshots.get(key);
-        if (!previous || previous.object.updatedAt.getTime() <= object.updatedAt.getTime()) {
-          snapshots.set(key, { projectId: objectProject, object, raw, memory });
+    const projects = projectId === undefined
+      ? (await this.metadata.listProjects()).map((project) => project.project_id)
+      : [projectId];
+    const snapshots: Array<{ projectId: string; key: string; raw: string; memory: Memory }> = [];
+    for (const currentProject of projects) {
+      const records = await this.metadata.listMemoryIndexes(currentProject);
+      for (const record of records) {
+        try {
+          if (record.project_id !== currentProject
+            || cloudMemoryObjectKey(currentProject, record.name, record.content_hash, this.gcsPrefix) !== record.content_key) continue;
+          const raw = await this.markdown.read(record.content_key);
+          if (computeHash(raw) !== record.content_hash) continue;
+          const memory = MemorySchema.parse(parseMemoryString(raw));
+          if (memory.id !== record.id || memory.name !== record.name
+            || (memory.status ?? 'active') !== (record.status ?? 'active')
+            || memory.last_reviewed_at !== record.last_reviewed_at
+            || memory.next_review_at !== record.next_review_at
+            || memory.archived_at !== record.archived_at
+            || memory.archive_reason !== record.archive_reason
+            || memory.archived_by !== record.archived_by) continue;
+          snapshots.push({ projectId: currentProject, key: record.content_key, raw, memory });
+        } catch {
+          // Metadata pointers are authoritative; malformed or mismatched objects are skipped.
         }
-      } catch {
-        // Reindex follows local reconcile semantics: malformed objects are skipped.
       }
     }
     await store.transaction(async (tx) => {
@@ -868,12 +900,11 @@ export class CloudMemoryService {
         await tx.exec('DELETE FROM memories WHERE project_id = ?', [projectId]);
       }
       let savepointId = 0;
-      for (const snapshot of snapshots.values()) {
+      for (const snapshot of snapshots) {
         const savepoint = 'cloud_reindex_' + savepointId++;
         try {
           await tx.exec('SAVEPOINT ' + savepoint);
-          await insertMemoryIndex(tx, snapshot.projectId, snapshot.object.key, snapshot.raw, snapshot.memory);
-          await this.metadata.putMemoryIndex(snapshot.projectId, toMemoryIndexRecord(snapshot.projectId, snapshot.object.key, computeHash(snapshot.raw), snapshot.memory));
+          await insertMemoryIndex(tx, snapshot.projectId, snapshot.key, snapshot.raw, snapshot.memory);
           await tx.exec('RELEASE SAVEPOINT ' + savepoint);
         } catch {
           await tx.exec('ROLLBACK TO SAVEPOINT ' + savepoint);
@@ -887,6 +918,209 @@ export class CloudMemoryService {
   async reindex(projectId?: string): Promise<void> {
     const target = projectId === undefined ? undefined : this.requireProject(projectId);
     return this.mutex.run(target ?? SHARED_PROJECT_ID, () => this.reindexUnlocked(target));
+  }
+
+  async applyMutationAsync(request: MutationRequest): Promise<MutationResult> {
+    const project = this.requireProject(request.project_id);
+    return this.withRemoteLock(project, () => this.applyMutationUnlocked({ ...request, project_id: project }));
+  }
+
+  private async applyMutationUnlocked(request: MutationRequest): Promise<MutationResult> {
+    const project = request.project_id;
+    const payloadHash = mutationPayloadHash(request);
+    const previousOperation = await this.maintenanceStore.checkOperation(project, request.operation_id, payloadHash);
+    if (previousOperation) {
+      if (previousOperation.outcome === 'already_applied') await this.reindexUnlocked(project);
+      return previousOperation;
+    }
+
+    const store = await this.index();
+    const ids = mutationMemoryIds(request.action);
+    const rows = new Map<string, MemoryRow>();
+    const current = new Map<string, Memory>();
+    const oldRaw = new Map<string, string>();
+    for (const id of ids) {
+      const row = await selectRow(store, project, id);
+      const canonical = await this.metadata.getMemoryIndex(project, id);
+      if (!row || !canonical) {
+        if (request.action.type === 'restore') throw new MemoryNotFoundError(id);
+        return this.mutationConflict(request.operation_id);
+      }
+      let raw: string;
+      try { raw = await this.markdown.read(canonical.content_key); } catch { return this.mutationConflict(request.operation_id); }
+      const hash = computeHash(raw);
+      if (request.expected_hashes[id] !== hash || canonical.content_hash !== hash) return this.mutationConflict(request.operation_id);
+      const memory = parseMemoryString(raw);
+      if (memory.id !== id) return this.mutationConflict(request.operation_id);
+      rows.set(id, { ...row, file_path: canonical.content_key, content_hash: canonical.content_hash });
+      current.set(id, memory);
+      oldRaw.set(id, raw);
+    }
+    if (Object.keys(request.expected_hashes).length !== ids.length || ids.some((id) => !Object.hasOwn(request.expected_hashes, id))) {
+      return this.mutationConflict(request.operation_id);
+    }
+    if (request.action.type === 'create') {
+      const existingName = await this.metadata.getNameIndex(project, request.action.input.name);
+      if (existingName) return this.mutationConflict(request.operation_id);
+    }
+
+    let restoredMemory: Memory | undefined;
+    if (request.action.type === 'restore') {
+      const restored = await this.maintenanceStore.readRevision(project, request.action.memory_id, request.action.revision_id);
+      if (!restored) throw new MemoryNotFoundError(request.action.revision_id);
+      restoredMemory = parseMemoryString(restored.body);
+    }
+    const settings = await this.maintenanceStore.getSettings(project);
+    if (request.expected_settings_version !== undefined
+      && (settings.version !== request.expected_settings_version || !settings.enabled)) return this.mutationConflict(request.operation_id);
+    if (project !== SHARED_PROJECT_ID && request.action.type !== 'restore' && request.expected_settings_version === undefined) {
+      return this.mutationConflict(request.operation_id);
+    }
+    const afterMemories = prepareMutation(request, current, settings, restoredMemory);
+    const snapshots: MutationCommitData['after'] = [];
+    const revisions: MutationCommitData['revisions'] = [];
+    const writtenCurrent = new Set<string>();
+    const writtenRevision = new Set<string>();
+    let canonicalCommitStarted = false;
+    try {
+      for (const memory of afterMemories) {
+        const previous = rows.get(memory.id);
+        const raw = serializeMemory(memory);
+        const contentHash = computeHash(raw);
+        const key = this.objectKey(project, memory.name, contentHash);
+        if (key !== previous?.file_path) {
+          let present = false;
+          if (this.markdown.head) {
+            try {
+              await this.markdown.head(key);
+              const existing = await this.markdown.read(key);
+              if (computeHash(existing) !== contentHash) throw new Error(`immutable memory object hash mismatch: ${key}`);
+              present = true;
+            } catch (error) {
+              if (!(error instanceof Error) || !/not found/i.test(error.message)) throw error;
+            }
+          }
+          if (!present) {
+            await this.markdown.write(key, raw, { contentHash });
+            writtenCurrent.add(key);
+          }
+        }
+        if (previous) {
+          const revisionId = ulid();
+          const revisionKey = await this.maintenanceStore.writeRevisionBody(project, memory.id, revisionId, oldRaw.get(memory.id)!);
+          writtenRevision.add(revisionKey);
+          revisions.push({
+            id: revisionId,
+            memory_id: memory.id,
+            content_key: revisionKey,
+            content_hash: computeHash(oldRaw.get(memory.id)!),
+            created_at: request.now,
+            operation_id: request.operation_id,
+            reason_code: request.reason_code,
+          });
+        }
+        snapshots.push({ memory, content_key: key, content_hash: contentHash });
+      }
+      const result: MutationResult = {
+        operation_id: request.operation_id,
+        outcome: 'applied',
+        memory_ids: afterMemories.map((memory) => memory.id),
+        revision_ids: revisions.map((revision) => revision.id),
+      };
+      const data: MutationCommitData = {
+        request,
+        payload_hash: payloadHash,
+        before_hashes: request.expected_hashes,
+        after: snapshots,
+        revisions,
+        event: {
+          operation_id: request.operation_id,
+          project_id: project,
+          memory_ids: result.memory_ids,
+          revision_ids: result.revision_ids,
+          action: request.action.type,
+          reason_code: request.reason_code,
+          created_at: request.now,
+        },
+        result,
+      };
+      canonicalCommitStarted = true;
+      const committed = await this.maintenanceStore.commitMutation(data);
+      if (committed.outcome !== 'applied') {
+        await this.cleanupMutationObjects(writtenCurrent, writtenRevision);
+        return committed;
+      }
+      try {
+        await this.writeMutationToCache(store, project, rows, snapshots);
+      } catch (cacheError) {
+        try {
+          await this.reindexUnlocked(project, store);
+        } catch (reindexError) {
+          throw new AggregateError([cacheError, reindexError], 'mutation committed but cache rebuild failed');
+        }
+      }
+      return committed;
+    } catch (error) {
+      if (canonicalCommitStarted) {
+        const committed = await this.maintenanceStore.checkOperation(project, request.operation_id, payloadHash).catch(() => null);
+        if (committed?.outcome === 'already_applied') {
+          await this.reindexUnlocked(project, store);
+          return committed;
+        }
+      }
+      await this.cleanupMutationObjects(writtenCurrent, writtenRevision);
+      throw error;
+    }
+  }
+
+  private async writeMutationToCache(
+    store: IndexStore,
+    projectId: string,
+    previousRows: Map<string, MemoryRow>,
+    snapshots: MutationCommitData['after'],
+  ): Promise<void> {
+    await store.transaction(async (tx) => {
+      for (const snapshot of snapshots) {
+        const memory = snapshot.memory;
+        const previous = previousRows.get(memory.id);
+        if (!previous) {
+          await insertMemoryIndex(tx, projectId, snapshot.content_key, await this.markdown.read(snapshot.content_key), memory);
+          continue;
+        }
+        const fts = await tx.query<{ rowid: number }>('SELECT rowid FROM memories WHERE id = ?', [memory.id]);
+        await tx.exec(`UPDATE memories SET name = ?, type = ?, description = ?, body_chars = ?, file_path = ?, content_hash = ?,
+          status = ?, last_reviewed_at = ?, next_review_at = ?, archived_at = ?, archive_reason = ?, archived_by = ?,
+          created_at = ?, updated_at = ? WHERE id = ?`, [
+          memory.name, memory.type, memory.description, bodyChars(memory.body), snapshot.content_key, snapshot.content_hash,
+          memory.status ?? 'active', memory.last_reviewed_at ?? null, memory.next_review_at ?? null,
+          memory.archived_at ?? null, memory.archive_reason ?? null, memory.archived_by ?? null,
+          memory.created_at, memory.updated_at, memory.id,
+        ]);
+        if (fts[0]) await tx.exec('DELETE FROM memories_fts WHERE rowid = ?', [fts[0].rowid]);
+        await tx.exec('DELETE FROM tags WHERE memory_id = ?', [memory.id]);
+        await tx.exec('DELETE FROM links WHERE src_id = ?', [memory.id]);
+        await tx.exec('DELETE FROM supersedes WHERE src_id = ?', [memory.id]);
+        await applyMemoryKg(tx, projectId, memory.id, memory);
+        if ((memory.status ?? 'active') === 'active') {
+          await insertCollections(tx, memory);
+          await insertFts(tx, memory);
+        }
+      }
+    });
+  }
+
+  private async cleanupMutationObjects(currentKeys: Set<string>, revisionKeys: Set<string>): Promise<void> {
+    await Promise.all([...currentKeys, ...revisionKeys].map(async (key) => {
+      try { await this.markdown.remove(key); } catch { /* an unreferenced object can be collected later */ }
+    }));
+  }
+
+  private mutationConflict(operationId: string): MutationResult {
+    return { operation_id: operationId, outcome: 'conflict', memory_ids: [], revision_ids: [] };
+  }
+
+  listRevisionsAsync(projectId: string, memoryId: string) {
+    return this.maintenanceStore.listRevisions(this.requireProject(projectId), memoryId);
   }
 
   saveAsync(projectId: string, input: SaveInput): Promise<Memory> {

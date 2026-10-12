@@ -6,6 +6,9 @@ import { getFirebaseAdminApp } from '@/lib/auth/firebase';
 import { MemoryConflictError } from '@/lib/memory/types';
 import type { Entity, MemoryStatus, MemoryType, Triple } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId } from '@/lib/slug';
+import { DEFAULT_MAINTENANCE_SETTINGS } from '@/lib/maintenance/policy';
+import { MaintenanceSettingsSchema, type MaintenanceSettings } from '@/lib/maintenance/types';
+import type { MaintenanceEvent, MemoryRevision, MutationCommitData, MutationResult } from '@/lib/maintenance/store';
 
 export interface FirestoreDocument {
   id: string;
@@ -183,6 +186,31 @@ function tombstonesPath(projectId: string): string {
   return documentPath(projectPath(projectId), 'tombstones');
 }
 
+function maintenancePath(projectId: string): string {
+  return documentPath(projectPath(projectId), 'maintenance');
+}
+
+function maintenanceSettingsPath(projectId: string): string {
+  return documentPath(maintenancePath(projectId), 'settings');
+}
+
+function maintenanceEventsPath(projectId: string): string {
+  return documentPath(maintenancePath(projectId), 'events');
+}
+
+function maintenanceOperationsPath(projectId: string): string {
+  return documentPath(maintenancePath(projectId), 'operations');
+}
+
+function memoryRevisionsPath(projectId: string, memoryId: string): string {
+  return documentPath(memoriesPath(projectId), memoryId, 'revisions');
+}
+
+function safeDocumentId(value: string): string {
+  if (value.length === 0 || value.includes('/')) throw new FirestoreDataError('document id must be non-empty and contain no slash');
+  return encodeURIComponent(value);
+}
+
 function nameDocumentId(name: string): string {
   return encodeURIComponent(assertMemoryName(name));
 }
@@ -338,12 +366,218 @@ function nameRecord(document: FirestoreDocument): NameIndexRecord {
   };
 }
 
+function settingsRecord(document: FirestoreDocument): MaintenanceSettings {
+  const data = asRecord(document.data(), document.path);
+  return MaintenanceSettingsSchema.parse({
+    enabled: data.enabled,
+    review_days: data.review_days,
+    session_archive_days: data.session_archive_days,
+    version: data.version,
+  });
+}
+
+function revisionRecord(document: FirestoreDocument): MemoryRevision {
+  const data = asRecord(document.data(), document.path);
+  return {
+    id: asString(data.id, `${document.path}.id`),
+    memory_id: asString(data.memory_id, `${document.path}.memory_id`),
+    content_key: asString(data.content_key, `${document.path}.content_key`),
+    content_hash: asString(data.content_hash, `${document.path}.content_hash`),
+    created_at: asIso(data.created_at, `${document.path}.created_at`),
+    operation_id: asString(data.operation_id, `${document.path}.operation_id`),
+    reason_code: asString(data.reason_code, `${document.path}.reason_code`) as MemoryRevision['reason_code'],
+  };
+}
+
+function maintenanceEventRecord(document: FirestoreDocument): MaintenanceEvent {
+  const data = asRecord(document.data(), document.path);
+  return {
+    operation_id: asString(data.operation_id, `${document.path}.operation_id`),
+    project_id: asString(data.project_id, `${document.path}.project_id`),
+    memory_ids: asStringArray(data.memory_ids, `${document.path}.memory_ids`),
+    revision_ids: asStringArray(data.revision_ids, `${document.path}.revision_ids`),
+    action: asString(data.action, `${document.path}.action`) as MaintenanceEvent['action'],
+    reason_code: asString(data.reason_code, `${document.path}.reason_code`) as MaintenanceEvent['reason_code'],
+    created_at: asIso(data.created_at, `${document.path}.created_at`),
+  };
+}
+
 function memoryData(record: MemoryIndexRecord): Record<string, unknown> {
   return { ...record };
 }
 
 export class FirestoreMetadataStore {
   constructor(private readonly gateway: FirestoreGateway) {}
+
+  async getMaintenanceSettings(projectId: string): Promise<MaintenanceSettings> {
+    const document = await this.gateway.get(maintenanceSettingsPath(projectId));
+    return document.exists ? settingsRecord(document) : { ...DEFAULT_MAINTENANCE_SETTINGS, review_days: { ...DEFAULT_MAINTENANCE_SETTINGS.review_days } };
+  }
+
+  async saveMaintenanceSettings(projectId: string, input: MaintenanceSettings, expectedVersion: number): Promise<MaintenanceSettings> {
+    const settings = MaintenanceSettingsSchema.parse(input);
+    const path = maintenanceSettingsPath(projectId);
+    return this.gateway.runTransaction(async (transaction) => {
+      const document = await transaction.get(path);
+      const current = document.exists ? settingsRecord(document) : DEFAULT_MAINTENANCE_SETTINGS;
+      if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0 || current.version !== expectedVersion) {
+        throw new MemoryConflictError(`maintenance settings version: ${projectId}`);
+      }
+      const next = { ...settings, version: current.version + 1 };
+      await transaction.set(path, next);
+      return next;
+    });
+  }
+
+  async listMaintenanceEvents(projectId: string, after?: string, limit = 100): Promise<MaintenanceEvent[]> {
+    const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const events = (await this.gateway.list(maintenanceEventsPath(projectId)))
+      .filter((document) => document.exists)
+      .map(maintenanceEventRecord)
+      .filter((event) => after === undefined || event.created_at > after)
+      .sort((left, right) => after === undefined
+        ? right.created_at.localeCompare(left.created_at) || right.operation_id.localeCompare(left.operation_id)
+        : left.created_at.localeCompare(right.created_at) || left.operation_id.localeCompare(right.operation_id));
+    return events.slice(0, bounded);
+  }
+
+  async listMemoryRevisions(projectId: string, memoryId: string): Promise<MemoryRevision[]> {
+    return (await this.gateway.list(memoryRevisionsPath(projectId, memoryId)))
+      .filter((document) => document.exists)
+      .map(revisionRecord)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id));
+  }
+
+  async getMaintenanceOperation(projectId: string, operationId: string, payloadHash: string): Promise<MutationResult | null> {
+    const path = documentPath(maintenanceOperationsPath(projectId), safeDocumentId(operationId));
+    const document = await this.gateway.get(path);
+    if (!document.exists) return null;
+    const data = asRecord(document.data(), path);
+    return {
+      operation_id: operationId,
+      outcome: data.payload_hash === payloadHash ? 'already_applied' : 'conflict',
+      memory_ids: asStringArray(data.memory_ids, `${path}.memory_ids`),
+      revision_ids: asStringArray(data.revision_ids, `${path}.revision_ids`),
+    };
+  }
+
+  async getMemoryRevision(projectId: string, memoryId: string, revisionId: string): Promise<MemoryRevision | null> {
+    const document = await this.gateway.get(documentPath(memoryRevisionsPath(projectId, memoryId), safeDocumentId(revisionId)));
+    return document.exists ? revisionRecord(document) : null;
+  }
+
+  async deleteMemoryRevisions(projectId: string, memoryId: string): Promise<MemoryRevision[]> {
+    const revisions = await this.listMemoryRevisions(projectId, memoryId);
+    await this.gateway.runTransaction(async (transaction) => {
+      for (const revision of revisions) {
+        await transaction.delete(documentPath(memoryRevisionsPath(projectId, memoryId), safeDocumentId(revision.id)));
+        await transaction.set(documentPath(tombstonesPath(projectId), tombstoneDocumentId(revision.content_key)), {
+          project_id: projectId,
+          memory_id: memoryId,
+          content_key: revision.content_key,
+          deleted_at: new Date().toISOString(),
+        });
+      }
+    });
+    return revisions;
+  }
+
+  async commitMemoryMutation(data: MutationCommitData, records: MemoryIndexRecord[]): Promise<MutationResult> {
+    const projectId = assertProjectId(data.request.project_id);
+    const operation = documentPath(maintenanceOperationsPath(projectId), safeDocumentId(data.request.operation_id));
+    const event = documentPath(maintenanceEventsPath(projectId), safeDocumentId(data.event.operation_id));
+    const recordById = new Map(records.map((record) => [record.id, record]));
+    if (recordById.size !== data.after.length) throw new Error('mutation records do not match snapshots');
+    return this.gateway.runTransaction(async (transaction) => {
+      const projectPathValue = projectPath(projectId);
+      const operationDocument = await transaction.get(operation);
+      if (operationDocument.exists) {
+        const prior = asRecord(operationDocument.data(), operation);
+        return {
+          operation_id: data.request.operation_id,
+          outcome: prior.payload_hash === data.payload_hash ? 'already_applied' : 'conflict',
+          memory_ids: asStringArray(prior.memory_ids, `${operation}.memory_ids`),
+          revision_ids: asStringArray(prior.revision_ids, `${operation}.revision_ids`),
+        } satisfies MutationResult;
+      }
+
+      const projectDocument = await transaction.get(projectPathValue);
+      if (!projectDocument.exists) throw new Error(`project not found: ${projectId}`);
+      const currentProject = projectRecord(projectDocument);
+      let settings: MaintenanceSettings | undefined;
+      if (data.request.expected_settings_version !== undefined) {
+        const settingsDocument = await transaction.get(maintenanceSettingsPath(projectId));
+        settings = settingsDocument.exists ? settingsRecord(settingsDocument) : undefined;
+        if (!settings?.enabled || settings.version !== data.request.expected_settings_version) return {
+          operation_id: data.request.operation_id, outcome: 'conflict', memory_ids: [], revision_ids: [],
+        };
+      } else if (projectId !== '__shared__' && data.request.action.type !== 'restore') {
+        return { operation_id: data.request.operation_id, outcome: 'conflict', memory_ids: [], revision_ids: [] };
+      }
+
+      const currentDocuments = new Map<string, FirestoreDocument>();
+      for (const memoryId of Object.keys(data.before_hashes)) {
+        const document = await transaction.get(documentPath(memoriesPath(projectId), safeDocumentId(memoryId)));
+        currentDocuments.set(memoryId, document);
+        if (!document.exists || memoryRecord(document).content_hash !== data.before_hashes[memoryId]) {
+          return { operation_id: data.request.operation_id, outcome: 'conflict', memory_ids: [], revision_ids: [] };
+        }
+      }
+      const currentRecords = new Map<string, MemoryIndexRecord>();
+      for (const [memoryId, document] of currentDocuments) currentRecords.set(memoryId, memoryRecord(document));
+
+      const nameDocuments = new Map<string, FirestoreDocument>();
+      const namePaths = new Map<string, string>();
+      for (const record of records) namePaths.set(record.name, documentPath(namesPath(projectId), nameDocumentId(record.name)));
+      for (const current of currentRecords.values()) namePaths.set(current.name, documentPath(namesPath(projectId), nameDocumentId(current.name)));
+      for (const [name, path] of namePaths) nameDocuments.set(name, await transaction.get(path));
+      for (const record of records) {
+        const existing = nameDocuments.get(record.name);
+        if (existing?.exists && nameRecord(existing).memory_id !== record.id) {
+          return { operation_id: data.request.operation_id, outcome: 'conflict', memory_ids: [], revision_ids: [] };
+        }
+      }
+
+      for (const current of currentRecords.values()) {
+        const next = recordById.get(current.id);
+        if (next && current.name !== next.name) {
+          const oldName = nameDocuments.get(current.name);
+          if (oldName?.exists && nameRecord(oldName).memory_id === current.id) {
+            await transaction.delete(documentPath(namesPath(projectId), nameDocumentId(current.name)));
+          }
+        }
+      }
+      for (const record of records) {
+        await transaction.set(documentPath(memoriesPath(projectId), safeDocumentId(record.id)), memoryData(record));
+        await transaction.set(documentPath(namesPath(projectId), nameDocumentId(record.name)), {
+          memory_id: record.id,
+          name: record.name,
+          content_key: record.content_key,
+          content_hash: record.content_hash,
+        });
+      }
+      for (const revision of data.revisions) {
+        await transaction.set(documentPath(memoryRevisionsPath(projectId, revision.memory_id), safeDocumentId(revision.id)), {
+          ...revision,
+          project_id: projectId,
+        });
+      }
+      await transaction.set(event, { ...data.event });
+      await transaction.set(operation, {
+        operation_id: data.request.operation_id,
+        payload_hash: data.payload_hash,
+        outcome: 'applied',
+        memory_ids: data.result.memory_ids,
+        revision_ids: data.result.revision_ids,
+        created_at: data.request.now,
+      });
+      await transaction.set(projectPathValue, {
+        revision: currentProject.revision + 1,
+        updated_at: data.request.now,
+      }, true);
+      return data.result;
+    });
+  }
 
   async getProject(projectId: string): Promise<FirestoreProjectRecord | null> {
     const document = await this.gateway.get(projectPath(projectId));

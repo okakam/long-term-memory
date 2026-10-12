@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 import { computeHash } from '@/lib/markdown/file-io';
+import { DEFAULT_MAINTENANCE_SETTINGS } from '@/lib/maintenance/policy';
 import { serializeMemory } from '@/lib/markdown/frontmatter';
 import type { Memory } from '@/lib/memory/types';
 import { openLocalDb } from '@/lib/storage/local-index';
@@ -11,6 +12,7 @@ import type { IndexStore, MarkdownStore, SqlValue, StoredObject } from '@/lib/st
 
 class FakeFirestore implements FirestoreGateway {
   readonly documents = new Map<string, Record<string, unknown>>();
+  failNextTransaction = false;
   async get(path: string): Promise<FirestoreDocument> { return this.snapshot(path); }
   async list(collectionPath: string): Promise<FirestoreDocument[]> {
     const prefix = `${collectionPath}/`;
@@ -22,6 +24,10 @@ class FakeFirestore implements FirestoreGateway {
   async update(path: string, data: Record<string, unknown>): Promise<void> { await this.set(path, data, true); }
   async delete(path: string): Promise<void> { this.documents.delete(path); }
   async runTransaction<T>(fn: (transaction: FirestoreTransaction) => Promise<T>): Promise<T> {
+    if (this.failNextTransaction) {
+      this.failNextTransaction = false;
+      throw new Error('firestore transaction failed');
+    }
     return fn({
       get: (path) => this.get(path),
       list: (collectionPath) => this.list(collectionPath),
@@ -86,6 +92,21 @@ class FailingTransactionIndex implements IndexStore {
   }
 }
 
+class FailOnceTransactionIndex implements IndexStore {
+  failNextTransaction = false;
+  constructor(private readonly delegate: IndexStore) {}
+  exec(sql: string, args?: readonly SqlValue[]): Promise<void> { return this.delegate.exec(sql, args); }
+  query<T extends object>(sql: string, args?: readonly SqlValue[]): Promise<T[]> { return this.delegate.query<T>(sql, args); }
+  async transaction<T>(fn: (store: IndexStore) => Promise<T>): Promise<T> {
+    if (this.failNextTransaction) {
+      this.failNextTransaction = false;
+      throw new Error('cache transaction failed once');
+    }
+    return this.delegate.transaction(fn);
+  }
+  close(): void | Promise<void> { return this.delegate.close?.(); }
+}
+
 const resources: Array<{ close(): void }> = [];
 
 afterEach(() => {
@@ -116,6 +137,126 @@ test('CloudMemoryService save はURL出典を構造化しsource_refsと分離し
     next_review_at: '2027-03-30T00:00:00.000Z',
   });
   expect(await service.get('demo', saved.id)).toMatchObject({ sources: saved.sources, source_refs: saved.source_refs });
+});
+
+test('CloudMemoryService mutation は旧GCS本文をrevisionへ保持し、current metadataを更新する', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+  const saved = await service.save('demo', {
+    name: 'revision-note', description: 'before', type: 'reference', body: 'before body',
+  });
+  const originalRecord = await metadata.getMemoryIndex('demo', saved.id);
+  const settings = await service.maintenanceStore.saveSettings('demo', { ...DEFAULT_MAINTENANCE_SETTINGS, enabled: true }, 0);
+
+  const request = {
+    operation_id: 'cloud-patch', project_id: 'demo',
+    expected_hashes: { [saved.id]: originalRecord!.content_hash }, expected_settings_version: settings.version,
+    action: { type: 'patch' as const, memory_id: saved.id, patch: { body: 'after body' } },
+    reason_code: 'confirmed' as const, now: '2026-10-12T00:00:00.000Z',
+  };
+  const result = await service.applyMutationAsync(request);
+
+  expect(result.outcome).toBe('applied');
+  expect(await service.get('demo', saved.id)).toMatchObject({ body: 'after body', status: 'active' });
+  expect(await metadata.getMemoryIndex('demo', saved.id)).toMatchObject({ status: 'active', content_hash: expect.not.stringMatching(originalRecord!.content_hash) });
+  expect(await service.listRevisionsAsync('demo', saved.id)).toMatchObject([
+    { content_hash: originalRecord!.content_hash, operation_id: 'cloud-patch' },
+  ]);
+  expect(markdown.objects.get(originalRecord!.content_key)?.text).toContain('before body');
+
+  expect((await service.applyMutationAsync(request)).outcome).toBe('already_applied');
+  expect((await service.applyMutationAsync({ ...request, action: { ...request.action, patch: { body: 'different payload' } } })).outcome).toBe('conflict');
+
+  const updatedRecord = await metadata.getMemoryIndex('demo', saved.id);
+  const archived = await service.applyMutationAsync({
+    operation_id: 'cloud-archive', project_id: 'demo', expected_hashes: { [saved.id]: updatedRecord!.content_hash },
+    expected_settings_version: settings.version,
+    action: { type: 'archive', memory_id: saved.id, archive_reason: 'completed' },
+    reason_code: 'completed', now: '2026-10-12T00:01:00.000Z',
+  });
+  expect(archived.outcome).toBe('applied');
+  expect(await service.listByType('demo', 'reference')).toEqual([]);
+  expect(await service.searchFulltext('demo', 'after body')).toEqual([]);
+  await service.reindex('demo');
+  expect(await service.get('demo', saved.id)).toMatchObject({ status: 'archived' });
+  expect(await service.listByType('demo', 'reference')).toEqual([]);
+  const patchRevision = (await service.listRevisionsAsync('demo', saved.id)).find((revision) => revision.operation_id === 'cloud-patch')!;
+  const archivedRecord = await metadata.getMemoryIndex('demo', saved.id);
+  const restored = await service.applyMutationAsync({
+    operation_id: 'cloud-restore', project_id: 'demo', expected_hashes: { [saved.id]: archivedRecord!.content_hash },
+    action: { type: 'restore', memory_id: saved.id, revision_id: patchRevision.id },
+    reason_code: 'restored', now: '2026-10-12T00:02:00.000Z',
+  });
+  expect(restored.outcome).toBe('applied');
+  expect(await service.get('demo', saved.id)).toMatchObject({ status: 'active', body: 'before body' });
+  const revisionKeys = (await service.listRevisionsAsync('demo', saved.id)).map((revision) => revision.content_key);
+  await service.forget('demo', saved.id);
+  expect(await service.listRevisionsAsync('demo', saved.id)).toEqual([]);
+  expect(revisionKeys.every((key) => !markdown.objects.has(key))).toBe(true);
+  await expect(service.applyMutationAsync({
+    operation_id: 'cloud-restore-after-forget', project_id: 'demo', expected_hashes: {},
+    action: { type: 'restore', memory_id: saved.id, revision_id: patchRevision.id },
+    reason_code: 'restored', now: '2026-10-12T00:03:00.000Z',
+  })).rejects.toThrow(`memory not found: ${saved.id}`);
+});
+
+test('Cloud mutation のGCS/Firestore失敗ではcurrent pointerを変えず未参照objectをcleanupする', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const firestore = new FakeFirestore();
+  const metadata = new FirestoreMetadataStore(firestore);
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+  const saved = await service.save('demo', { name: 'failure-note', description: 'before', type: 'reference', body: 'before body' });
+  const original = await metadata.getMemoryIndex('demo', saved.id);
+  const settings = await service.maintenanceStore.saveSettings('demo', { ...DEFAULT_MAINTENANCE_SETTINGS, enabled: true }, 0);
+  const request = {
+    operation_id: 'failed-gcs-write', project_id: 'demo', expected_hashes: { [saved.id]: original!.content_hash },
+    expected_settings_version: settings.version,
+    action: { type: 'patch' as const, memory_id: saved.id, patch: { body: 'new body' } },
+    reason_code: 'confirmed' as const, now: '2026-10-12T00:00:00.000Z',
+  };
+
+  markdown.failAfterWrites = 0;
+  await expect(service.applyMutationAsync(request)).rejects.toThrow('write failed');
+  expect((await metadata.getMemoryIndex('demo', saved.id))?.content_hash).toBe(original!.content_hash);
+  expect(await service.listRevisionsAsync('demo', saved.id)).toEqual([]);
+
+  markdown.failAfterWrites = null;
+  firestore.failNextTransaction = true;
+  await expect(service.applyMutationAsync({ ...request, operation_id: 'failed-firestore-commit' })).rejects.toThrow('firestore transaction failed');
+  expect((await metadata.getMemoryIndex('demo', saved.id))?.content_hash).toBe(original!.content_hash);
+  expect(await service.listRevisionsAsync('demo', saved.id)).toEqual([]);
+  expect(markdown.objects.size).toBe(1);
+  expect(await service.get('demo', saved.id)).toMatchObject({ body: 'before body' });
+});
+
+test('Cloud cache transaction failure rebuilds from committed Firestore current pointers', async () => {
+  const delegate = openLocalDb(':memory:');
+  const index = new FailOnceTransactionIndex(delegate);
+  resources.push(delegate);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+  const saved = await service.save('demo', { name: 'cache-failure', description: 'before', type: 'reference', body: 'before body' });
+  const original = await metadata.getMemoryIndex('demo', saved.id);
+  const settings = await service.maintenanceStore.saveSettings('demo', { ...DEFAULT_MAINTENANCE_SETTINGS, enabled: true }, 0);
+  index.failNextTransaction = true;
+  const result = await service.applyMutationAsync({
+    operation_id: 'cache-commit-rebuild', project_id: 'demo', expected_hashes: { [saved.id]: original!.content_hash },
+    expected_settings_version: settings.version,
+    action: { type: 'patch', memory_id: saved.id, patch: { body: 'after body' } },
+    reason_code: 'confirmed', now: '2026-10-12T00:00:00.000Z',
+  });
+  expect(result.outcome).toBe('applied');
+  expect(await service.get('demo', saved.id)).toMatchObject({ body: 'after body' });
+  expect(await service.listRevisionsAsync('demo', saved.id)).toHaveLength(1);
 });
 
 test('GCS本文とFirestore metadataからsave/get/reindexを行いSQLite cacheを再構築できる', async () => {

@@ -21,7 +21,8 @@ export async function reconcileObjects(
 ): Promise<ReconcileObjectsResult> {
   const now = options.now ?? new Date();
   const graceMs = Math.max(0, options.graceMs ?? 24 * 60 * 60 * 1000);
-  const referenced = new Set((db.prepare('SELECT file_path FROM memories').all() as Array<{ file_path: string }>).map((row) => row.file_path));
+  const referenced = new Set((db.prepare(`SELECT file_path AS content_key FROM memories
+    UNION SELECT content_key FROM memory_revisions`).all() as Array<{ content_key: string }>).map((row) => row.content_key));
   const objects = await store.list(options.prefix);
   const orphaned = objects
     .filter((object) => object.key.endsWith('.md') && !referenced.has(object.key))

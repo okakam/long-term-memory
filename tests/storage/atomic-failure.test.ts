@@ -35,9 +35,14 @@ test('reconcileObjects は参照中を残し猶予期間を過ぎた孤立 objec
     migrate(db);
     db.prepare('INSERT INTO memories (id, project_id, name, type, description, file_path, content_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run('memory-1', 'project', 'memory', 'project', 'description', 'projects/project/memories/memory/hash.md', 'hash', 'created', 'updated');
+    db.prepare(`INSERT INTO memory_revisions
+      (project_id, memory_id, revision_id, content_key, content_hash, created_at, operation_id, reason_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('project', 'memory-1', 'revision-1', 'projects/project/memories/revisions/revision-1.md', 'revision-hash', 'created', 'operation-1', 'confirmed');
     const old = { key: 'projects/project/memories/memory/orphan-old.md', size: 1, updatedAt: new Date('2026-01-01T00:00:00Z') };
     const fresh = { key: 'projects/project/memories/memory/orphan-new.md', size: 1, updatedAt: new Date('2026-09-05T00:00:00Z') };
-    const store = createStore([old, fresh, { key: 'projects/project/memories/memory/hash.md', size: 1, updatedAt: old.updatedAt }]);
+    const revision = { key: 'projects/project/memories/revisions/revision-1.md', size: 1, updatedAt: old.updatedAt };
+    const store = createStore([old, fresh, revision, { key: 'projects/project/memories/memory/hash.md', size: 1, updatedAt: old.updatedAt }]);
     const result = await reconcileObjects(db, store, { prefix: 'projects/project/memories/', now: new Date('2026-09-06T00:00:00Z'), graceMs: 7 * 24 * 60 * 60 * 1000 });
     expect(result.orphaned.map((object) => object.key)).toEqual([old.key]);
     expect(store.removed).toEqual([old.key]);

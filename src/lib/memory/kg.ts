@@ -6,6 +6,7 @@ import { UnknownEntityError, type Entity, type Triple } from '@/lib/memory/types
 interface KgInput {
   entities: Entity[];
   triples: Triple[];
+  status?: 'active' | 'archived';
 }
 
 function entityId(db: Database.Database, projectId: string, name: string): string {
@@ -25,6 +26,11 @@ export function applyMemoryKg(db: Database.Database, projectId: string, memoryId
   db.prepare('DELETE FROM entity_edges WHERE asserted_by = ?').run(memoryId);
   db.prepare('DELETE FROM entity_aliases WHERE asserted_by = ?').run(memoryId);
   db.prepare('DELETE FROM memory_entities WHERE memory_id = ?').run(memoryId);
+
+  if (input.status === 'archived') {
+    pruneOrphanEntities(db, projectId);
+    return;
+  }
 
   const declaredNames = new Set(input.entities.map((entity) => entity.name));
   for (const [subject, , object] of input.triples) {
