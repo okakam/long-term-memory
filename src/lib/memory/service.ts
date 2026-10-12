@@ -231,6 +231,24 @@ export class MemoryService implements MaintenanceMemorySource {
     return { items, next_after: hasMore ? pageRows[pageRows.length - 1]!.id : null };
   }
 
+  async listArchivedMaintenanceMemories(projectId: string, after?: string, limit = 100): Promise<MaintenanceMemoryPage> {
+    const project = this.requireProject(projectId);
+    const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const rows = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path, content_hash,
+      status, last_reviewed_at, next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at
+      FROM memories WHERE project_id = ? AND status = 'archived' AND (? IS NULL OR id > ?)
+      ORDER BY id ASC LIMIT ?`).all(project, after ?? null, after ?? null, bounded + 1) as MemoryRow[];
+    const hasMore = rows.length > bounded;
+    const pageRows = rows.slice(0, bounded);
+    const items = pageRows.map((row) => {
+      const raw = readFileSync(row.file_path, 'utf8');
+      const memory = parseMemoryString(raw);
+      if (memory.status !== 'archived') throw new Error('maintenance memory status is inconsistent');
+      return { memory, content_hash: computeHash(raw) };
+    });
+    return { items, next_after: hasMore ? pageRows[pageRows.length - 1]!.id : null };
+  }
+
   async getMaintenanceMemory(projectId: string, memoryId: string) {
     const project = this.requireProject(projectId);
     const row = selectRow(this.db, project, memoryId);

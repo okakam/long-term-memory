@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useState } from 'react';
 
 import { MemberList, type ProjectMember, type ProjectRole } from './MemberList';
+import { MaintenancePanel } from './MaintenancePanel';
 
 export type AccessibleProject = {
   project_id: string;
@@ -149,6 +150,7 @@ export function ProjectManagementPanel({ initialProjects, currentUserId, selecte
         </form> : <p className="muted">memberはプロジェクトの閲覧・利用ができます。管理はownerのみ行えます。</p>}
         <MemberList members={members} currentUserId={currentUserId} canManage={canManage} pendingUserId={typeof pending === 'string' && pending !== 'project' && pending !== 'member' ? pending : null} onRoleChange={updateRole} onRemove={removeMember} />
       </section>
+      {canManage ? <MaintenancePanel key={selectedId} projectId={selectedId} /> : null}
     </>}
     {error ? <p className="error-message" role="alert">{error}</p> : null}
   </section>;

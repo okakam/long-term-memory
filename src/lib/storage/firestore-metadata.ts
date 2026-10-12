@@ -7,6 +7,7 @@ import { MemoryConflictError } from '@/lib/memory/types';
 import type { Entity, MemoryStatus, MemoryType, Triple } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId } from '@/lib/slug';
 import { DEFAULT_MAINTENANCE_SETTINGS, MISSING_LINK_GRACE_DAYS } from '@/lib/maintenance/policy';
+import { decodeMaintenanceEventCursor } from '@/lib/maintenance/cursor';
 import { MaintenanceSettingsSchema, type MaintenanceSettings } from '@/lib/maintenance/types';
 import type { LinkObservation, MaintenanceEvent, MemoryRevision, MutationCommitData, MutationResult } from '@/lib/maintenance/store';
 
@@ -448,13 +449,13 @@ export class FirestoreMetadataStore {
 
   async listMaintenanceEvents(projectId: string, after?: string, limit = 100): Promise<MaintenanceEvent[]> {
     const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const cursor = after ? decodeMaintenanceEventCursor(after) : null;
     const events = (await this.gateway.list(maintenanceEventsPath(projectId)))
       .filter((document) => document.exists)
       .map(maintenanceEventRecord)
-      .filter((event) => after === undefined || event.created_at > after)
-      .sort((left, right) => after === undefined
-        ? right.created_at.localeCompare(left.created_at) || right.operation_id.localeCompare(left.operation_id)
-        : left.created_at.localeCompare(right.created_at) || left.operation_id.localeCompare(right.operation_id));
+      .filter((event) => cursor === null || event.created_at < cursor.created_at
+        || (event.created_at === cursor.created_at && event.operation_id < cursor.operation_id))
+      .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.operation_id.localeCompare(left.operation_id));
     return events.slice(0, bounded);
   }
 

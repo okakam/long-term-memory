@@ -7,6 +7,7 @@ import { MemoryConflictError } from '@/lib/memory/types';
 import { atomicWriteText, computeHash } from '@/lib/markdown/file-io';
 import { assertProjectId, SHARED_PROJECT_ID } from '@/lib/slug';
 import { DEFAULT_MAINTENANCE_SETTINGS, MISSING_LINK_GRACE_DAYS } from '@/lib/maintenance/policy';
+import { decodeMaintenanceEventCursor } from '@/lib/maintenance/cursor';
 import { MaintenanceSettingsSchema, type MaintenanceSettings } from '@/lib/maintenance/types';
 import type {
   MaintenanceEvent,
@@ -93,10 +94,13 @@ export class LocalMaintenanceStore implements MaintenanceStore {
   async listEvents(projectId: string, after?: string, limit = 100): Promise<MaintenanceEvent[]> {
     const project = assertProjectId(projectId);
     const safeLimit = Math.min(500, Math.max(1, Math.floor(limit)));
-    const rows = (after
+    const cursor = after ? decodeMaintenanceEventCursor(after) : null;
+    const rows = (cursor
       ? this.db.prepare(`SELECT operation_id, project_id, memory_ids, revision_ids, action, reason_code, created_at
-          FROM maintenance_events WHERE project_id = ? AND created_at > ? ORDER BY created_at, operation_id LIMIT ?`)
-        .all(project, after, safeLimit)
+          FROM maintenance_events WHERE project_id = ? AND
+          (created_at < ? OR (created_at = ? AND operation_id < ?))
+          ORDER BY created_at DESC, operation_id DESC LIMIT ?`)
+        .all(project, cursor.created_at, cursor.created_at, cursor.operation_id, safeLimit)
       : this.db.prepare(`SELECT operation_id, project_id, memory_ids, revision_ids, action, reason_code, created_at
           FROM maintenance_events WHERE project_id = ? ORDER BY created_at DESC, operation_id DESC LIMIT ?`)
         .all(project, safeLimit)) as EventRow[];

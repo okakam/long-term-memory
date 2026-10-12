@@ -117,6 +117,7 @@ export interface MemoryMutationPort {
 export interface MaintenanceMemorySource extends MemoryMutationPort {
   readonly maintenanceStore: MaintenanceStore;
   listMaintenanceMemories(projectId: string, after?: string, limit?: number): Promise<MaintenanceMemoryPage>;
+  listArchivedMaintenanceMemories(projectId: string, after?: string, limit?: number): Promise<MaintenanceMemoryPage>;
   getMaintenanceMemory(projectId: string, memoryId: string): Promise<MaintenanceMemoryRecord | null>;
   maintenanceNameExists(projectId: string, name: string): Promise<boolean>;
 }

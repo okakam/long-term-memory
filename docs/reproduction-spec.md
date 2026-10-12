@@ -90,7 +90,8 @@ OAuth consentの`/oauth/authorize`では、transaction保存済みのredirect UR
 - `/.well-known/oauth-protected-resource/api/mcp`、`/.well-known/oauth-authorization-server`、`/oauth/register`、`/oauth/authorize`、`/oauth/token`、`/oauth/revoke`: Codex向けDCR/PKCE OAuth endpoint。metadataとOAuth endpointは`Cache-Control: no-store`を返す。
 - `/api/mcp`: queryなしのStreamable HTTP endpoint。`project_id` queryがあるrequestはHTTP 400で拒否する。`initialize`、`tools/list`、`list_projects`と`setup_client_environment`はproject scopeを取らず、それ以外の15 toolsはtop-level必須`project_id`を受ける。requestごとにOAuth access tokenまたはPATを検証し、projectを扱う15 toolsのinvocationごとにmembershipとtool別権限を再評価する。principal不在・無効はHTTP 401、認証済みtool callのmembership/role拒否はJSON-RPC tool error (`isError: true`) をHTTP 200で返す。失効済みgrantを拒否し、認証主体やproject stateをmodule globalへ保存しない。
 - `/api/auth/oauth-grants`: Firebase session本人のOAuth接続一覧と失効だけを許可し、token本文・hash・refresh familyは返さない。
-- `/dashboard`: Firebaseでログインした作成者がprojectを作成するとFirestore membershipの`owner`になる。ownerだけが登録済み許可ドメインのメールアドレスをmemberへ追加し、role変更・削除を行える。OAuth同意はmembershipを変更せず、MCP requestごとにmembershipを再評価する。
+- `/dashboard`: Firebaseでログインした作成者がprojectを作成するとFirestore membershipの`owner`になる。ownerだけが登録済み許可ドメインのメールアドレスをmemberへ追加し、role変更・削除を行える。OAuth同意はmembershipを変更せず、MCP requestごとにmembershipを再評価する。ownerは通常project単位で自動棚卸しを有効化し、memory type別review日数とsession archive日数を設定できる。設定はversion付きで保存し、更新競合はHTTP 409として再読み込みを促す。初期状態はdisabledとする。
+- Dashboardの`/api/projects/:id/maintenance/history`はowner向けにeventとarchive一覧をページングし、選択した記憶のrevision metadataと現在hashを返す。本文・source URL・内部GCS keyは返さない。`/api/projects/:id/maintenance/restore`はsame-originとowner membershipを再確認してからrevisionを復元し、hash競合時はHTTP 409を返す。`__shared__`の履歴GETはcurator UIDだけに許可し、shared restoreは許可しない。
 - Web UIは `/sign-in` と `/sign-up` をpublicにし、Firebase client SDKのemail/password・Google providerを使う。Firebase公開設定は `/api/auth/config` からno-storeで取得でき、client bundleへ秘密値を埋め込まない。共有scopeでは編集・削除を表示しない。
 
 MCP toolsは次の17個を維持する。
