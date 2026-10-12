@@ -4,6 +4,7 @@ import type { ToolContext } from './context';
 import { registerMetaTools } from './tools/meta';
 import { registerReadTools } from './tools/read';
 import { registerWriteTools } from './tools/write';
+import { registerMaintenanceTools } from './tools/maintenance';
 import { instrumentRegistrar } from '@/lib/telemetry/instrument';
 
 export type { ToolContext } from './context';
@@ -17,10 +18,14 @@ export function createMcpServer(ctx: ToolContext): McpServer {
       return typeof projectId === 'string' ? projectId : '__global__';
     },
     sessionId: ctx.sessionId,
-    maintenance: ctx.canWriteShared,
+    maintenance: ctx.canWriteShared || Boolean(ctx.automationCredential),
   });
-  registerWriteTools(server, ctx);
-  registerReadTools(server, ctx);
-  registerMetaTools(server, ctx);
+  if (ctx.automationCredential) {
+    registerMaintenanceTools(server, ctx);
+  } else {
+    registerWriteTools(server, ctx);
+    registerReadTools(server, ctx);
+    registerMetaTools(server, ctx);
+  }
   return server;
 }

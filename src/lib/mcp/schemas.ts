@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { assertProjectId, isValidSlug } from '@/lib/slug';
 import { MEMORY_TYPES } from '@/lib/memory/types';
+import { MaintenanceProposalSchema } from '@/lib/maintenance/proposal';
 
 export const ProjectId = z.string()
   .refine((value) => {
@@ -151,6 +152,16 @@ export const SetupClientEnvironmentInput = z.object({
 }).strict();
 
 export const ReindexInput = z.object(ProjectScopedInput).strict();
+
+export const MaintenanceListProjectsInput = z.object({}).strict();
+export const MaintenanceSnapshotInput = z.object({
+  project_id: ProjectId,
+  after: z.string().max(1024).optional(),
+}).strict();
+export const MaintenanceApplyInput = z.object({
+  project_id: ProjectId,
+  proposal: MaintenanceProposalSchema,
+}).strict();
 
 export type RememberUserFactArgs = z.infer<typeof RememberUserFactInput>;
 export type RememberFeedbackArgs = z.infer<typeof RememberFeedbackInput>;

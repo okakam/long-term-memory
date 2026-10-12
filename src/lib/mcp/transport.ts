@@ -2,6 +2,7 @@ import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 import { getMemoryService } from '@/lib/memory/singleton';
 import { authRequired } from '@/lib/auth/config';
+import { requireAutomationCredential, type AutomationCredential } from '@/lib/maintenance/auth';
 import { getOAuthConfiguration } from '@/lib/oauth/config';
 import { oauthInsufficientScopeResponse, oauthUnauthorizedResponse } from '@/lib/oauth/http';
 import { OAuthProtocolError } from '@/lib/oauth/service';
@@ -88,8 +89,16 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
   }
 
   const maintenanceToken = extractMaintenanceToken(req);
+  const operationMode = req.headers.get('x-ltm-operation-mode');
+  let automationCredential: AutomationCredential | undefined;
   let principal: McpPrincipal | undefined;
-  if (authRequired()) {
+  if (operationMode === 'maintenance') {
+    try {
+      automationCredential = await requireAutomationCredential(req);
+    } catch {
+      return new Response('authentication required', { status: 401 });
+    }
+  } else if (authRequired()) {
     try {
       principal = await requireMcpPrincipal(req);
     } catch (error) {
@@ -97,14 +106,16 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
     }
   }
   const canWriteShared = grantsSharedWrite(maintenanceToken)
+    && !automationCredential
     && (!authRequired()
       || (principal?.credentialKind === 'pat' && principal.userId === process.env.LTM_CURATOR_USER_ID));
   const ctx: ToolContext = {
     svc: options.service ?? getMemoryService(),
     canWriteShared,
     principal,
+    automationCredential,
     maintenanceToken,
-    requireProjectAccess: createProjectAccessGuard({ principal, maintenanceToken }),
+    requireProjectAccess: createProjectAccessGuard({ principal, automationCredential, maintenanceToken }),
   };
   const mode = options.mode ?? defaultMode();
   const timeoutMs = options.timeoutMs ?? 30_000;

@@ -175,6 +175,7 @@ const sessions = new Map<string, CachedSession>();
 function sessionKey(ctx: ToolContext): string {
   return JSON.stringify({
     sharedWrite: ctx.canWriteShared === true,
+    automation: ctx.automationCredential?.kind ?? null,
     principal: ctx.principal
       ? [ctx.principal.userId, ctx.principal.credentialId ?? null, ctx.principal.credentialKind ?? null]
       : null,
