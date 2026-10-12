@@ -88,6 +88,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     days={days}
     selectedProjectId={requestedProject}
     currentUserId={principal.userId}
+    canManageShared={Boolean(process.env.LTM_CURATOR_USER_ID && principal.userId === process.env.LTM_CURATOR_USER_ID)}
     accessibleProjects={accessibleProjects}
     windowLabel={displayIso(window.start.toISOString()) + ' — ' + displayIso(window.end.toISOString())}
     summary={summary}

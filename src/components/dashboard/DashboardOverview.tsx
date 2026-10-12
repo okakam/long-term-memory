@@ -15,6 +15,7 @@ interface DashboardOverviewProps {
   days: number;
   selectedProjectId?: string;
   currentUserId: string;
+  canManageShared: boolean;
   accessibleProjects: AccessibleProject[];
   windowLabel: string;
   summary: TelemetrySummary;
@@ -33,7 +34,7 @@ interface DashboardOverviewProps {
 }
 
 export function DashboardOverview({
-  days, selectedProjectId, currentUserId, accessibleProjects, windowLabel, summary, previous,
+  days, selectedProjectId, currentUserId, canManageShared, accessibleProjects, windowLabel, summary, previous,
   series, tools, projects, errors, curator, projectFacts, sessionSummaries, maxDailyCalls,
   displayDay, displayIso, queryLink,
 }: DashboardOverviewProps) {
@@ -65,6 +66,7 @@ export function DashboardOverview({
         initialProjects={accessibleProjects}
         currentUserId={currentUserId}
         selectedProjectId={selectedProjectId}
+        canManageShared={canManageShared}
       />
 
       <section className="analytics-panel" aria-labelledby="summary-heading">

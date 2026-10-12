@@ -6,6 +6,7 @@ import { ulid } from 'ulid';
 import { openDb } from '@/lib/db/connection';
 import { atomicWriteText, computeHash, readMemoryFile } from '@/lib/markdown/file-io';
 import { parseMemoryString, serializeMemory } from '@/lib/markdown/frontmatter';
+import { sourcesFromBody } from '@/lib/markdown/frontmatter';
 import { applyMemoryKg, removeMemoryKg } from '@/lib/memory/kg';
 import { withProjectLock } from '@/lib/lock/project-lock';
 import { rankMemoriesByPpr } from '@/lib/graph/assoc';
@@ -23,6 +24,13 @@ import {
 } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId, SHARED_PROJECT_ID } from '@/lib/slug';
 import { reconcile, reindex } from '@/lib/memory/reconcile';
+import { DEFAULT_MAINTENANCE_SETTINGS, reviewSchedule } from '@/lib/maintenance/policy';
+import { LocalMaintenanceStore } from '@/lib/maintenance/local-store';
+import { LocalCurationStore } from '@/lib/curation/local-store';
+import type { CurationStore } from '@/lib/curation/store';
+import { mutationMemoryIds, mutationPayloadHash, prepareMutation } from '@/lib/maintenance/mutations';
+import type { MaintenanceMemoryPage, MaintenanceMemorySource, MaintenanceStore, MutationCommitData, MutationRequest, MutationResult } from '@/lib/maintenance/store';
+import type { CurationMemoryCursor, CurationSourcePage, CurationWindow } from '@/lib/curation/types';
 import type { Storage } from '@/lib/paths';
 import { resolveStorage } from '@/lib/paths';
 
@@ -35,6 +43,12 @@ interface MemoryRow {
   body_chars: number;
   file_path: string;
   content_hash: string;
+  status?: Memory['status'];
+  last_reviewed_at?: string;
+  next_review_at?: string;
+  archived_at?: string;
+  archive_reason?: string;
+  archived_by?: string;
   created_at: string;
   updated_at: string;
 }
@@ -85,12 +99,18 @@ function insertFts(db: Database.Database, memory: Memory): void {
 
 function selectRow(db: Database.Database, projectId: string, idOrName: string): MemoryRow | undefined {
   return db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path,
-    content_hash, created_at, updated_at FROM memories
+    content_hash, status, created_at, updated_at FROM memories
     WHERE project_id = ? AND (id = ? OR name = ?) LIMIT 1`).get(projectId, idOrName, idOrName) as MemoryRow | undefined;
 }
 
-export class MemoryService {
-  private constructor(private readonly db: Database.Database, private readonly storage: Storage) {}
+export class MemoryService implements MaintenanceMemorySource {
+  readonly maintenanceStore: MaintenanceStore;
+  readonly curationStore: CurationStore;
+
+  private constructor(private readonly db: Database.Database, private readonly storage: Storage) {
+    this.maintenanceStore = new LocalMaintenanceStore(db, storage);
+    this.curationStore = new LocalCurationStore(db);
+  }
 
   static open(db: Database.Database, storage = resolveStorage()): MemoryService {
     return new MemoryService(db, storage);
@@ -147,7 +167,8 @@ export class MemoryService {
     const name = this.requireName(input.name);
     if (selectRow(this.db, project, name)) throw new MemoryConflictError(name);
     const timestamp = nowIso();
-    const memory = {
+    const urls = sourcesFromBody(input.body, timestamp);
+    const memory = MemorySchema.parse({
       id: ulid(),
       name,
       description: input.description,
@@ -157,24 +178,30 @@ export class MemoryService {
       entities: input.entities ?? [],
       triples: input.triples ?? [],
       source_refs: input.source_refs,
+      sources: urls.length > 0 ? urls : [{ kind: 'conversation', captured_at: timestamp }],
       supersedes: input.supersedes ?? [],
       body: input.body,
       created_at: timestamp,
       updated_at: timestamp,
-    } as Memory;
+      ...reviewSchedule(input.type, timestamp, DEFAULT_MAINTENANCE_SETTINGS),
+      status: 'active',
+    });
     const text = serializeMemory(memory);
     const filePath = this.storage.memoryFile(project, name);
     atomicWriteText(filePath, text);
     try {
       const insert = this.db.transaction(() => {
         this.db.prepare(`INSERT INTO memories
-          (id, project_id, name, type, description, body_chars, file_path, content_hash, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          (id, project_id, name, type, description, body_chars, file_path, content_hash, status,
+            last_reviewed_at, next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .run(memory.id, project, memory.name, memory.type, memory.description, bodyChars(memory.body),
-            filePath, computeHash(text), memory.created_at, memory.updated_at);
+            filePath, computeHash(text), memory.status ?? 'active', memory.last_reviewed_at ?? null,
+            memory.next_review_at ?? null, memory.archived_at ?? null, memory.archive_reason ?? null,
+            memory.archived_by ?? null, memory.created_at, memory.updated_at);
         insertCollections(this.db, memory);
         insertFts(this.db, memory);
-        applyMemoryKg(this.db, project, memory.id, { entities: memory.entities, triples: memory.triples });
+        applyMemoryKg(this.db, project, memory.id, { entities: memory.entities, triples: memory.triples, status: memory.status });
       });
       insert();
       return memory;
@@ -191,10 +218,93 @@ export class MemoryService {
     return this.hydrate(row);
   }
 
+  async listMaintenanceMemories(projectId: string, after?: string, limit = 100): Promise<MaintenanceMemoryPage> {
+    const project = this.requireProject(projectId);
+    const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const rows = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path, content_hash,
+      status, last_reviewed_at, next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at
+      FROM memories WHERE project_id = ? AND status = 'active' AND (? IS NULL OR id > ?)
+      ORDER BY id ASC LIMIT ?`).all(project, after ?? null, after ?? null, bounded + 1) as MemoryRow[];
+    const hasMore = rows.length > bounded;
+    const pageRows = rows.slice(0, bounded);
+    const items = pageRows.map((row) => {
+      const raw = readFileSync(row.file_path, 'utf8');
+      const memory = parseMemoryString(raw);
+      if ((memory.status ?? 'active') !== 'active') throw new Error('maintenance memory status is inconsistent');
+      return { memory, content_hash: computeHash(raw) };
+    });
+    return { items, next_after: hasMore ? pageRows[pageRows.length - 1]!.id : null };
+  }
+
+  async listCurationMemories(
+    projectId: string,
+    window: Pick<CurationWindow, 'from' | 'to'>,
+    after: CurationMemoryCursor | null,
+    limit = 25,
+  ): Promise<CurationSourcePage> {
+    const project = this.requireProject(projectId);
+    const bounded = Math.min(25, Math.max(1, Math.floor(limit)));
+    const rows = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path, content_hash,
+      status, last_reviewed_at, next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at
+      FROM memories WHERE project_id = ? AND created_at < ? AND (? IS NULL OR created_at >= ?)
+        AND (? IS NULL OR created_at > ? OR (created_at = ? AND id > ?))
+      ORDER BY created_at ASC, id ASC LIMIT ?`)
+      .all(project, window.to, window.from, window.from, after?.created_at ?? null,
+        after?.created_at ?? null, after?.created_at ?? null, after?.id ?? null, bounded + 1) as MemoryRow[];
+    const hasMore = rows.length > bounded;
+    const pageRows = rows.slice(0, bounded);
+    const items = pageRows.filter((row) => (row.status ?? 'active') === 'active').map((row) => {
+      const raw = readFileSync(row.file_path, 'utf8');
+      const memory = parseMemoryString(raw);
+      if ((memory.status ?? 'active') !== 'active' || memory.created_at !== row.created_at) {
+        throw new Error('curation memory snapshot is inconsistent');
+      }
+      return { memory, content_hash: computeHash(raw) };
+    });
+    const last = pageRows.at(-1);
+    return {
+      items,
+      next_after: hasMore && last ? { created_at: last.created_at, id: last.id } : null,
+    };
+  }
+
+  async listArchivedMaintenanceMemories(projectId: string, after?: string, limit = 100): Promise<MaintenanceMemoryPage> {
+    const project = this.requireProject(projectId);
+    const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const rows = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path, content_hash,
+      status, last_reviewed_at, next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at
+      FROM memories WHERE project_id = ? AND status = 'archived' AND (? IS NULL OR id > ?)
+      ORDER BY id ASC LIMIT ?`).all(project, after ?? null, after ?? null, bounded + 1) as MemoryRow[];
+    const hasMore = rows.length > bounded;
+    const pageRows = rows.slice(0, bounded);
+    const items = pageRows.map((row) => {
+      const raw = readFileSync(row.file_path, 'utf8');
+      const memory = parseMemoryString(raw);
+      if (memory.status !== 'archived') throw new Error('maintenance memory status is inconsistent');
+      return { memory, content_hash: computeHash(raw) };
+    });
+    return { items, next_after: hasMore ? pageRows[pageRows.length - 1]!.id : null };
+  }
+
+  async getMaintenanceMemory(projectId: string, memoryId: string) {
+    const project = this.requireProject(projectId);
+    const row = selectRow(this.db, project, memoryId);
+    if (!row) return null;
+    const raw = readFileSync(row.file_path, 'utf8');
+    const memory = parseMemoryString(raw);
+    if ((row.status ?? 'active') !== (memory.status ?? 'active')) throw new Error('maintenance memory status is inconsistent');
+    return { memory, content_hash: computeHash(raw) };
+  }
+
+  async maintenanceNameExists(projectId: string, name: string): Promise<boolean> {
+    const project = this.requireProject(projectId);
+    return Boolean(this.db.prepare('SELECT 1 FROM memories WHERE project_id = ? AND name = ? LIMIT 1').get(project, name));
+  }
+
   listByType(projectId: string, type: Memory['type'], limit = 100): Memory[] {
     const project = this.requireProject(projectId);
     const rows = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path,
-      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND type = ?
+      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND type = ? AND status = 'active'
       ORDER BY updated_at DESC, name ASC LIMIT ?`).all(project, type, safeLimit(limit, 100)) as MemoryRow[];
     return rows.map((row) => this.hydrate(row));
   }
@@ -203,7 +313,7 @@ export class MemoryService {
     const project = this.requireProject(projectId);
     const params: Array<string | number> = [project];
     let sql = `SELECT id, project_id, name, type, description, body_chars, file_path,
-      content_hash, created_at, updated_at FROM memories WHERE project_id = ?`;
+      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND status = 'active'`;
     if (options.type) { sql += ' AND type = ?'; params.push(options.type); }
     sql += ' ORDER BY updated_at DESC, name ASC LIMIT ?';
     params.push(safeLimit(options.limit, 100));
@@ -219,7 +329,7 @@ export class MemoryService {
     const rows = this.db.prepare(`SELECT m.id, m.project_id, m.name, m.type, m.description, m.body_chars,
       m.file_path, m.content_hash, m.created_at, m.updated_at FROM memories m
       JOIN tags t ON t.memory_id = m.id
-      WHERE m.project_id = ? AND t.tag IN (${placeholders})
+      WHERE m.project_id = ? AND m.status = 'active' AND t.tag IN (${placeholders})
       GROUP BY m.id${having} ORDER BY m.updated_at DESC, m.name ASC`)
       .all(project, ...uniqueTags) as MemoryRow[];
     return rows.map((row) => this.hydrate(row));
@@ -234,7 +344,7 @@ export class MemoryService {
     const rows = this.db.prepare(`SELECT m.id, m.project_id, m.name, m.type, m.description, m.body_chars,
       m.file_path, m.content_hash, m.created_at, m.updated_at FROM memories m
       JOIN tags t ON t.memory_id = m.id
-      WHERE m.project_id = ? AND t.tag IN (${placeholders})
+      WHERE m.project_id = ? AND m.status = 'active' AND t.tag IN (${placeholders})
       GROUP BY m.id${having} ORDER BY m.updated_at DESC, m.name ASC`)
       .all(project, ...uniqueTags) as MemoryRow[];
     return this.summaries(rows);
@@ -247,6 +357,11 @@ export class MemoryService {
     const filePath = row.file_path;
     const oldText = readFileSync(filePath, 'utf8');
     const current = parseMemoryString(oldText);
+    const timestamp = nowIso();
+    const contentChanged = (patch.body !== undefined && patch.body !== current.body)
+      || (patch.description !== undefined && patch.description !== current.description);
+    const review = contentChanged ? reviewSchedule(current.type, timestamp, DEFAULT_MAINTENANCE_SETTINGS) : null;
+    const body = patch.body ?? current.body;
     const entities = patch.entities ?? current.entities;
     if (['user', 'feedback', 'project'].includes(current.type)
       && current.entities.length > 0 && entities.length === 0) {
@@ -262,23 +377,36 @@ export class MemoryService {
       triples: patch.triples ?? current.triples,
       source_refs: patch.source_refs ?? current.source_refs,
       supersedes: patch.supersedes ?? current.supersedes,
-      updated_at: nowIso(),
+      sources: patch.body !== undefined && patch.body !== current.body
+        ? (sourcesFromBody(body, timestamp).length > 0
+          ? sourcesFromBody(body, timestamp)
+          : [{ kind: 'conversation', captured_at: timestamp }])
+        : current.sources,
+      last_reviewed_at: review?.last_reviewed_at ?? current.last_reviewed_at,
+      next_review_at: review?.next_review_at ?? current.next_review_at,
+      status: current.status ?? 'active',
+      updated_at: timestamp,
     });
     const text = serializeMemory(updated);
     atomicWriteText(filePath, text);
     try {
       const tx = this.db.transaction(() => {
         const fts = this.db.prepare('SELECT rowid FROM memories WHERE id = ?').get(updated.id) as { rowid: number };
-        this.db.prepare(`UPDATE memories SET description = ?, body_chars = ?, content_hash = ?, updated_at = ?
-          WHERE id = ?`).run(updated.description, bodyChars(updated.body), computeHash(text), updated.updated_at, updated.id);
+        this.db.prepare(`UPDATE memories SET description = ?, body_chars = ?, content_hash = ?, status = ?,
+          last_reviewed_at = ?, next_review_at = ?, archived_at = ?, archive_reason = ?, archived_by = ?, updated_at = ?
+          WHERE id = ?`).run(updated.description, bodyChars(updated.body), computeHash(text), updated.status ?? 'active',
+          updated.last_reviewed_at ?? null, updated.next_review_at ?? null, updated.archived_at ?? null,
+          updated.archive_reason ?? null, updated.archived_by ?? null, updated.updated_at, updated.id);
         this.db.prepare('DELETE FROM tags WHERE memory_id = ?').run(updated.id);
         this.db.prepare('DELETE FROM links WHERE src_id = ?').run(updated.id);
         this.db.prepare('DELETE FROM supersedes WHERE src_id = ?').run(updated.id);
         this.db.prepare('DELETE FROM memories_fts WHERE rowid = ?').run(fts.rowid);
         removeMemoryKg(this.db, project, updated.id);
-        insertCollections(this.db, updated);
-        insertFts(this.db, updated);
-        applyMemoryKg(this.db, project, updated.id, { entities: updated.entities, triples: updated.triples });
+        if ((updated.status ?? 'active') === 'active') {
+          insertCollections(this.db, updated);
+          insertFts(this.db, updated);
+        }
+        applyMemoryKg(this.db, project, updated.id, { entities: updated.entities, triples: updated.triples, status: updated.status });
       });
       tx();
       return updated;
@@ -293,6 +421,8 @@ export class MemoryService {
     const project = this.requireProject(projectId);
     const row = selectRow(this.db, project, idOrName);
     if (!row) throw new MemoryNotFoundError(idOrName);
+    const revisionKeys = this.db.prepare('SELECT content_key FROM memory_revisions WHERE project_id = ? AND memory_id = ?')
+      .all(project, row.id).map((item) => (item as { content_key: string }).content_key);
     if (existsSync(row.file_path)) unlinkSync(row.file_path);
     const tx = this.db.transaction(() => {
       const fts = this.db.prepare('SELECT rowid FROM memories WHERE id = ?').get(row.id) as { rowid: number } | undefined;
@@ -301,9 +431,11 @@ export class MemoryService {
       this.db.prepare('DELETE FROM tags WHERE memory_id = ?').run(row.id);
       this.db.prepare('DELETE FROM links WHERE src_id = ?').run(row.id);
       this.db.prepare('DELETE FROM supersedes WHERE src_id = ?').run(row.id);
+      this.db.prepare('DELETE FROM memory_revisions WHERE project_id = ? AND memory_id = ?').run(project, row.id);
       this.db.prepare('DELETE FROM memories WHERE id = ?').run(row.id);
     });
     tx();
+    for (const key of revisionKeys) if (existsSync(key)) unlinkSync(key);
   }
 
   linkMemories(projectId: string, src: string, dstName: string): Memory {
@@ -316,7 +448,9 @@ export class MemoryService {
 
   findRelated(projectId: string, idOrName: string, depth = 1): { nodes: Memory[]; truncated: boolean } {
     const project = this.requireProject(projectId);
-    const start = selectRow(this.db, project, idOrName);
+    const start = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path,
+      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND status = 'active'
+      AND (id = ? OR name = ?) LIMIT 1`).get(project, idOrName, idOrName) as MemoryRow | undefined;
     if (!start) throw new MemoryNotFoundError(idOrName);
     const requestedDepth = Number.isFinite(depth) ? Math.floor(depth) : 1;
     const cappedDepth = Math.min(Math.max(requestedDepth, 1), 3);
@@ -328,7 +462,7 @@ export class MemoryService {
       if (current.depth >= cappedDepth) continue;
       const links = this.db.prepare(`SELECT m.id, m.project_id, m.name, m.type, m.description, m.body_chars,
         m.file_path, m.content_hash, m.created_at, m.updated_at FROM links l JOIN memories m
-        ON m.project_id = ? AND m.name = l.dst_name WHERE l.src_id = ?
+        ON m.project_id = ? AND m.name = l.dst_name WHERE l.src_id = ? AND m.status = 'active'
         ORDER BY m.updated_at DESC, m.name ASC`).all(project, current.row.id) as MemoryRow[];
       for (const row of links) {
         if (rows.has(row.id)) continue;
@@ -410,7 +544,7 @@ export class MemoryService {
 
   private filteredMemoryRows(projectId: string, options: SearchOptions = {}): MemoryRow[] {
     const params: Array<string | number> = [projectId];
-    let where = 'm.project_id = ?';
+    let where = "m.project_id = ? AND m.status = 'active'";
     if (options.type) { where += ' AND m.type = ?'; params.push(options.type); }
     const tags = uniqueStrings(options.tags);
     if (tags.length > 0) {
@@ -427,7 +561,7 @@ export class MemoryService {
     const tokens = ftsTokens(query);
     if (tokens.length === 0) return [];
     const params: Array<string | number> = [projectId];
-    let filter = 'm.project_id = ?';
+    let filter = "m.project_id = ? AND m.status = 'active'";
     if (options.type) { filter += ' AND m.type = ?'; params.push(options.type); }
     const tags = uniqueStrings(options.tags);
     if (tags.length > 0) {
@@ -500,7 +634,7 @@ export class MemoryService {
     const rows = this.db.prepare(`SELECT s.dst_name AS dst, src.name AS src FROM supersedes s
       JOIN memories src ON src.id = s.src_id
       JOIN memories dst_memory ON dst_memory.project_id = src.project_id AND dst_memory.name = s.dst_name
-      WHERE src.project_id = ? AND s.dst_name != src.name
+      WHERE src.project_id = ? AND src.status = 'active' AND dst_memory.status = 'active' AND s.dst_name != src.name
       ORDER BY src.updated_at ASC, src.name ASC`).all(project) as Array<{ dst: string; src: string }>;
     return new Map(rows.map((row) => [row.dst, row.src]));
   }
@@ -508,25 +642,29 @@ export class MemoryService {
   readKgGraph(projectId: string) {
     const project = this.requireProject(projectId);
     const memoryRows = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path,
-      content_hash, created_at, updated_at FROM memories WHERE project_id = ? ORDER BY name`).all(project) as MemoryRow[];
+      content_hash, created_at, updated_at FROM memories WHERE project_id = ? AND status = 'active' ORDER BY name`).all(project) as MemoryRow[];
     const memories = this.summaries(memoryRows).map(({ id, name, type, description, tags }) => ({
       id, name, type, description, tags,
     }));
     const entities = this.db.prepare('SELECT id, name FROM entities WHERE project_id = ? ORDER BY name').all(project) as Array<{ id: string; name: string }>;
     const memberships = this.db.prepare(`SELECT me.memory_id AS memoryId, me.entity_id AS entityId FROM memory_entities me
-      JOIN memories m ON m.id = me.memory_id WHERE m.project_id = ?`).all(project) as Array<{ memoryId: string; entityId: string }>;
+      JOIN memories m ON m.id = me.memory_id WHERE m.project_id = ? AND m.status = 'active'`).all(project) as Array<{ memoryId: string; entityId: string }>;
     const edges = this.db.prepare(`SELECT ee.src_entity_id AS srcEntityId, ee.dst_entity_id AS dstEntityId, ee.relation
-      FROM entity_edges ee JOIN entities src ON src.id = ee.src_entity_id WHERE src.project_id = ?`).all(project) as Array<{ srcEntityId: string; dstEntityId: string; relation: string }>;
+      FROM entity_edges ee JOIN entities src ON src.id = ee.src_entity_id JOIN memories asserted ON asserted.id = ee.asserted_by
+      WHERE src.project_id = ? AND asserted.status = 'active'`).all(project) as Array<{ srcEntityId: string; dstEntityId: string; relation: string }>;
     const links = this.db.prepare(`SELECT l.src_id AS srcMemoryId, l.dst_name AS dstName FROM links l
-      JOIN memories m ON m.id = l.src_id WHERE m.project_id = ?`).all(project) as Array<{ srcMemoryId: string; dstName: string }>;
+      JOIN memories m ON m.id = l.src_id WHERE m.project_id = ? AND m.status = 'active'`).all(project) as Array<{ srcMemoryId: string; dstName: string }>;
     return { memories, entities, memberships, edges, links };
   }
 
   kgStats(projectId: string): { entities: number; edges: number; memberships: number } {
     const project = this.requireProject(projectId);
-    const entities = this.db.prepare('SELECT COUNT(*) AS count FROM entities WHERE project_id = ?').get(project) as { count: number };
-    const memberships = this.db.prepare(`SELECT COUNT(*) AS count FROM memory_entities me JOIN memories m ON m.id = me.memory_id WHERE m.project_id = ?`).get(project) as { count: number };
-    const edges = this.db.prepare(`SELECT COUNT(*) AS count FROM entity_edges ee JOIN entities e ON e.id = ee.src_entity_id WHERE e.project_id = ?`).get(project) as { count: number };
+    const entities = this.db.prepare(`SELECT COUNT(*) AS count FROM entities e WHERE e.project_id = ? AND EXISTS
+      (SELECT 1 FROM memory_entities me JOIN memories m ON m.id = me.memory_id WHERE me.entity_id = e.id AND m.status = 'active')`).get(project) as { count: number };
+    const memberships = this.db.prepare(`SELECT COUNT(*) AS count FROM memory_entities me JOIN memories m ON m.id = me.memory_id
+      WHERE m.project_id = ? AND m.status = 'active'`).get(project) as { count: number };
+    const edges = this.db.prepare(`SELECT COUNT(*) AS count FROM entity_edges ee JOIN entities e ON e.id = ee.src_entity_id
+      JOIN memories asserted ON asserted.id = ee.asserted_by WHERE e.project_id = ? AND asserted.status = 'active'`).get(project) as { count: number };
     return { entities: entities.count, edges: edges.count, memberships: memberships.count };
   }
 
@@ -536,6 +674,169 @@ export class MemoryService {
 
   reindex(projectId?: string): void {
     reindex(this.db, this.storage, projectId === undefined ? undefined : this.requireProject(projectId));
+  }
+
+  async applyMutationAsync(request: MutationRequest): Promise<MutationResult> {
+    const project = this.requireProject(request.project_id);
+    return withProjectLock(project, () => this.applyMutationUnlocked({ ...request, project_id: project }));
+  }
+
+  private async applyMutationUnlocked(request: MutationRequest): Promise<MutationResult> {
+    const project = request.project_id;
+    const payloadHash = mutationPayloadHash(request);
+    const previousOperation = await this.maintenanceStore.checkOperation(project, request.operation_id, payloadHash);
+    if (previousOperation) return previousOperation;
+
+    const ids = mutationMemoryIds(request.action);
+    const current = new Map<string, Memory>();
+    const rows = new Map<string, MemoryRow>();
+    const oldTexts = new Map<string, string>();
+    for (const id of ids) {
+      const row = selectRow(this.db, project, id);
+      if (!row) {
+        if (request.action.type === 'restore') throw new MemoryNotFoundError(id);
+        return this.mutationConflict(request.operation_id);
+      }
+      const raw = readFileSync(row.file_path, 'utf8');
+      const hash = computeHash(raw);
+      if (request.expected_hashes[id] !== hash || row.content_hash !== hash) return this.mutationConflict(request.operation_id);
+      current.set(id, parseMemoryString(raw));
+      rows.set(id, row);
+      oldTexts.set(id, raw);
+    }
+    if (Object.keys(request.expected_hashes).length !== ids.length) return this.mutationConflict(request.operation_id);
+    for (const id of ids) if (!Object.hasOwn(request.expected_hashes, id)) return this.mutationConflict(request.operation_id);
+
+    let restoredMemory: Memory | undefined;
+    if (request.action.type === 'restore') {
+      const restored = await this.maintenanceStore.readRevision(project, request.action.memory_id, request.action.revision_id);
+      if (!restored) throw new MemoryNotFoundError(request.action.revision_id);
+      restoredMemory = parseMemoryString(restored.body);
+    }
+    if (request.action.type === 'create') {
+      const existing = selectRow(this.db, project, request.action.input.name);
+      const path = this.storage.memoryFile(project, this.requireName(request.action.input.name));
+      if (existing || existsSync(path)) return this.mutationConflict(request.operation_id);
+    }
+
+    const settings = await this.maintenanceStore.getSettings(project);
+    if (request.expected_settings_version !== undefined
+      && (settings.version !== request.expected_settings_version || !settings.enabled)) return this.mutationConflict(request.operation_id);
+    if (project !== SHARED_PROJECT_ID && request.action.type !== 'restore' && request.expected_settings_version === undefined) {
+      return this.mutationConflict(request.operation_id);
+    }
+    const afterMemories = prepareMutation(request, current, settings, restoredMemory);
+    const snapshots: MutationCommitData['after'] = [];
+    const revisions: MutationCommitData['revisions'] = [];
+    const writtenCurrent = new Map<string, { path: string; previous?: string }>();
+    const writtenRevisions: string[] = [];
+    try {
+      for (const memory of afterMemories) {
+        const oldRow = rows.get(memory.id);
+        const filePath = oldRow?.file_path ?? this.storage.memoryFile(project, this.requireName(memory.name));
+        const raw = serializeMemory(memory);
+        const contentHash = computeHash(raw);
+        if (oldRow) {
+          const revisionId = ulid();
+          const revisionKey = await this.maintenanceStore.writeRevisionBody(project, memory.id, revisionId, oldTexts.get(memory.id)!);
+          writtenRevisions.push(revisionKey);
+          revisions.push({
+            id: revisionId,
+            memory_id: memory.id,
+            content_key: revisionKey,
+            content_hash: computeHash(oldTexts.get(memory.id)!),
+            created_at: request.now,
+            operation_id: request.operation_id,
+            reason_code: request.reason_code,
+          });
+        }
+        writtenCurrent.set(memory.id, { path: filePath, previous: oldRow ? oldTexts.get(memory.id) : undefined });
+        atomicWriteText(filePath, raw);
+        snapshots.push({ memory, content_key: filePath, content_hash: contentHash });
+      }
+      const result: MutationResult = {
+        operation_id: request.operation_id,
+        outcome: 'applied',
+        memory_ids: afterMemories.map((memory) => memory.id),
+        revision_ids: revisions.map((revision) => revision.id),
+      };
+      const data: MutationCommitData = {
+        request,
+        payload_hash: payloadHash,
+        before_hashes: request.expected_hashes,
+        after: snapshots,
+        revisions,
+        event: {
+          operation_id: request.operation_id,
+          project_id: project,
+          memory_ids: result.memory_ids,
+          revision_ids: result.revision_ids,
+          action: request.action.type,
+          reason_code: request.reason_code,
+          created_at: request.now,
+        },
+        result,
+      };
+      const committed = await this.maintenanceStore.commitMutation(data, () => {
+        for (const snapshot of snapshots) {
+          const row = rows.get(snapshot.memory.id);
+          const memory = snapshot.memory;
+          if (row) {
+            const fts = this.db.prepare('SELECT rowid FROM memories WHERE id = ?').get(memory.id) as { rowid: number } | undefined;
+            this.db.prepare(`UPDATE memories SET project_id = ?, name = ?, type = ?, description = ?, body_chars = ?,
+              file_path = ?, content_hash = ?, status = ?, last_reviewed_at = ?, next_review_at = ?, archived_at = ?,
+              archive_reason = ?, archived_by = ?, created_at = ?, updated_at = ? WHERE id = ?`)
+              .run(project, memory.name, memory.type, memory.description, bodyChars(memory.body), snapshot.content_key,
+                snapshot.content_hash, memory.status ?? 'active', memory.last_reviewed_at ?? null, memory.next_review_at ?? null,
+                memory.archived_at ?? null, memory.archive_reason ?? null, memory.archived_by ?? null,
+                memory.created_at, memory.updated_at, memory.id);
+            if (fts) this.db.prepare('DELETE FROM memories_fts WHERE rowid = ?').run(fts.rowid);
+            this.db.prepare('DELETE FROM tags WHERE memory_id = ?').run(memory.id);
+            this.db.prepare('DELETE FROM links WHERE src_id = ?').run(memory.id);
+            this.db.prepare('DELETE FROM supersedes WHERE src_id = ?').run(memory.id);
+            removeMemoryKg(this.db, project, memory.id);
+          } else {
+            this.db.prepare(`INSERT INTO memories (id, project_id, name, type, description, body_chars, file_path,
+              content_hash, status, last_reviewed_at, next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+              .run(memory.id, project, memory.name, memory.type, memory.description, bodyChars(memory.body), snapshot.content_key,
+                snapshot.content_hash, memory.status ?? 'active', memory.last_reviewed_at ?? null, memory.next_review_at ?? null,
+                memory.archived_at ?? null, memory.archive_reason ?? null, memory.archived_by ?? null,
+                memory.created_at, memory.updated_at);
+          }
+          if ((memory.status ?? 'active') === 'active') {
+            insertCollections(this.db, memory);
+            insertFts(this.db, memory);
+            applyMemoryKg(this.db, project, memory.id, { entities: memory.entities, triples: memory.triples, status: 'active' });
+          }
+        }
+      });
+      if (committed.outcome === 'applied') return committed;
+      this.rollbackMutationFiles(writtenCurrent, writtenRevisions);
+      return committed;
+    } catch (error) {
+      this.rollbackMutationFiles(writtenCurrent, writtenRevisions);
+      throw error;
+    }
+  }
+
+  private rollbackMutationFiles(current: Map<string, { path: string; previous?: string }>, revisions: string[]): void {
+    for (const entry of current.values()) {
+      if (entry.previous === undefined) {
+        if (existsSync(entry.path)) unlinkSync(entry.path);
+      } else {
+        atomicWriteText(entry.path, entry.previous);
+      }
+    }
+    for (const path of revisions) if (existsSync(path)) unlinkSync(path);
+  }
+
+  private mutationConflict(operationId: string): MutationResult {
+    return { operation_id: operationId, outcome: 'conflict', memory_ids: [], revision_ids: [] };
+  }
+
+  listRevisionsAsync(projectId: string, memoryId: string) {
+    return this.maintenanceStore.listRevisions(this.requireProject(projectId), memoryId);
   }
 
   saveAsync(projectId: string, input: SaveInput): Promise<Memory> {

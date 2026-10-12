@@ -59,6 +59,28 @@ source_refs:
 ---`);
   });
 
+  test('出典・見直し日時・archive状態をfrontmatterへ保存する', () => {
+    const output = serializeMemory(memory({
+      sources: [{ kind: 'url', url: 'https://example.test/doc', captured_at: '2026-10-01T00:00:00.000Z' }],
+      last_reviewed_at: '2026-10-01T00:00:00.000Z',
+      next_review_at: '2027-03-30T00:00:00.000Z',
+      status: 'archived',
+      archived_at: '2026-10-02T00:00:00.000Z',
+      archive_reason: 'completed',
+      archived_by: 'maintenance',
+    }));
+
+    expect(parseMemoryString(output)).toMatchObject({
+      sources: [{ kind: 'url', url: 'https://example.test/doc', captured_at: '2026-10-01T00:00:00.000Z' }],
+      last_reviewed_at: '2026-10-01T00:00:00.000Z',
+      next_review_at: '2027-03-30T00:00:00.000Z',
+      status: 'archived',
+      archived_at: '2026-10-02T00:00:00.000Z',
+      archive_reason: 'completed',
+      archived_by: 'maintenance',
+    });
+  });
+
   test.each(['y', 'n', 'yes', 'no', 'on', 'off'])('YAML boolean alias %s を文字列として往復する', (alias) => {
     const parsed = parseMemoryString(serializeMemory(memory({ tags: [alias] })));
     expect(parsed.tags).toEqual([alias]);
@@ -150,6 +172,32 @@ updated_at: '2026-06-02T07:51:42.244Z'
 body
 `)).toThrow();
     expect(() => MemorySchema.parse(memory({ description: '' }))).toThrow();
+  });
+
+  test('legacy URL 行はHTTPS出典へ導出し、legacy status はactiveとして扱う', () => {
+    const parsed = parseMemoryString(`---
+id: legacy-id
+name: legacy-reference
+description: legacy
+type: reference
+tags: []
+links: []
+created_at: '2026-05-20T06:10:27.105Z'
+updated_at: '2026-06-02T07:51:42.244Z'
+source_refs:
+  - project_id: source-project
+    memory: source-memory
+---
+reference text
+
+URL: https://example.test/legacy?view=1
+`);
+
+    expect(parsed.status).toBe('active');
+    expect(parsed.sources).toEqual([{
+      kind: 'url', url: 'https://example.test/legacy?view=1', captured_at: '2026-05-20T06:10:27.105Z',
+    }]);
+    expect(parsed.source_refs).toEqual([{ project_id: 'source-project', memory: 'source-memory' }]);
   });
 });
 

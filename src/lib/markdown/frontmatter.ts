@@ -1,6 +1,6 @@
 import matter from 'gray-matter';
 
-import { MemorySchema, type Memory } from '@/lib/memory/types';
+import { MemorySchema, MemorySourceSchema, type Memory, type MemorySource } from '@/lib/memory/types';
 
 function isoString(value: unknown): unknown {
   return value instanceof Date ? value.toISOString() : value;
@@ -29,10 +29,29 @@ export function serializeMemory(memory: Memory): string {
   }
   if (memory.triples.length > 0) data.triples = memory.triples;
   if (memory.source_refs && memory.source_refs.length > 0) data.source_refs = memory.source_refs;
+  if (memory.sources && memory.sources.length > 0) data.sources = memory.sources;
   if (memory.supersedes.length > 0) data.supersedes = memory.supersedes;
+  if (memory.last_reviewed_at) data.last_reviewed_at = memory.last_reviewed_at;
+  if (memory.next_review_at) data.next_review_at = memory.next_review_at;
+  if (memory.status) data.status = memory.status;
+  if (memory.archived_at) data.archived_at = memory.archived_at;
+  if (memory.archive_reason) data.archive_reason = memory.archive_reason;
+  if (memory.archived_by) data.archived_by = memory.archived_by;
 
   const body = memory.body.endsWith('\n') ? memory.body : `${memory.body}\n`;
   return matter.stringify(body, data);
+}
+
+export function sourcesFromBody(body: string, capturedAt: string): MemorySource[] {
+  const sources: MemorySource[] = [];
+  for (const match of body.matchAll(/^\s*URL:\s*(\S+)\s*$/gim)) {
+    const parsed = MemorySourceSchema.safeParse({ kind: 'url', url: match[1], captured_at: capturedAt });
+    if (parsed.success && parsed.data.kind === 'url') {
+      const url = parsed.data.url;
+      if (!sources.some((source) => source.kind === 'url' && source.url === url)) sources.push(parsed.data);
+    }
+  }
+  return sources;
 }
 
 export function parseMemoryString(text: string): Memory {
@@ -62,6 +81,23 @@ export function parseMemoryString(text: string): Memory {
   const supersedes = Array.isArray(data.supersedes)
     ? data.supersedes.filter((name): name is string => typeof name === 'string' && name.length > 0)
     : [];
+  const body = parsed.content.replace(/^\n+/, '').replace(/\n+$/, '');
+  const createdAt = isoString(data.created_at);
+  const rawSources = Array.isArray(data.sources)
+    ? data.sources.flatMap((source) => {
+      if (!isRecord(source)) return [];
+      const normalized = {
+        ...source,
+        captured_at: isoString(source.captured_at),
+        last_checked_at: isoString(source.last_checked_at),
+      };
+      const result = MemorySourceSchema.safeParse(normalized);
+      return result.success ? [result.data] : [];
+    })
+    : [];
+  const sources = rawSources.length > 0
+    ? rawSources
+    : typeof createdAt === 'string' ? sourcesFromBody(body, createdAt) : [];
 
   return MemorySchema.parse({
     ...data,
@@ -70,9 +106,11 @@ export function parseMemoryString(text: string): Memory {
     entities,
     triples,
     source_refs: sourceRefs.length > 0 ? sourceRefs : undefined,
+    sources: sources.length > 0 ? sources : undefined,
     supersedes,
-    body: parsed.content.replace(/^\n+/, '').replace(/\n+$/, ''),
-    created_at: isoString(data.created_at),
+    status: data.status ?? 'active',
+    body,
+    created_at: createdAt,
     updated_at: isoString(data.updated_at),
   });
 }

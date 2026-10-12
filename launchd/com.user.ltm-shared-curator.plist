@@ -12,6 +12,10 @@
   <key>StartCalendarInterval</key>
   <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
   <key>RunAtLoad</key><false/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LTM_CURATOR_REPO_ROOT</key><string>__REPO_ROOT__</string>
+  </dict>
   <key>StandardOutPath</key><string>__HOME__/.local/state/ltm-curator/launchd.out.log</string>
   <key>StandardErrorPath</key><string>__HOME__/.local/state/ltm-curator/launchd.err.log</string>
 </dict>

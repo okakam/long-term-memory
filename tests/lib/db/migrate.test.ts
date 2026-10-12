@@ -44,6 +44,29 @@ test('版が異なる DB は FK 安全な順序で索引を再構築する', () 
   }
 });
 
+test('検索index再構築ではmaintenance settingsとrevision pointerを保持する', () => {
+  const db = new Database(':memory:');
+  try {
+    db.pragma('foreign_keys = ON');
+    migrate(db);
+    db.prepare('INSERT INTO maintenance_settings (project_id, enabled, review_days, session_archive_days, version) VALUES (?, ?, ?, ?, ?)')
+      .run('project', 1, '{"project":90,"reference":180,"user":365,"feedback":365}', 90, 3);
+    db.prepare(`INSERT INTO memory_revisions
+      (project_id, memory_id, revision_id, content_key, content_hash, created_at, operation_id, reason_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('project', 'memory-1', 'revision-1', 'revision.md', 'hash', 'created', 'operation-1', 'confirmed');
+    db.prepare('UPDATE schema_version SET version = ?').run(CURRENT_VERSION - 1);
+
+    migrate(db);
+
+    expect(db.prepare('SELECT version FROM maintenance_settings WHERE project_id = ?').get('project')).toMatchObject({ version: 3 });
+    expect(db.prepare('SELECT revision_id, content_key FROM memory_revisions WHERE project_id = ?').get('project'))
+      .toEqual({ revision_id: 'revision-1', content_key: 'revision.md' });
+  } finally {
+    db.close();
+  }
+});
+
 test('contentless FTS は trigram 検索・重み付き bm25・rowid DELETE を使える', () => {
   const db = new Database(':memory:');
   try {

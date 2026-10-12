@@ -4,6 +4,8 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 
 FROM ${NODE_IMAGE}
 
+ARG PNPM_VERSION=11.1.3
+
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -49,7 +51,7 @@ RUN apt-get update \
     && rm -f /etc/ssh/ssh_host_* \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
-    && corepack install --global pnpm \
+    && corepack install --global "pnpm@${PNPM_VERSION}" \
     && npm install --global @openai/codex \
     && npm install --global firebase-tools \
     && npm cache clean --force

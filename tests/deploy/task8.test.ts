@@ -27,6 +27,9 @@ test('Docker配布設定はCloud RunのPORTと一時SQLiteを使う', () => {
   expect(compose).toContain('target: /data');
   expect(compose).toContain('3939:3939');
   expect(compose).toContain('LTM_STORAGE_DRIVER: local');
+  const devcontainerDockerfile = read('.devcontainer/Dockerfile');
+  expect(devcontainerDockerfile).toContain('ARG PNPM_VERSION=11.1.3');
+  expect(devcontainerDockerfile).toContain('corepack install --global "pnpm@${PNPM_VERSION}"');
 });
 
 test('環境変数サンプルはCloud Run/Firebase/GCSのキーだけを含み秘密値を含まない', () => {
@@ -144,6 +147,7 @@ test('Cloud Run smokeのinventoryはsetupを含む17 toolsを要求する', () =
 function stubSmoke(setup: object) {
   vi.stubEnv('CLOUD_RUN_URL', 'https://smoke.example');
   vi.stubEnv('LTM_MCP_TOKEN', 'test-bearer');
+  vi.stubEnv('LTM_AUTO_MAINTENANCE_TOKEN', 'test-auto-maintenance');
   vi.stubEnv('LTM_SMOKE_PROJECT_ID', 'smoke');
   const requests: Array<{ name: string; arguments: Record<string, unknown>; authorization: string | null }> = [];
   let savedName = '';
@@ -151,13 +155,20 @@ function stubSmoke(setup: object) {
   vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
     if (!init) return Response.json({ ok: true });
     const request = JSON.parse(String(init.body));
-    if (request.method === 'tools/list') return Response.json({ result: { tools: expectedTools.map((name) => ({ name })) } });
+    if (request.method === 'tools/list') {
+      const operationMode = new Headers(init.headers).get('x-ltm-operation-mode');
+      const names = operationMode === 'maintenance'
+        ? ['maintenance_list_projects', 'maintenance_snapshot', 'maintenance_apply']
+        : expectedTools;
+      return Response.json({ result: { tools: names.map((name) => ({ name })) } });
+    }
     if (request.method === 'initialize') return Response.json({ result: {} });
     const { name, arguments: args } = request.params;
     requests.push({ name, arguments: args, authorization: new Headers(init.headers).get('authorization') });
     let value: unknown = {};
     if (name === 'setup_client_environment') value = setup;
     if (name === 'list_projects') value = [{ project_id: 'smoke' }];
+    if (name === 'maintenance_list_projects') value = [];
     if (name === 'remember_reference') {
       if (!savedName) savedName = args.name; else targetName = args.name;
     }
@@ -174,7 +185,7 @@ test('Cloud Run smokeはBearerでproject_idなしのCodex setupと既存project 
   expect(requests.find((request) => request.name === 'setup_client_environment')).toEqual({
     name: 'setup_client_environment', arguments: { client: 'codex' }, authorization: 'Bearer test-bearer',
   });
-  const projectCalls = requests.filter((request) => !['list_projects', 'setup_client_environment'].includes(request.name));
+  const projectCalls = requests.filter((request) => !['list_projects', 'setup_client_environment', 'maintenance_list_projects'].includes(request.name));
   expect(projectCalls.length).toBeGreaterThan(0);
   for (const request of projectCalls) expect(request.arguments.project_id).toBe('smoke');
 });

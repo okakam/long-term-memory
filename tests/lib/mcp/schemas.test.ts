@@ -20,6 +20,19 @@ test('全 scope tool は top-level project_id を必須とする', () => {
   expect(ReindexInput.safeParse({ project_id: 'alpha', unexpected: true }).success).toBe(false);
 });
 
+test('reference の出典URLはHTTPSに限定し、内部状態を受け付けない', () => {
+  const input = { project_id: 'alpha', name: 'reference', description: 'desc', body: 'body' };
+  expect(RememberReferenceInput.safeParse({ ...input, url: 'http://example.test/doc' }).success).toBe(false);
+  expect(RememberReferenceInput.safeParse({ ...input, url: 'https://example.test/doc' }).success).toBe(true);
+
+  const parsed = RememberReferenceInput.parse({
+    ...input, url: 'https://example.test/doc', status: 'archived', last_reviewed_at: '2026-01-01', operation_id: 'forged',
+  });
+  expect(parsed).not.toHaveProperty('status');
+  expect(parsed).not.toHaveProperty('last_reviewed_at');
+  expect(parsed).not.toHaveProperty('operation_id');
+});
+
 test('名前付き schema field は description を持つ', () => {
   const shape = RememberFeedbackInput.shape;
   for (const key of ['name', 'description', 'body', 'entities', 'why', 'how_to_apply']) {
