@@ -103,7 +103,7 @@ describe('FirestoreMetadataStore', () => {
     await store.createProject('demo', 'owner');
     await store.putMemoryIndex('demo', record());
 
-    expect(await store.getMemoryIndex('demo', 'memory-1')).toEqual(record());
+    expect(await store.getMemoryIndex('demo', 'memory-1')).toEqual({ ...record(), status: 'active' });
     expect(await store.getNameIndex('demo', 'note')).toMatchObject({ memory_id: 'memory-1' });
     expect((await store.getProject('demo'))?.revision).toBe(1);
   });
