@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import type { MemberRecord, ProjectRecord, TokenRecord } from '@/lib/auth/store';
 import { getFirebaseAdminApp } from '@/lib/auth/firebase';
 import { MemoryConflictError } from '@/lib/memory/types';
-import type { Entity, MemoryType, Triple } from '@/lib/memory/types';
+import type { Entity, MemoryStatus, MemoryType, Triple } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId } from '@/lib/slug';
 
 export interface FirestoreDocument {
@@ -49,6 +49,12 @@ export interface MemoryIndexRecord {
   supersedes: string[];
   entities: Entity[];
   triples: Triple[];
+  status?: MemoryStatus;
+  last_reviewed_at?: string;
+  next_review_at?: string;
+  archived_at?: string;
+  archive_reason?: string;
+  archived_by?: string;
   created_at: string;
   updated_at: string;
 }
@@ -268,6 +274,8 @@ function memoryRecord(document: FirestoreDocument): MemoryIndexRecord {
   if (!['user', 'feedback', 'project', 'reference', 'session'].includes(type)) {
     throw new FirestoreDataError(`${document.path}.type is invalid`);
   }
+  const status = data.status ?? 'active';
+  if (status !== 'active' && status !== 'archived') throw new FirestoreDataError(`${document.path}.status is invalid`);
   return {
     id: asString(data.id, `${document.path}.id`),
     project_id: asString(data.project_id, `${document.path}.project_id`),
@@ -282,6 +290,12 @@ function memoryRecord(document: FirestoreDocument): MemoryIndexRecord {
     supersedes: asStringArray(data.supersedes ?? [], `${document.path}.supersedes`),
     entities: asEntities(data.entities ?? []),
     triples: asTriples(data.triples ?? []),
+    status,
+    last_reviewed_at: data.last_reviewed_at === undefined ? undefined : asIso(data.last_reviewed_at, `${document.path}.last_reviewed_at`),
+    next_review_at: data.next_review_at === undefined ? undefined : asIso(data.next_review_at, `${document.path}.next_review_at`),
+    archived_at: data.archived_at === undefined ? undefined : asIso(data.archived_at, `${document.path}.archived_at`),
+    archive_reason: data.archive_reason === undefined ? undefined : asString(data.archive_reason, `${document.path}.archive_reason`),
+    archived_by: data.archived_by === undefined ? undefined : asString(data.archived_by, `${document.path}.archived_by`),
     created_at: asIso(data.created_at, `${document.path}.created_at`),
     updated_at: asIso(data.updated_at, `${document.path}.updated_at`),
   };

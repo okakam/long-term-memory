@@ -75,7 +75,10 @@ const LightweightMemoryInput = {
 
 export const RememberReferenceInput = z.object({
   ...LightweightMemoryInput,
-  url: z.string().url().optional().describe('Optional external URL appended to the memory body.'),
+  url: z.string().url().refine((value) => {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.username === '' && url.password === '';
+  }, 'URL must use HTTPS and contain no credentials').optional().describe('Optional public HTTPS URL appended to the memory body.'),
 });
 export const RememberSessionSummaryInput = z.object(LightweightMemoryInput);
 

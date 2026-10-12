@@ -2,7 +2,7 @@ import { ulid } from 'ulid';
 
 import { KeyedMutex } from '@/lib/memory/mutex';
 import { computeHash } from '@/lib/markdown/file-io';
-import { parseMemoryString, serializeMemory } from '@/lib/markdown/frontmatter';
+import { parseMemoryString, serializeMemory, sourcesFromBody } from '@/lib/markdown/frontmatter';
 import { rankMemoriesByRemotePpr } from '@/lib/graph/remote-assoc';
 import {
   MemoryConflictError,
@@ -27,6 +27,7 @@ import {
 } from '@/lib/storage/firestore-metadata';
 import { openEphemeralIndex } from '@/lib/storage/sqlite-index';
 import { rerank } from '@/lib/memory/rerank';
+import { DEFAULT_MAINTENANCE_SETTINGS, reviewSchedule } from '@/lib/maintenance/policy';
 
 interface MemoryRow {
   id: string;
@@ -75,6 +76,12 @@ function toMemoryIndexRecord(projectId: string, key: string, contentHash: string
     supersedes: memory.supersedes,
     entities: memory.entities,
     triples: memory.triples,
+    status: memory.status ?? 'active',
+    last_reviewed_at: memory.last_reviewed_at,
+    next_review_at: memory.next_review_at,
+    archived_at: memory.archived_at,
+    archive_reason: memory.archive_reason,
+    archived_by: memory.archived_by,
     created_at: memory.created_at,
     updated_at: memory.updated_at,
   };
@@ -261,6 +268,7 @@ export class CloudMemoryService {
     const store = await this.index();
     if (await selectRow(store, project, name)) throw new MemoryConflictError(name);
     const timestamp = nowIso();
+    const urls = sourcesFromBody(input.body, timestamp);
     const memory = MemorySchema.parse({
       id: ulid(),
       name,
@@ -271,10 +279,13 @@ export class CloudMemoryService {
       entities: input.entities ?? [],
       triples: input.triples ?? [],
       source_refs: input.source_refs,
+      sources: urls.length > 0 ? urls : [{ kind: 'conversation', captured_at: timestamp }],
       supersedes: input.supersedes ?? [],
       body: input.body,
       created_at: timestamp,
       updated_at: timestamp,
+      ...reviewSchedule(input.type, timestamp, DEFAULT_MAINTENANCE_SETTINGS),
+      status: 'active',
     });
     const text = serializeMemory(memory);
     const contentHash = computeHash(text);
@@ -392,6 +403,11 @@ export class CloudMemoryService {
     const row = await selectRow(store, project, idOrName);
     if (!row) throw new MemoryNotFoundError(idOrName);
     const current = parseMemoryString(await this.markdown.read(row.file_path));
+    const timestamp = nowIso();
+    const contentChanged = (patch.body !== undefined && patch.body !== current.body)
+      || (patch.description !== undefined && patch.description !== current.description);
+    const review = contentChanged ? reviewSchedule(current.type, timestamp, DEFAULT_MAINTENANCE_SETTINGS) : null;
+    const body = patch.body ?? current.body;
     const entities = patch.entities ?? current.entities;
     if (['user', 'feedback', 'project'].includes(current.type) && current.entities.length > 0 && entities.length === 0) {
       throw new Error(`cannot empty entities on a "${current.type}" memory: KG-bearing memories must keep at least one entity`);
@@ -406,7 +422,15 @@ export class CloudMemoryService {
       triples: patch.triples ?? current.triples,
       source_refs: patch.source_refs ?? current.source_refs,
       supersedes: patch.supersedes ?? current.supersedes,
-      updated_at: nowIso(),
+      sources: patch.body !== undefined && patch.body !== current.body
+        ? (sourcesFromBody(body, timestamp).length > 0
+          ? sourcesFromBody(body, timestamp)
+          : [{ kind: 'conversation', captured_at: timestamp }])
+        : current.sources,
+      last_reviewed_at: review?.last_reviewed_at ?? current.last_reviewed_at,
+      next_review_at: review?.next_review_at ?? current.next_review_at,
+      status: current.status ?? 'active',
+      updated_at: timestamp,
     });
     const text = serializeMemory(updated);
     const contentHash = computeHash(text);

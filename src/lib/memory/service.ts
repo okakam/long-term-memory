@@ -6,6 +6,7 @@ import { ulid } from 'ulid';
 import { openDb } from '@/lib/db/connection';
 import { atomicWriteText, computeHash, readMemoryFile } from '@/lib/markdown/file-io';
 import { parseMemoryString, serializeMemory } from '@/lib/markdown/frontmatter';
+import { sourcesFromBody } from '@/lib/markdown/frontmatter';
 import { applyMemoryKg, removeMemoryKg } from '@/lib/memory/kg';
 import { withProjectLock } from '@/lib/lock/project-lock';
 import { rankMemoriesByPpr } from '@/lib/graph/assoc';
@@ -23,6 +24,7 @@ import {
 } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId, SHARED_PROJECT_ID } from '@/lib/slug';
 import { reconcile, reindex } from '@/lib/memory/reconcile';
+import { DEFAULT_MAINTENANCE_SETTINGS, reviewSchedule } from '@/lib/maintenance/policy';
 import type { Storage } from '@/lib/paths';
 import { resolveStorage } from '@/lib/paths';
 
@@ -147,7 +149,8 @@ export class MemoryService {
     const name = this.requireName(input.name);
     if (selectRow(this.db, project, name)) throw new MemoryConflictError(name);
     const timestamp = nowIso();
-    const memory = {
+    const urls = sourcesFromBody(input.body, timestamp);
+    const memory = MemorySchema.parse({
       id: ulid(),
       name,
       description: input.description,
@@ -157,11 +160,14 @@ export class MemoryService {
       entities: input.entities ?? [],
       triples: input.triples ?? [],
       source_refs: input.source_refs,
+      sources: urls.length > 0 ? urls : [{ kind: 'conversation', captured_at: timestamp }],
       supersedes: input.supersedes ?? [],
       body: input.body,
       created_at: timestamp,
       updated_at: timestamp,
-    } as Memory;
+      ...reviewSchedule(input.type, timestamp, DEFAULT_MAINTENANCE_SETTINGS),
+      status: 'active',
+    });
     const text = serializeMemory(memory);
     const filePath = this.storage.memoryFile(project, name);
     atomicWriteText(filePath, text);
@@ -247,6 +253,11 @@ export class MemoryService {
     const filePath = row.file_path;
     const oldText = readFileSync(filePath, 'utf8');
     const current = parseMemoryString(oldText);
+    const timestamp = nowIso();
+    const contentChanged = (patch.body !== undefined && patch.body !== current.body)
+      || (patch.description !== undefined && patch.description !== current.description);
+    const review = contentChanged ? reviewSchedule(current.type, timestamp, DEFAULT_MAINTENANCE_SETTINGS) : null;
+    const body = patch.body ?? current.body;
     const entities = patch.entities ?? current.entities;
     if (['user', 'feedback', 'project'].includes(current.type)
       && current.entities.length > 0 && entities.length === 0) {
@@ -262,7 +273,15 @@ export class MemoryService {
       triples: patch.triples ?? current.triples,
       source_refs: patch.source_refs ?? current.source_refs,
       supersedes: patch.supersedes ?? current.supersedes,
-      updated_at: nowIso(),
+      sources: patch.body !== undefined && patch.body !== current.body
+        ? (sourcesFromBody(body, timestamp).length > 0
+          ? sourcesFromBody(body, timestamp)
+          : [{ kind: 'conversation', captured_at: timestamp }])
+        : current.sources,
+      last_reviewed_at: review?.last_reviewed_at ?? current.last_reviewed_at,
+      next_review_at: review?.next_review_at ?? current.next_review_at,
+      status: current.status ?? 'active',
+      updated_at: timestamp,
     });
     const text = serializeMemory(updated);
     atomicWriteText(filePath, text);

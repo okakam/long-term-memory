@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { computeHash } from '@/lib/markdown/file-io';
 import { serializeMemory } from '@/lib/markdown/frontmatter';
@@ -89,7 +89,33 @@ class FailingTransactionIndex implements IndexStore {
 const resources: Array<{ close(): void }> = [];
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const resource of resources.splice(0)) resource.close();
+});
+
+test('CloudMemoryService save はURL出典を構造化しsource_refsと分離して保存する', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-10-01T00:00:00.000Z'));
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const metadata = new FirestoreMetadataStore(new FakeFirestore());
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+
+  const saved = await service.save('demo', {
+    name: 'source-note', description: 'External source', type: 'reference',
+    body: 'Reference text\n\nURL: https://example.test/doc?version=2',
+    source_refs: [{ project_id: 'origin', memory: 'source-memory' }],
+  });
+
+  expect(saved).toMatchObject({
+    sources: [{ kind: 'url', url: 'https://example.test/doc?version=2', captured_at: '2026-10-01T00:00:00.000Z' }],
+    source_refs: [{ project_id: 'origin', memory: 'source-memory' }],
+    last_reviewed_at: '2026-10-01T00:00:00.000Z',
+    next_review_at: '2027-03-30T00:00:00.000Z',
+  });
+  expect(await service.get('demo', saved.id)).toMatchObject({ sources: saved.sources, source_refs: saved.source_refs });
 });
 
 test('GCS本文とFirestore metadataからsave/get/reindexを行いSQLite cacheを再構築できる', async () => {

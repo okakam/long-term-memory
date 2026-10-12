@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { openDb } from '@/lib/db/connection';
 import { MemoryConflictError } from '@/lib/memory/types';
@@ -8,7 +8,10 @@ import { MemoryService } from '@/lib/memory/service';
 import { resolveStorage } from '@/lib/paths';
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+afterEach(() => {
+  vi.useRealTimers();
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
 
 function createService() {
   const root = mkdtempSync(join('/tmp', 'ltm-service-'));
@@ -20,6 +23,33 @@ function createService() {
 }
 
 describe('MemoryService save/get/update/forget', () => {
+  test('save は出典と種別別の初回見直し日を記録し、本文更新だけで期限を更新する', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-01T00:00:00.000Z'));
+    const { service, db } = createService();
+    try {
+      const saved = service.save('project', {
+        name: 'reviewable-note', description: 'A memory', type: 'project', body: 'Body',
+      });
+      expect(saved).toMatchObject({
+        status: 'active',
+        sources: [{ kind: 'conversation', captured_at: '2026-10-01T00:00:00.000Z' }],
+        last_reviewed_at: '2026-10-01T00:00:00.000Z',
+        next_review_at: '2026-12-30T00:00:00.000Z',
+      });
+
+      vi.setSystemTime(new Date('2026-10-02T00:00:00.000Z'));
+      const tagged = service.update('project', saved.id, { tags: ['changed'] });
+      expect(tagged.last_reviewed_at).toBe('2026-10-01T00:00:00.000Z');
+      expect(tagged.next_review_at).toBe('2026-12-30T00:00:00.000Z');
+
+      vi.setSystemTime(new Date('2026-10-03T00:00:00.000Z'));
+      const edited = service.update('project', saved.id, { body: 'Updated body' });
+      expect(edited.last_reviewed_at).toBe('2026-10-03T00:00:00.000Z');
+      expect(edited.next_review_at).toBe('2027-01-01T00:00:00.000Z');
+    } finally { db.close(); }
+  });
+
   test('markdown を正本として save と get を行う', () => {
     const { service, storage, db } = createService();
     try {
