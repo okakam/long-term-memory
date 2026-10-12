@@ -5,6 +5,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 
 import { MemberList, type ProjectMember, type ProjectRole } from './MemberList';
 import { MaintenancePanel } from './MaintenancePanel';
+import { SharedCurationHistory } from './SharedCurationHistory';
 
 export type AccessibleProject = {
   project_id: string;
@@ -15,13 +16,14 @@ type ProjectManagementPanelProps = {
   initialProjects: AccessibleProject[];
   currentUserId: string;
   selectedProjectId?: string;
+  canManageShared?: boolean;
 };
 
 function apiError(response: Response, fallback: string): Promise<never> {
   return response.text().then((text) => { throw new Error(text || fallback); });
 }
 
-export function ProjectManagementPanel({ initialProjects, currentUserId, selectedProjectId }: ProjectManagementPanelProps) {
+export function ProjectManagementPanel({ initialProjects, currentUserId, selectedProjectId, canManageShared = false }: ProjectManagementPanelProps) {
   const router = useRouter();
   const [projects, setProjects] = useState(initialProjects);
   const [selectedId, setSelectedId] = useState(selectedProjectId ?? initialProjects[0]?.project_id ?? '');
@@ -152,6 +154,7 @@ export function ProjectManagementPanel({ initialProjects, currentUserId, selecte
       </section>
       {canManage ? <MaintenancePanel key={selectedId} projectId={selectedId} /> : null}
     </>}
+    {canManageShared ? <SharedCurationHistory /> : null}
     {error ? <p className="error-message" role="alert">{error}</p> : null}
   </section>;
 }
