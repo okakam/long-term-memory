@@ -118,7 +118,13 @@ deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1
 
 ## 9. 検証コマンド
 
+依存ライブラリはNode.js 22・pnpm 11.1.3で管理する。現行の固定バージョンはNext.js / eslint-config-next 16.4.0、React / React DOM 19.3.0とする。これらはユーザー指定により最新安定版へ更新した。その他の依存範囲内の更新では`package.json`の範囲・固定指定を維持し、ルートと`functions/`それぞれの`pnpm-lock.yaml`へ解決済みバージョンを記録する。更新コマンドがmanifestの下限を書き換えた場合は元の指定へ戻し、lockfileを同期してからfrozen installを確認する。Functionsは独立パッケージとして`--ignore-workspace`を指定し、CIと同じ`--ignore-scripts`でインストールする。2026-10-12の更新内容・検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`を参照する。
+
 ```bash
+pnpm install --frozen-lockfile
+pnpm --dir functions --ignore-workspace install --frozen-lockfile --ignore-scripts
+pnpm --dir functions --ignore-workspace test
+pnpm --dir functions --ignore-workspace build
 pnpm test
 pnpm lint
 pnpm exec tsc --noEmit
