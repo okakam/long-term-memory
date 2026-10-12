@@ -4,7 +4,7 @@
 
 - このリポジトリの仕様書・計画書・運用ドキュメントは日本語で記述する。
 - 実装前に `docs/reproduction-spec.md` と、対象タスクに対応する `docs/superpowers/plans/` の計画を確認する。
-- 自動棚卸し・出典記録・共通情報集約の承認済み設計は `docs/superpowers/specs/2026-10-12-automated-memory-review-and-provenance-design.md`、実装計画の入口は `docs/superpowers/plans/2026-10-12-automated-memory-operations.md` とする。通常projectの自動見直しと日時指定の共有集約は分割計画に沿って実装する。現時点では計画段階であり、本番の既存17 tools・curator挙動を実装済みとして扱わない。
+- 自動棚卸し・出典記録・共通情報集約の設計正本は `docs/superpowers/specs/2026-10-12-automated-memory-review-and-provenance-design.md`、実装計画は `docs/superpowers/plans/2026-10-12-automated-memory-operations.md` とその分割計画とする。通常project棚卸しは専用`LTM_AUTO_MAINTENANCE_TOKEN`と3つのmaintenance MCP toolだけで実行し、curator PATと`LTM_MAINTENANCE_TOKEN`によるshared curation権限と混ぜない。運用手順は `docs/memory-automation.md` に記録する。
 - 仕様、構成、開発手順、運用ルールに変更があった場合は、関連するドキュメントとこの `AGENTS.md` を随時更新する。特に、このファイル自体も開発の進行に合わせて随時更新すること。
 - 認証情報、API キー、実在する `.env` ファイルはコミットしない。
 - `.gitignore` で依存関係、生成物、ローカル記憶データ、認証を含むローカル設定を除外する。`.env.example` と `pnpm-lock.yaml` はバージョン管理する。
@@ -36,6 +36,7 @@
 - OAuth同意画面(`/oauth/authorize`)のresponse CSPはtransactionから再検証したCodex loopback callbackのoriginだけを`form-action`へ追加する。静的CSPはこのrouteだけを除外し、他routeの`form-action 'self'`と共通security headersを維持する。callback path/queryや任意originを許可しない。本番受入はdeploy後のCodex browser consent/callback smokeで確認し、ローカル成功と混同しない。
 - Dashboardのproject作成者はFirestore membershipのownerとし、ownerだけが登録済み許可ドメインのemailでmemberを管理する。認可の正本はUID membershipであり、email directory lookupは表示・追加時だけに使う。最後のownerを削除又はmemberへ変更してはならない。
 - Dashboardの自動棚卸し設定、履歴、archive復元はowner専用とする。設定更新・復元の直前にFirestore membershipを再取得し、same-origin guardを通す。shared履歴はcurator UIDだけが読め、shared復元はDashboard APIから許可しない。履歴応答に記憶本文、source URL、内部GCS keyを含めない。
+- curator workflowは`group: ltm-curator`で直列化し、通常棚卸しjobが失敗しても共有集約jobを実行する。手動共有集約はUTC `YYYY-MM-DD`の開始・終了日を対で受け、既定dry-runとし、schedule以外は日次cursorを更新しない。
 - Cloud Run runner imageには、起動時に読み込まれる`next.config.ts`とそのproject module依存を含める。Docker imageの`/api/health`起動確認をdeploy前の回帰ゲートとする。
 
 - YAML/JSON の構文を検証し、`docker compose -f .devcontainer/compose.yaml config --quiet` を実行する。

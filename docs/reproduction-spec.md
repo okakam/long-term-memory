@@ -57,7 +57,7 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 
 ### Cloud Run runtime
 
-`LTM_STORAGE_DRIVER=cloud`、`AUTH_REQUIRED=1`、`MCP_OAUTH_ENABLED`、`PORT`、`LTM_GCS_BUCKET`、`LTM_GCS_PREFIX`、`FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、`NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`LTM_CURATOR_USER_ID`、`LTM_MAINTENANCE_TOKEN` を設定する。OAuth有効時は `MCP_OAUTH_ENABLED=1`、`AUTH_REQUIRED=1`、HTTPSの `MCP_PUBLIC_URL` を必須とする。
+`LTM_STORAGE_DRIVER=cloud`、`AUTH_REQUIRED=1`、`MCP_OAUTH_ENABLED`、`PORT`、`LTM_GCS_BUCKET`、`LTM_GCS_PREFIX`、`FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、`NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`、`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`LTM_CURATOR_USER_ID`、`LTM_MAINTENANCE_TOKEN`、`LTM_AUTO_MAINTENANCE_TOKEN` を設定する。後者は通常project棚卸し専用で、curator PATやshared用maintenance tokenと共有しない。OAuth有効時は `MCP_OAUTH_ENABLED=1`、`AUTH_REQUIRED=1`、HTTPSの `MCP_PUBLIC_URL` を必須とする。
 
 GCSとFirestoreへのアクセスはCloud RunランタイムサービスアカウントのIAMとApplication Default Credentialsを使う。Firebase Adminのservice account JSONをrepositoryやコンテナへコピーしない。
 
@@ -114,6 +114,8 @@ MCP toolsは次の17個を維持する。
 ## 8. CI/CD
 
 `.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にrootのtest・lint・production build・Docker build・built image上の`/api/health`起動確認に加えてFunctions専用のinstall・test・buildを実行し、runtime secretを渡さない。Next.jsは`next start`時にも`next.config.ts`を読み込むため、runner imageにはそこから参照するproject module依存を含める。Firebase Functionsの本番デプロイはFirebase CLIの認証済み操作としてCloud Run deployとは分離する。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS/OAuth flagはEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
+
+`.github/workflows/curator.yml` は毎日01:00 UTCに通常projectの自動棚卸しと共通記憶集約を同一runner上で順に実行し、workflow concurrencyで直列化する。通常棚卸しはownerが有効化したprojectだけを専用`LTM_AUTO_MAINTENANCE_TOKEN`で処理する。shared集約はcurator PATと`LTM_MAINTENANCE_TOKEN`を使い、sourceのactive記憶を作成日時のUTC半開期間で読み、元projectを変更せず`__shared__`に`source_refs`付きで反映する。手動期間指定、dry-run、cursor、cap、履歴、復元requestの手順は`docs/memory-automation.md`を正本とする。
 
 deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase設定はproduction environmentからsmokeへ渡し、OAuth tokenはCodex CLIのlogin storeで扱い、ログへ出力しない。flag offのPAT smoke後にだけOAuth flagをonへ切り替え、失敗時はoffへ戻してPAT経路を確認する。
 

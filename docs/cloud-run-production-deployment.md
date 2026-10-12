@@ -61,6 +61,7 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 | `GCP_RUNTIME_SERVICE_ACCOUNT` | Cloud Run実行用サービスアカウント |
 | `CLOUD_RUN_URL` | deploy後smokeのCloud Run URL |
 | `LTM_MCP_TOKEN` | `/settings/tokens`で発行したsmoke専用MCP PAT |
+| `LTM_AUTO_MAINTENANCE_TOKEN` | 通常projectの3つの自動棚卸しMCP操作に使う専用bearer token。Cloud Run runtime secretと同じ値 |
 
 ### Environment variables
 
@@ -80,6 +81,7 @@ Deployment branches and tagsはmainだけを許可する。PRマージ後の自�
 | `MCP_ALLOWED_ORIGINS` | MCP許可origin |
 | `LTM_CURATOR_USER_ID` | shared writeを許可するFirebase UID |
 | `GCP_SECRET_LTM_MAINTENANCE_TOKEN` | Secret Manager内のmaintenance token secret名 |
+| `GCP_SECRET_LTM_AUTO_MAINTENANCE_TOKEN` | Secret Manager内の通常project自動棚卸しtoken secret名 |
 
 ### カスタムドメイン `ltm.okakam.net`
 
@@ -116,6 +118,7 @@ Firebaseでサインインした状態で、`https://ltm.okakam.net/settings/tok
 - Firebase AuthenticationのEmail/Password・Googleログインは`@okakam.net`だけを許可する。`beforeUserCreated`と`beforeUserSignedIn`、Cloud Run側principal検証の二重構成を維持する。
 - Cloud Run runtime service accountへ対象GCS bucketの必要なIAM権限とFirestore accessを付与する。GCS credential keyは作成せず、Application Default Credentialsを使う。
 - maintenance tokenはGCP Secret Managerへ登録し、workflowから値をログ出力しない。
+- `LTM_AUTO_MAINTENANCE_TOKEN`は別のランダムsecretとしてGitHub secretとSecret Managerへ同じ値を登録する。production Environment variable `GCP_SECRET_LTM_AUTO_MAINTENANCE_TOKEN`はsecret名を示し、通常project向けmaintenance MCPだけがこのtokenを読む。curator PATとshared用maintenance tokenとは共用しない。
 - Cloud Runは`asia-northeast1`、min 0、max 1、concurrency 1、1 vCPU、512 MiBを初期値とする。
 
 ## 受け入れ確認

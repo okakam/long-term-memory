@@ -98,7 +98,6 @@ WRITE_TOOLS=(
   mcp__long-term-memory__remember_feedback
   mcp__long-term-memory__remember_project_fact
   mcp__long-term-memory__update_memory
-  mcp__long-term-memory__forget_memory
   mcp__long-term-memory__link_memories
 )
 DISALLOWED_TOOLS=(

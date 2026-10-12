@@ -11,3 +11,12 @@ test('shared curatorはURLではなく各toolのproject_idでscopeを選ぶ', ()
   expect(skill).toContain('Use `project_id: "__shared__"` for every shared read or write.');
   expect(skill).not.toContain('project_id comes from the MCP URL');
 });
+
+test('shared curatorは記憶をforgetせず、sessionから耐久情報だけ昇格する', () => {
+  const skill = readFileSync(resolve(root, 'skills/shared-memory-curator/SKILL.md'), 'utf8');
+  expect(skill).not.toContain('forget_memory');
+  expect(skill).toContain('never permanently delete an existing shared memory');
+  expect(skill).toContain('Include session memories');
+  expect(skill).toContain('daily difference');
+  expect(skill).toContain('UTC');
+});
