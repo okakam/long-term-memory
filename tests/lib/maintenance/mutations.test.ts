@@ -130,6 +130,28 @@ test('restore_uses_revision_body_and_reactivates_memory', async () => {
   } finally { db.close(); }
 });
 
+test('prune_link_rechecks_target_existence_inside_the_mutation_transaction', async () => {
+  const { service, storage, db } = createService();
+  try {
+    const owner = service.save('project', {
+      name: 'link-owner', description: 'link owner', type: 'project', links: ['existing-target'], body: 'Keep resolved links.',
+    });
+    service.save('project', { name: 'existing-target', description: 'target', type: 'project', body: 'Target is present.' });
+    const settings = await enableMaintenance(service);
+    await service.maintenanceStore.observeLinkIfAbsent('project', owner.id, 'existing-target', '2026-09-01T00:00:00.000Z');
+    const hash = computeHash(readFileSync(storage.memoryFile('project', owner.name), 'utf8'));
+    const result = await service.applyMutationAsync({
+      operation_id: 'cannot-prune-existing-target', project_id: 'project', expected_hashes: { [owner.id]: hash },
+      expected_settings_version: settings.version,
+      action: { type: 'prune_links', memory_id: owner.id, names: ['existing-target'] },
+      reason_code: 'missing_link', now: '2026-10-12T00:00:00.000Z',
+    });
+
+    expect(result.outcome).toBe('conflict');
+    expect(service.get('project', owner.id).links).toContain('existing-target');
+  } finally { db.close(); }
+});
+
 test('manual_forget_deletes_revision_metadata_and_bodies', async () => {
   const { service, storage, db } = createService();
   try {

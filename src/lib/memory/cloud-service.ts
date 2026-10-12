@@ -30,7 +30,7 @@ import { rerank } from '@/lib/memory/rerank';
 import { DEFAULT_MAINTENANCE_SETTINGS, reviewSchedule } from '@/lib/maintenance/policy';
 import { FirestoreMaintenanceStore } from '@/lib/maintenance/firestore-store';
 import { mutationMemoryIds, mutationPayloadHash, prepareMutation } from '@/lib/maintenance/mutations';
-import type { MaintenanceStore, MemoryMutationPort, MutationCommitData, MutationRequest, MutationResult } from '@/lib/maintenance/store';
+import type { MaintenanceMemoryPage, MaintenanceMemorySource, MaintenanceStore, MutationCommitData, MutationRequest, MutationResult } from '@/lib/maintenance/store';
 
 interface MemoryRow {
   id: string;
@@ -206,7 +206,7 @@ async function deleteIndex(store: IndexStore, projectId: string, memoryId: strin
   await store.exec('DELETE FROM memories WHERE id = ?', [memoryId]);
 }
 
-export class CloudMemoryService implements MemoryMutationPort {
+export class CloudMemoryService implements MaintenanceMemorySource {
   private closed = false;
   private readonly readyPromise: Promise<void>;
   readonly maintenanceStore: MaintenanceStore;
@@ -348,6 +348,42 @@ export class CloudMemoryService implements MemoryMutationPort {
     const row = await selectRow(await this.index(), project, idOrName);
     if (!row) throw new MemoryNotFoundError(idOrName);
     return this.hydrate(row);
+  }
+
+  async listMaintenanceMemories(projectId: string, after?: string, limit = 100): Promise<MaintenanceMemoryPage> {
+    const project = this.requireProject(projectId);
+    const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const records = (await this.metadata.listMemoryIndexes(project))
+      .filter((record) => (record.status ?? 'active') === 'active' && (after === undefined || record.id > after))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const page = records.slice(0, bounded + 1);
+    const hasMore = page.length > bounded;
+    const items = await Promise.all(page.slice(0, bounded).map(async (record) => {
+      const raw = await this.markdown.read(record.content_key);
+      const hash = computeHash(raw);
+      const memory = parseMemoryString(raw);
+      if (hash !== record.content_hash || memory.id !== record.id || (memory.status ?? 'active') !== 'active') {
+        throw new Error('maintenance memory snapshot is inconsistent');
+      }
+      return { memory, content_hash: hash };
+    }));
+    return { items, next_after: hasMore ? page[bounded - 1]!.id : null };
+  }
+
+  async getMaintenanceMemory(projectId: string, memoryId: string) {
+    const project = this.requireProject(projectId);
+    const record = await this.metadata.getMemoryIndex(project, memoryId);
+    if (!record) return null;
+    const raw = await this.markdown.read(record.content_key);
+    const hash = computeHash(raw);
+    const memory = parseMemoryString(raw);
+    if (hash !== record.content_hash || memory.id !== record.id
+      || (memory.status ?? 'active') !== (record.status ?? 'active')) throw new Error('maintenance memory snapshot is inconsistent');
+    return { memory, content_hash: hash };
+  }
+
+  async maintenanceNameExists(projectId: string, name: string): Promise<boolean> {
+    return (await this.metadata.getNameIndex(this.requireProject(projectId), name)) !== null;
   }
 
   async listByType(projectId: string, type: Memory['type'], limit = 100): Promise<Memory[]> {

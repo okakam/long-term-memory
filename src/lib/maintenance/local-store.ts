@@ -6,10 +6,11 @@ import { dirname, join } from 'node:path';
 import { MemoryConflictError } from '@/lib/memory/types';
 import { atomicWriteText, computeHash } from '@/lib/markdown/file-io';
 import { assertProjectId, SHARED_PROJECT_ID } from '@/lib/slug';
-import { DEFAULT_MAINTENANCE_SETTINGS } from '@/lib/maintenance/policy';
+import { DEFAULT_MAINTENANCE_SETTINGS, MISSING_LINK_GRACE_DAYS } from '@/lib/maintenance/policy';
 import { MaintenanceSettingsSchema, type MaintenanceSettings } from '@/lib/maintenance/types';
 import type {
   MaintenanceEvent,
+  LinkObservation,
   MaintenanceStore,
   MemoryRevision,
   MutationCommitData,
@@ -118,6 +119,31 @@ export class LocalMaintenanceStore implements MaintenanceStore {
     return rows.map((row) => this.toRevision(row));
   }
 
+  async getLinkObservation(projectId: string, memoryId: string, dstName: string): Promise<LinkObservation | null> {
+    const project = assertProjectId(projectId);
+    const row = this.db.prepare(`SELECT memory_id, dst_name, first_seen_at FROM maintenance_link_observations
+      WHERE project_id = ? AND memory_id = ? AND dst_name = ?`).get(project, memoryId, dstName) as LinkObservation | undefined;
+    return row ?? null;
+  }
+
+  async observeLinkIfAbsent(projectId: string, memoryId: string, dstName: string, firstSeenAt: string): Promise<LinkObservation> {
+    const project = assertProjectId(projectId);
+    const timestamp = new Date(firstSeenAt);
+    if (Number.isNaN(timestamp.getTime())) throw new Error('link observation timestamp must be valid');
+    this.db.prepare(`INSERT OR IGNORE INTO maintenance_link_observations
+      (project_id, memory_id, dst_name, first_seen_at) VALUES (?, ?, ?, ?)`)
+      .run(project, memoryId, dstName, timestamp.toISOString());
+    const row = await this.getLinkObservation(project, memoryId, dstName);
+    if (!row) throw new Error('link observation was not persisted');
+    return row;
+  }
+
+  async clearLinkObservation(projectId: string, memoryId: string, dstName: string): Promise<void> {
+    const project = assertProjectId(projectId);
+    this.db.prepare(`DELETE FROM maintenance_link_observations
+      WHERE project_id = ? AND memory_id = ? AND dst_name = ?`).run(project, memoryId, dstName);
+  }
+
   async readRevision(projectId: string, memoryId: string, revisionId: string): Promise<{ revision: MemoryRevision; body: string } | null> {
     const project = assertProjectId(projectId);
     const row = this.db.prepare(`SELECT revision_id, memory_id, content_key, content_hash, created_at, operation_id, reason_code
@@ -187,6 +213,21 @@ export class LocalMaintenanceStore implements MaintenanceStore {
       for (const [memoryId, expectedHash] of Object.entries(data.before_hashes)) {
         const current = this.db.prepare('SELECT content_hash FROM memories WHERE project_id = ? AND id = ?').get(project, memoryId) as { content_hash: string } | undefined;
         if (!current || current.content_hash !== expectedHash) return this.conflict(data.request.operation_id);
+      }
+      if (data.request.action.type === 'prune_links') {
+        const minimumAge = MISSING_LINK_GRACE_DAYS * 24 * 60 * 60 * 1000;
+        const now = Date.parse(data.request.now);
+        for (const name of data.request.action.names) {
+          const linked = this.db.prepare('SELECT 1 FROM links WHERE src_id = ? AND dst_name = ?').get(data.request.action.memory_id, name);
+          const target = this.db.prepare('SELECT 1 FROM memories WHERE project_id = ? AND name = ?').get(project, name);
+          const observation = this.db.prepare(`SELECT first_seen_at FROM maintenance_link_observations
+            WHERE project_id = ? AND memory_id = ? AND dst_name = ?`)
+            .get(project, data.request.action.memory_id, name) as { first_seen_at: string } | undefined;
+          const firstSeen = observation ? Date.parse(observation.first_seen_at) : Number.NaN;
+          if (!linked || target || !Number.isFinite(now) || !Number.isFinite(firstSeen) || now - firstSeen < minimumAge) {
+            return this.conflict(data.request.operation_id);
+          }
+        }
       }
       for (const snapshot of data.after) {
         const name = this.db.prepare('SELECT id FROM memories WHERE project_id = ? AND name = ?').get(project, snapshot.memory.name) as { id: string } | undefined;

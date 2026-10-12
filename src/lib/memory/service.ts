@@ -27,7 +27,7 @@ import { reconcile, reindex } from '@/lib/memory/reconcile';
 import { DEFAULT_MAINTENANCE_SETTINGS, reviewSchedule } from '@/lib/maintenance/policy';
 import { LocalMaintenanceStore } from '@/lib/maintenance/local-store';
 import { mutationMemoryIds, mutationPayloadHash, prepareMutation } from '@/lib/maintenance/mutations';
-import type { MaintenanceStore, MemoryMutationPort, MutationCommitData, MutationRequest, MutationResult } from '@/lib/maintenance/store';
+import type { MaintenanceMemoryPage, MaintenanceMemorySource, MaintenanceStore, MutationCommitData, MutationRequest, MutationResult } from '@/lib/maintenance/store';
 import type { Storage } from '@/lib/paths';
 import { resolveStorage } from '@/lib/paths';
 
@@ -96,11 +96,11 @@ function insertFts(db: Database.Database, memory: Memory): void {
 
 function selectRow(db: Database.Database, projectId: string, idOrName: string): MemoryRow | undefined {
   return db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path,
-    content_hash, created_at, updated_at FROM memories
+    content_hash, status, created_at, updated_at FROM memories
     WHERE project_id = ? AND (id = ? OR name = ?) LIMIT 1`).get(projectId, idOrName, idOrName) as MemoryRow | undefined;
 }
 
-export class MemoryService implements MemoryMutationPort {
+export class MemoryService implements MaintenanceMemorySource {
   readonly maintenanceStore: MaintenanceStore;
 
   private constructor(private readonly db: Database.Database, private readonly storage: Storage) {
@@ -211,6 +211,39 @@ export class MemoryService implements MemoryMutationPort {
     const row = selectRow(this.db, project, idOrName);
     if (!row) throw new MemoryNotFoundError(idOrName);
     return this.hydrate(row);
+  }
+
+  async listMaintenanceMemories(projectId: string, after?: string, limit = 100): Promise<MaintenanceMemoryPage> {
+    const project = this.requireProject(projectId);
+    const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const rows = this.db.prepare(`SELECT id, project_id, name, type, description, body_chars, file_path, content_hash,
+      status, last_reviewed_at, next_review_at, archived_at, archive_reason, archived_by, created_at, updated_at
+      FROM memories WHERE project_id = ? AND status = 'active' AND (? IS NULL OR id > ?)
+      ORDER BY id ASC LIMIT ?`).all(project, after ?? null, after ?? null, bounded + 1) as MemoryRow[];
+    const hasMore = rows.length > bounded;
+    const pageRows = rows.slice(0, bounded);
+    const items = pageRows.map((row) => {
+      const raw = readFileSync(row.file_path, 'utf8');
+      const memory = parseMemoryString(raw);
+      if ((memory.status ?? 'active') !== 'active') throw new Error('maintenance memory status is inconsistent');
+      return { memory, content_hash: computeHash(raw) };
+    });
+    return { items, next_after: hasMore ? pageRows[pageRows.length - 1]!.id : null };
+  }
+
+  async getMaintenanceMemory(projectId: string, memoryId: string) {
+    const project = this.requireProject(projectId);
+    const row = selectRow(this.db, project, memoryId);
+    if (!row) return null;
+    const raw = readFileSync(row.file_path, 'utf8');
+    const memory = parseMemoryString(raw);
+    if ((row.status ?? 'active') !== (memory.status ?? 'active')) throw new Error('maintenance memory status is inconsistent');
+    return { memory, content_hash: computeHash(raw) };
+  }
+
+  async maintenanceNameExists(projectId: string, name: string): Promise<boolean> {
+    const project = this.requireProject(projectId);
+    return Boolean(this.db.prepare('SELECT 1 FROM memories WHERE project_id = ? AND name = ? LIMIT 1').get(project, name));
   }
 
   listByType(projectId: string, type: Memory['type'], limit = 100): Memory[] {

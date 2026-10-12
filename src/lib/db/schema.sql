@@ -160,3 +160,14 @@ CREATE TABLE IF NOT EXISTS maintenance_operations (
   created_at TEXT NOT NULL,
   PRIMARY KEY(project_id, operation_id)
 );
+
+CREATE TABLE IF NOT EXISTS maintenance_link_observations (
+  project_id TEXT NOT NULL,
+  memory_id TEXT NOT NULL,
+  dst_name TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  PRIMARY KEY(project_id, memory_id, dst_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_maintenance_link_observations_memory
+  ON maintenance_link_observations(project_id, memory_id);

@@ -139,6 +139,59 @@ test('CloudMemoryService save はURL出典を構造化しsource_refsと分離し
   expect(await service.get('demo', saved.id)).toMatchObject({ sources: saved.sources, source_refs: saved.source_refs });
 });
 
+test('maintenance cloud pages use canonical active records and Firestore link observations persist', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const markdown = new FakeMarkdownStore();
+  const firestore = new FakeFirestore();
+  const metadata = new FirestoreMetadataStore(firestore);
+  await metadata.createProject('demo', 'owner');
+  const service = new CloudMemoryService(Promise.resolve(index), markdown, metadata, new KeyedMutex(), 'projects');
+  const first = await service.save('demo', { name: 'first-memory', description: 'first', type: 'project', body: 'First fact.' });
+  const second = await service.save('demo', { name: 'second-memory', description: 'second', type: 'project', body: 'Second fact.' });
+  const settings = await service.maintenanceStore.saveSettings('demo', { ...DEFAULT_MAINTENANCE_SETTINGS, enabled: true }, 0);
+
+  const firstPage = await service.listMaintenanceMemories('demo', undefined, 1);
+  expect(firstPage.items).toHaveLength(1);
+  expect(firstPage.next_after).toBe(firstPage.items[0]!.memory.id);
+  const secondPage = await service.listMaintenanceMemories('demo', firstPage.next_after ?? undefined, 1);
+  expect(secondPage.items).toHaveLength(1);
+  expect(secondPage.next_after).toBeNull();
+
+  const secondRecord = await metadata.getMemoryIndex('demo', second.id);
+  const archived = await service.applyMutationAsync({
+    operation_id: 'archive-cloud-page-memory', project_id: 'demo',
+    expected_hashes: { [second.id]: secondRecord!.content_hash }, expected_settings_version: settings.version,
+    action: { type: 'archive', memory_id: second.id, archive_reason: 'completed' },
+    reason_code: 'completed', now: '2026-10-12T00:00:00.000Z',
+  });
+  expect(archived.outcome).toBe('applied');
+  expect((await service.listMaintenanceMemories('demo')).items.map((item) => item.memory.id)).toEqual([first.id]);
+  await expect(service.getMaintenanceMemory('demo', second.id)).resolves.toMatchObject({ memory: { status: 'archived' } });
+  await expect(service.maintenanceNameExists('demo', second.name)).resolves.toBe(true);
+
+  const observation = await metadata.observeMaintenanceLinkIfAbsent('demo', first.id, 'future-memory', '2026-09-01T00:00:00.000Z');
+  await expect(metadata.observeMaintenanceLinkIfAbsent('demo', first.id, 'future-memory', '2026-10-01T00:00:00.000Z'))
+    .resolves.toEqual(observation);
+  await metadata.clearMaintenanceLinkObservation('demo', first.id, 'future-memory');
+  await expect(metadata.getMaintenanceLinkObservation('demo', first.id, 'future-memory')).resolves.toBeNull();
+
+  const linkOwner = await service.save('demo', {
+    name: 'link-owner', description: 'link owner', type: 'project', links: ['existing-target'], body: 'Keep resolved links.',
+  });
+  await service.save('demo', { name: 'existing-target', description: 'target', type: 'project', body: 'Target is present.' });
+  await service.maintenanceStore.observeLinkIfAbsent('demo', linkOwner.id, 'existing-target', '2026-09-01T00:00:00.000Z');
+  const linkOwnerRecord = await metadata.getMemoryIndex('demo', linkOwner.id);
+  const prune = await service.applyMutationAsync({
+    operation_id: 'cloud-cannot-prune-existing-target', project_id: 'demo',
+    expected_hashes: { [linkOwner.id]: linkOwnerRecord!.content_hash }, expected_settings_version: settings.version,
+    action: { type: 'prune_links', memory_id: linkOwner.id, names: ['existing-target'] },
+    reason_code: 'missing_link', now: '2026-10-12T00:00:00.000Z',
+  });
+  expect(prune.outcome).toBe('conflict');
+  await expect(service.get('demo', linkOwner.id)).resolves.toMatchObject({ links: ['existing-target'] });
+});
+
 test('CloudMemoryService mutation は旧GCS本文をrevisionへ保持し、current metadataを更新する', async () => {
   const index = openLocalDb(':memory:');
   resources.push(index);

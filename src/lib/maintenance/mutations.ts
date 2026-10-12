@@ -8,6 +8,7 @@ import { sourcesFromBody } from '@/lib/markdown/frontmatter';
 import type { MutationAction, MutationRequest } from '@/lib/maintenance/store';
 
 export function mutationPayloadHash(request: MutationRequest): string {
+  if (request.idempotency_hash) return request.idempotency_hash;
   const stableRequest = {
     operation_id: request.operation_id,
     project_id: request.project_id,
@@ -98,7 +99,9 @@ export function prepareMutation(
     const target = currentMemories.get(action.target_id);
     const source = currentMemories.get(action.source_id);
     if (!target || !source || target.id === source.id) throw new Error('merge target and source must exist and differ');
-    return [withPatch(target, action.patch, request.now, settings), archive(source, 'merged', request.now)];
+    const archiveReason = action.archive_reason ?? 'merged';
+    const merged = withPatch(target, action.patch, request.now, settings);
+    return [MemorySchema.parse({ ...merged, ...(action.sources ? { sources: action.sources } : {}) }), archive(source, `merged:${target.id}:${archiveReason}`, request.now)];
   }
 
   const current = currentMemories.get(action.memory_id);
@@ -108,12 +111,15 @@ export function prepareMutation(
       return [MemorySchema.parse({
         ...current,
         ...(action.sources ? { sources: action.sources } : {}),
-        ...(action.review_state === 'confirmed' ? { last_reviewed_at: request.now } : {}),
+        ...(action.review_state === 'confirmed' || action.review_state === 'ambiguous' ? { last_reviewed_at: request.now } : {}),
         next_review_at: action.next_review_at,
         updated_at: request.now,
       })];
     }
-    case 'patch': return [withPatch(current, action.patch, request.now, settings)];
+    case 'patch': {
+      const patched = withPatch(current, action.patch, request.now, settings);
+      return [MemorySchema.parse({ ...patched, ...(action.sources ? { sources: action.sources } : {}) })];
+    }
     case 'archive': return [archive(current, action.archive_reason, request.now)];
     case 'prune_links': {
       const removed = new Set(action.names);

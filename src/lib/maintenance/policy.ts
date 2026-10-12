@@ -8,12 +8,19 @@ export const DEFAULT_MAINTENANCE_SETTINGS: MaintenanceSettings = {
   version: 0,
 };
 
+export const RETRY_REVIEW_DAYS = 7;
+export const MISSING_LINK_GRACE_DAYS = 30;
+
 function addUtcDays(anchor: string, days: number): string {
   const timestamp = Date.parse(anchor);
   if (!Number.isFinite(timestamp)) throw new Error('review anchor must be a valid timestamp');
   const date = new Date(timestamp);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString();
+}
+
+export function retryReviewAt(anchor: string): string {
+  return addUtcDays(anchor, RETRY_REVIEW_DAYS);
 }
 
 export function reviewSchedule(

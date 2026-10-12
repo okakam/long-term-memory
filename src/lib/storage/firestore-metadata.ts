@@ -6,9 +6,9 @@ import { getFirebaseAdminApp } from '@/lib/auth/firebase';
 import { MemoryConflictError } from '@/lib/memory/types';
 import type { Entity, MemoryStatus, MemoryType, Triple } from '@/lib/memory/types';
 import { assertMemoryName, assertProjectId } from '@/lib/slug';
-import { DEFAULT_MAINTENANCE_SETTINGS } from '@/lib/maintenance/policy';
+import { DEFAULT_MAINTENANCE_SETTINGS, MISSING_LINK_GRACE_DAYS } from '@/lib/maintenance/policy';
 import { MaintenanceSettingsSchema, type MaintenanceSettings } from '@/lib/maintenance/types';
-import type { MaintenanceEvent, MemoryRevision, MutationCommitData, MutationResult } from '@/lib/maintenance/store';
+import type { LinkObservation, MaintenanceEvent, MemoryRevision, MutationCommitData, MutationResult } from '@/lib/maintenance/store';
 
 export interface FirestoreDocument {
   id: string;
@@ -200,6 +200,14 @@ function maintenanceEventsPath(projectId: string): string {
 
 function maintenanceOperationsPath(projectId: string): string {
   return documentPath(maintenancePath(projectId), 'operations');
+}
+
+function maintenanceLinkObservationsPath(projectId: string): string {
+  return documentPath(maintenancePath(projectId), 'linkObservations');
+}
+
+function linkObservationDocumentId(memoryId: string, dstName: string): string {
+  return createHash('sha256').update(`${memoryId}\0${dstName}`, 'utf8').digest('hex');
 }
 
 function memoryRevisionsPath(projectId: string, memoryId: string): string {
@@ -402,6 +410,15 @@ function maintenanceEventRecord(document: FirestoreDocument): MaintenanceEvent {
   };
 }
 
+function linkObservationRecord(document: FirestoreDocument): LinkObservation {
+  const data = asRecord(document.data(), document.path);
+  return {
+    memory_id: asString(data.memory_id, `${document.path}.memory_id`),
+    dst_name: asString(data.dst_name, `${document.path}.dst_name`),
+    first_seen_at: asIso(data.first_seen_at, `${document.path}.first_seen_at`),
+  };
+}
+
 function memoryData(record: MemoryIndexRecord): Record<string, unknown> {
   return { ...record };
 }
@@ -439,6 +456,35 @@ export class FirestoreMetadataStore {
         ? right.created_at.localeCompare(left.created_at) || right.operation_id.localeCompare(left.operation_id)
         : left.created_at.localeCompare(right.created_at) || left.operation_id.localeCompare(right.operation_id));
     return events.slice(0, bounded);
+  }
+
+  async getMaintenanceLinkObservation(projectId: string, memoryId: string, dstName: string): Promise<LinkObservation | null> {
+    const path = documentPath(maintenanceLinkObservationsPath(projectId), linkObservationDocumentId(memoryId, dstName));
+    const document = await this.gateway.get(path);
+    return document.exists ? linkObservationRecord(document) : null;
+  }
+
+  async observeMaintenanceLinkIfAbsent(
+    projectId: string,
+    memoryId: string,
+    dstName: string,
+    firstSeenAt: string,
+  ): Promise<LinkObservation> {
+    const path = documentPath(maintenanceLinkObservationsPath(projectId), linkObservationDocumentId(memoryId, dstName));
+    const parsedTime = new Date(firstSeenAt);
+    if (Number.isNaN(parsedTime.getTime())) throw new Error('link observation timestamp must be valid');
+    return this.gateway.runTransaction(async (transaction) => {
+      const document = await transaction.get(path);
+      if (document.exists) return linkObservationRecord(document);
+      const record = { memory_id: memoryId, dst_name: dstName, first_seen_at: parsedTime.toISOString() };
+      await transaction.set(path, record);
+      return record;
+    });
+  }
+
+  async clearMaintenanceLinkObservation(projectId: string, memoryId: string, dstName: string): Promise<void> {
+    const path = documentPath(maintenanceLinkObservationsPath(projectId), linkObservationDocumentId(memoryId, dstName));
+    await this.gateway.delete(path);
   }
 
   async listMemoryRevisions(projectId: string, memoryId: string): Promise<MemoryRevision[]> {
@@ -530,7 +576,25 @@ export class FirestoreMetadataStore {
       const namePaths = new Map<string, string>();
       for (const record of records) namePaths.set(record.name, documentPath(namesPath(projectId), nameDocumentId(record.name)));
       for (const current of currentRecords.values()) namePaths.set(current.name, documentPath(namesPath(projectId), nameDocumentId(current.name)));
+      if (data.request.action.type === 'prune_links') {
+        for (const name of data.request.action.names) namePaths.set(name, documentPath(namesPath(projectId), nameDocumentId(name)));
+      }
       for (const [name, path] of namePaths) nameDocuments.set(name, await transaction.get(path));
+      if (data.request.action.type === 'prune_links') {
+        const currentMemory = currentRecords.get(data.request.action.memory_id);
+        const nowMs = Date.parse(data.request.now);
+        for (const name of data.request.action.names) {
+          const observationPath = documentPath(maintenanceLinkObservationsPath(projectId), linkObservationDocumentId(data.request.action.memory_id, name));
+          const observationDocument = await transaction.get(observationPath);
+          const observation = observationDocument.exists ? linkObservationRecord(observationDocument) : null;
+          const firstSeen = observation ? Date.parse(observation.first_seen_at) : Number.NaN;
+          if (!currentMemory?.links.includes(name) || nameDocuments.get(name)?.exists
+            || !Number.isFinite(nowMs) || !Number.isFinite(firstSeen)
+            || nowMs - firstSeen < MISSING_LINK_GRACE_DAYS * 24 * 60 * 60 * 1000) {
+            return { operation_id: data.request.operation_id, outcome: 'conflict', memory_ids: [], revision_ids: [] };
+          }
+        }
+      }
       for (const record of records) {
         const existing = nameDocuments.get(record.name);
         if (existing?.exists && nameRecord(existing).memory_id !== record.id) {

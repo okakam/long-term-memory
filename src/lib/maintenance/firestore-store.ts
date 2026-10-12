@@ -6,6 +6,7 @@ import { FirestoreMetadataStore, type MemoryIndexRecord } from '@/lib/storage/fi
 import type { MaintenanceSettings } from '@/lib/maintenance/types';
 import type {
   MaintenanceEvent,
+  LinkObservation,
   MaintenanceStore,
   MemoryRevision,
   MutationCommitData,
@@ -35,6 +36,18 @@ export class FirestoreMaintenanceStore implements MaintenanceStore {
 
   listRevisions(projectId: string, memoryId: string): Promise<MemoryRevision[]> {
     return this.metadata.listMemoryRevisions(assertProjectId(projectId), memoryId);
+  }
+
+  getLinkObservation(projectId: string, memoryId: string, dstName: string): Promise<LinkObservation | null> {
+    return this.metadata.getMaintenanceLinkObservation(assertProjectId(projectId), memoryId, dstName);
+  }
+
+  observeLinkIfAbsent(projectId: string, memoryId: string, dstName: string, firstSeenAt: string): Promise<LinkObservation> {
+    return this.metadata.observeMaintenanceLinkIfAbsent(assertProjectId(projectId), memoryId, dstName, firstSeenAt);
+  }
+
+  clearLinkObservation(projectId: string, memoryId: string, dstName: string): Promise<void> {
+    return this.metadata.clearMaintenanceLinkObservation(assertProjectId(projectId), memoryId, dstName);
   }
 
   async readRevision(projectId: string, memoryId: string, revisionId: string): Promise<{ revision: MemoryRevision; body: string } | null> {

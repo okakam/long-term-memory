@@ -11,6 +11,7 @@ const declaredTables = [...schema.matchAll(/CREATE\s+(?:VIRTUAL\s+)?TABLE\s+IF\s
 test('schema.sql の全テーブルと仮想テーブルを再構築対象へ列挙する', () => {
   expect(new Set(REBUILDABLE_TABLES)).toEqual(new Set(declaredTables.filter((name) => ![
     'schema_version', 'memory_tombstones', 'maintenance_settings', 'memory_revisions', 'maintenance_events', 'maintenance_operations',
+    'maintenance_link_observations',
   ].includes(name))));
   expect(REBUILDABLE_TABLES).toEqual([
     'entity_edges',
@@ -31,4 +32,5 @@ test('schema.sql は contentless trigram FTS と schema_version を宣言する'
   expect(schema).toContain('CREATE TABLE IF NOT EXISTS memory_tombstones');
   expect(schema).toContain('CREATE TABLE IF NOT EXISTS maintenance_settings');
   expect(schema).toContain('CREATE TABLE IF NOT EXISTS memory_revisions');
+  expect(schema).toContain('CREATE TABLE IF NOT EXISTS maintenance_link_observations');
 });
