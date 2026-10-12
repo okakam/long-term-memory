@@ -55,7 +55,12 @@ function targetPage(after?: string): CurationPage {
   };
 }
 
-function fixture(sourcePages: CurationPage[], restoreRequests: Array<Record<string, unknown>> = [], completeAdvanced = true) {
+function fixture(
+  sourcePages: CurationPage[],
+  restoreRequests: Array<Record<string, unknown>> = [],
+  completeAdvanced = true,
+  restoreResultState: 'pending' | 'succeeded' = 'succeeded',
+) {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
   let sourcePageIndex = 0;
   const fetcher = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
@@ -68,7 +73,7 @@ function fixture(sourcePages: CurationPage[], restoreRequests: Array<Record<stri
     if (name === 'curation_checkpoint' && args.action === 'restore_requests') return response({ requests: restoreRequests });
     if (name === 'curation_apply' && typeof args.restore_request_id === 'string') {
       const pending = restoreRequests.find((item) => item.id === args.restore_request_id);
-      return response({ ...pending, state: 'succeeded', completed_at: '2026-10-12T01:00:00.000Z' });
+      return response({ ...pending, state: restoreResultState, ...(restoreResultState === 'succeeded' ? { completed_at: '2026-10-12T01:00:00.000Z' } : {}) });
     }
     if (name === 'curation_checkpoint' && args.action === 'restore_result') {
       const request = restoreRequests.find((item) => item.id === args.request_id);
@@ -190,4 +195,21 @@ test('write run applies queued shared restore through curation gate and reports 
   expect(calls).toContainEqual({ name: 'curation_checkpoint', args: {
     project_id: '__shared__', action: 'restore_result', request_id: request.id, state: 'succeeded',
   } });
+});
+
+test('write run leaves transiently unavailable restore requests pending for retry', async () => {
+  const request = {
+    id: '01J9C7Q4VY3E5M8H2N6K0P1RAB', memory_id: 'shared-memory-1', revision_id: 'revision-1',
+    expected_hash: 'a'.repeat(64), requested_by: 'curator', state: 'pending', requested_at: '2026-10-12T00:00:00.000Z',
+  };
+  const { calls, fetcher } = fixture([sourcePage([], 0, null)], [request], true, 'pending');
+  const summary = await runDatedCuration({
+    client: { baseUrl: 'https://ltm.example.test', bearerToken: 'curator-token', operationMode: 'curation', maintenanceToken: 'maintenance-token', fetcher },
+    window,
+    propose: async () => [],
+  });
+
+  expect(summary.failed).toBe(0);
+  expect(calls.some((call) => call.name === 'curation_checkpoint' && call.args.action === 'restore_result')).toBe(false);
+  expect(calls.some((call) => call.name === 'curation_snapshot' && call.args.view === 'sources')).toBe(true);
 });

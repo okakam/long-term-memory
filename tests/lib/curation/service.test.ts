@@ -40,10 +40,15 @@ function setup(total: number) {
   const source = {
     curationStore,
     listCurationMemories,
-    listMaintenanceMemories: vi.fn(async () => ({ items: [], next_after: null })),
+    listMaintenanceMemories: vi.fn(async (projectId: string, after: string | undefined, limit = 25) => ({
+      items: records.filter(({ memory: item }) => projectId === '__shared__' && (after === undefined || item.id > after)).slice(0, limit),
+      next_after: null,
+    })),
+    getMaintenanceMemory: vi.fn(async (_projectId: string, memoryId: string) =>
+      records.find(({ memory: item }) => item.id === memoryId) ?? null),
   } as unknown as MemoryServiceLike;
   const service = new CurationService(source, () => now);
-  return { service, curationStore, listCurationMemories, records };
+  return { service, curationStore, listCurationMemories, records, source };
 }
 
 beforeEach(() => {
@@ -107,6 +112,53 @@ test('dry-run without explicit dates starts from the current per-project cursor'
     expect(page.window.from).toBe('2026-10-05T00:00:00.000Z');
     expect(await curationStore.getRun(page.run_id)).toBeNull();
     expect(await curationStore.getCursor('alpha')).toBe('2026-10-05T00:00:00.000Z');
+  } finally {
+    curationStore.close();
+  }
+});
+
+test('changed sources from apply conflicts are queued with their current hash for re-evaluation', async () => {
+  const { service, curationStore, records } = setup(1);
+  try {
+    const page = await service.sourceSnapshot({ project_id: 'alpha', window: { mode: 'schedule', dry_run: false } });
+    const currentHash = 'f'.repeat(64);
+    records[0].content_hash = currentHash;
+    records[0].memory.body = 'Changed after the curation snapshot.';
+
+    await service.recordOutcomes('alpha', page.run_id, page.page_index, [{
+      source_memory_id: records[0].memory.id, outcome: 'skipped', reason_code: 'apply_conflict',
+    }]);
+
+    await expect(curationStore.listDeferred('alpha')).resolves.toMatchObject([{
+      source_memory_id: records[0].memory.id, content_hash: currentHash, reason_code: 'apply_conflict',
+    }]);
+  } finally {
+    curationStore.close();
+  }
+});
+
+test('shared target snapshots reduce page size until the JSON limit is met', async () => {
+  const { service, curationStore, source } = setup(0);
+  const targets = Array.from({ length: 3 }, (_, index) => ({
+    memory: { ...memory(`target-${index}`), body: 'x'.repeat(100 * 1024) },
+    content_hash: String(index).padStart(64, 'a'),
+  }));
+  const requestedLimits: number[] = [];
+  vi.mocked(source.listMaintenanceMemories).mockImplementation(async (_projectId, after, limit = 25) => {
+    requestedLimits.push(limit);
+    const offset = after ? targets.findIndex(({ memory: item }) => item.id === after) + 1 : 0;
+    const selected = targets.slice(offset, offset + limit);
+    return {
+      items: selected,
+      next_after: offset + selected.length < targets.length ? selected.at(-1)?.memory.id ?? null : null,
+    };
+  });
+  try {
+    const page = await service.targetSnapshot();
+    expect(page.memories).toHaveLength(1);
+    expect(page.memories[0].memory.id).toBe('target-0');
+    expect(page.next_page).toBeTruthy();
+    expect(requestedLimits).toEqual([25, 12, 6, 3, 1]);
   } finally {
     curationStore.close();
   }

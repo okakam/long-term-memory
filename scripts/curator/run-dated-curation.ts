@@ -155,12 +155,14 @@ export async function runDatedCuration(options: CurationRunnerOptions): Promise<
         const result = await callMcpTool<SharedRestoreRequest>(options.client, 'curation_apply', {
           project_id: '__shared__', restore_request_id: request.id,
         });
-        if (!result || result.id !== request.id || !['succeeded', 'failed'].includes(result.state)) throw new McpClientError();
-        await callMcpTool(options.client, 'curation_checkpoint', {
-          project_id: '__shared__', action: 'restore_result', request_id: request.id,
-          state: result.state,
-          ...(result.failure_reason ? { failure_reason: result.failure_reason } : {}),
-        });
+        if (!result || result.id !== request.id || !['pending', 'succeeded', 'failed'].includes(result.state)) throw new McpClientError();
+        if (result.state !== 'pending') {
+          await callMcpTool(options.client, 'curation_checkpoint', {
+            project_id: '__shared__', action: 'restore_result', request_id: request.id,
+            state: result.state,
+            ...(result.failure_reason ? { failure_reason: result.failure_reason } : {}),
+          });
+        }
       }
     } catch {
       summary.failed += 1;

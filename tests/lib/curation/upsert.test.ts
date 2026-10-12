@@ -131,3 +131,41 @@ test('candidate secrets and identifiers are skipped before shared storage', asyn
   await expect(curation.applyProposal(candidate)).resolves.toMatchObject({ outcome: 'no_op' });
   expect(service.listProjects().find((project) => project.id === '__shared__')?.count ?? 0).toBe(0);
 });
+
+test('source structured fields are checked before shared storage', async () => {
+  const { service } = fixture();
+  const source = service.save('alpha', {
+    name: 'structured-guideline', description: 'Reusable guideline', type: 'reference',
+    body: 'Shared guidance: keep workspace job inputs versioned.',
+    entities: [{ name: 'Maintainer', aliases: ['person@example.test'] }],
+  });
+  const candidate = await proposalFor(service, source.name);
+  const curation = new CurationService(service, () => new Date(Date.now() + 60_000).toISOString());
+
+  await expect(curation.applyProposal(candidate)).resolves.toMatchObject({ outcome: 'no_op' });
+  expect(service.listProjects().find((project) => project.id === '__shared__')?.count ?? 0).toBe(0);
+});
+
+test('proposal structured fields are checked before shared storage', async () => {
+  const { service } = fixture();
+  const source = service.save('alpha', {
+    name: 'structured-guideline', description: 'Reusable guideline', type: 'reference',
+    body: 'Shared guidance: keep workspace job inputs versioned.',
+  });
+  const candidate = await proposalFor(service, source.name);
+  candidate.memory = {
+    ...candidate.memory,
+    tags: ['workspace', 'access_token=private-value'],
+    links: ['https://example.test/person@example.test'],
+    entities: [
+      { name: 'service', aliases: ['person@example.test'] },
+      { name: 'api_key=private-value', aliases: [] },
+    ],
+    triples: [['service', 'uses', 'api_key=private-value']],
+    supersedes: ['password=private-value'],
+  };
+  const curation = new CurationService(service, () => new Date(Date.now() + 60_000).toISOString());
+
+  await expect(curation.applyProposal(candidate)).resolves.toMatchObject({ outcome: 'no_op' });
+  expect(service.listProjects().find((project) => project.id === '__shared__')?.count ?? 0).toBe(0);
+});

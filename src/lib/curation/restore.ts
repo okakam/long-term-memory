@@ -66,7 +66,7 @@ export async function applySharedRestore(
       }
     }
   } catch {
-    failureReason = 'restore_unavailable';
+    return request;
   }
 
   return service.curationStore.completeRestoreRequest(request.id, {

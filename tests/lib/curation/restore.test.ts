@@ -92,3 +92,25 @@ test('restore request applies once with a stable mutation operation id', async (
     store.close();
   }
 });
+
+test.each(['getMaintenanceMemory', 'listRevisionsAsync', 'applyMutationAsync'] as const)(
+  'transient %s errors keep the restore request pending for a later write run', async (operation) => {
+    const { service, store } = fixture();
+    try {
+      const request = await store.createRestoreRequest({
+        memory_id: memoryId, revision_id: revision.id, expected_hash: hash, requested_by: 'curator', requested_at: '2026-10-12T00:00:00.000Z',
+      });
+      vi.mocked(service[operation]).mockRejectedValueOnce(new Error('temporary storage failure'));
+
+      const pending = await applySharedRestore(request.id, service, '2026-10-12T01:00:00.000Z');
+      expect(pending).toMatchObject({ id: request.id, state: 'pending' });
+      expect(pending).not.toHaveProperty('completed_at');
+      await expect(store.getRestoreRequest(request.id)).resolves.toMatchObject({ state: 'pending' });
+      await expect(applySharedRestore(request.id, service, '2026-10-12T02:00:00.000Z')).resolves.toMatchObject({
+        id: request.id, state: 'succeeded',
+      });
+    } finally {
+      store.close();
+    }
+  },
+);

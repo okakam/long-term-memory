@@ -246,8 +246,14 @@ export class CurationService {
       if (typeof cursor.after !== 'string') throw new Error('curation target cursor is malformed');
       afterId = cursor.after;
     }
-    const page = await this.source.listMaintenanceMemories(SHARED_PROJECT_ID, afterId, PAGE_SIZE);
-    const memories = page.items.map(({ memory, content_hash }) => ({ memory, content_hash }));
+    let limit = PAGE_SIZE;
+    let page = await this.source.listMaintenanceMemories(SHARED_PROJECT_ID, afterId, limit);
+    let memories = page.items.map(({ memory, content_hash }) => ({ memory, content_hash }));
+    while (pageJsonBytes(memories) > PAGE_BYTES && page.items.length > 1) {
+      limit = Math.max(1, Math.floor(limit / 2));
+      page = await this.source.listMaintenanceMemories(SHARED_PROJECT_ID, afterId, limit);
+      memories = page.items.map(({ memory, content_hash }) => ({ memory, content_hash }));
+    }
     if (pageJsonBytes(memories) > PAGE_BYTES) throw new Error('shared curation target page exceeds size limit');
     return {
       view: 'targets',
@@ -270,9 +276,25 @@ export class CurationService {
       throw new Error('curation run is unavailable');
     }
     await this.source.curationStore.recordOutcomes(runId, pageIndex, outcomes);
+    const now = this.now();
     for (const outcome of outcomes) {
-      const remainsDeferred = outcome.outcome === 'skipped'
-        && (outcome.reason_code === 'shared_cap' || outcome.reason_code === 'apply_conflict');
+      if (outcome.outcome === 'skipped' && outcome.reason_code === 'apply_conflict') {
+        const current = await this.source.getMaintenanceMemory(sourceProjectId, outcome.source_memory_id);
+        if (current && (current.memory.status ?? 'active') === 'active') {
+          await this.source.curationStore.saveDeferred({
+            source_project_id: sourceProjectId,
+            source_memory_id: outcome.source_memory_id,
+            content_hash: current.content_hash,
+            reason_code: 'apply_conflict',
+            created_at: now,
+            updated_at: now,
+          });
+        } else {
+          await this.source.curationStore.deleteDeferred(sourceProjectId, outcome.source_memory_id);
+        }
+        continue;
+      }
+      const remainsDeferred = outcome.outcome === 'skipped' && outcome.reason_code === 'shared_cap';
       if (!remainsDeferred) await this.source.curationStore.deleteDeferred(sourceProjectId, outcome.source_memory_id);
     }
   }
@@ -319,11 +341,8 @@ export class CurationService {
     }
     if (proposal.source_refs.some((ref) => !citations.has(ref.memory_id))) return conflict();
 
-    const sourceText = proposal.source_refs.map((ref) => {
-      const source = sourceById.get(ref.memory_id)!;
-      return `${source.name}\n${source.description}\n${source.body}`;
-    }).join('\n');
-    const candidateText = `${proposal.memory.name}\n${proposal.memory.description}\n${proposal.memory.body}`;
+    const sourceText = JSON.stringify([...sourceById.values()]);
+    const candidateText = JSON.stringify(proposal.memory);
     if (!safeToShare(sourceText) || !safeToShare(candidateText)) {
       for (const ref of proposal.source_refs) await this.source.curationStore.deleteDeferred(ref.project_id, ref.memory_id);
       return { outcome: 'no_op', operation_id: operationId };

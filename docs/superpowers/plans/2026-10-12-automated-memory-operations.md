@@ -71,3 +71,5 @@ Dashboardの通常project復元はowner認可で直接行う。shared復元はFi
 ## 今回の到達点
 
 第1段階は`10ef659`〜`4146300`で実装済み。第2段階の共通curation・shared restore・workflow・運用資料も実装し、ローカル受入を完了した。Cloud Runへのdeploy、GitHub/self-hosted runner secrets設定、credentialed smoke、PRは未実施。Docker Compose検証はCLI pluginがないため未実行。
+
+実装後の独立レビューで見つかった4件（構造化フィールドの機密filter漏れ、source hash競合の再評価漏れ、target page byte上限、一時restore障害のterminal化）を修正した。再レビューですべて解消し、新たなCritical/Important指摘なし。最終差分で対象回帰テスト24件、全テスト116 files/396 tests、lint、型検査、本番buildを実行して成功を確認した。
