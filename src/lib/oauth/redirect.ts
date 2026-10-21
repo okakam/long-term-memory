@@ -1,3 +1,5 @@
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost']);
+
 function parseUrl(value: string): URL | null {
   try {
     return new URL(value);
@@ -6,19 +8,22 @@ function parseUrl(value: string): URL | null {
   }
 }
 
+function isLoopbackHttp(url: URL): boolean {
+  return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
+}
+
 export function validateDcrRedirectUri(value: string): URL {
   const url = parseUrl(value);
   if (!url
-    || !/^http:\/\/127\.0\.0\.1(?::[0-9]+)?\//.test(value)
-    || url.protocol !== 'http:'
-    || url.hostname !== '127.0.0.1'
+    || !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::[0-9]+)?\//.test(value)
+    || !isLoopbackHttp(url)
     || url.port === '0'
     || url.pathname === '/'
     || url.search
     || url.hash
     || url.username
     || url.password) {
-    throw new Error('redirect URI must be a valid http://127.0.0.1 callback');
+    throw new Error('redirect URI must be a valid http://127.0.0.1 or http://localhost callback');
   }
   return url;
 }
@@ -28,15 +33,16 @@ export function redirectUriMatches(registered: string, requested: string): boole
   const right = parseUrl(requested);
   if (!left || !right) return false;
 
-  if (left.protocol === 'http:' && left.hostname === '127.0.0.1'
-    && right.protocol === 'http:' && right.hostname === '127.0.0.1') {
+  if (isLoopbackHttp(left) && isLoopbackHttp(right)) {
     try {
       validateDcrRedirectUri(registered);
       validateDcrRedirectUri(requested);
     } catch {
       return false;
     }
-    return left.pathname === right.pathname && left.search === right.search;
+    return left.hostname === right.hostname
+      && left.pathname === right.pathname
+      && left.search === right.search;
   }
   return left.href === right.href;
 }

@@ -94,9 +94,22 @@ test('DCRは許可されたloopback callbackだけを登録し、unsupported met
   }));
   expect(validDynamicPort.status).toBe(201);
 
+  const claudeCode = await register(new Request('https://ltm.okakam.net/oauth/register', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      client_name: 'Claude Code (long-term-memory)',
+      redirect_uris: ['http://localhost:53124/callback'],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    }),
+  }));
+  expect(claudeCode.status).toBe(201);
+
   for (const metadata of [
     { redirect_uris: ['http://127.0.0.1:0/callback'] },
-    { redirect_uris: ['http://localhost/callback'] },
+    { redirect_uris: ['http://localhost:0/callback'] },
+    { redirect_uris: ['http://localhost/'] },
     { redirect_uris: ['http://[::1]/callback'] },
     { redirect_uris: [callback], grant_types: ['client_credentials'] },
     { redirect_uris: [callback], response_types: ['token'] },
