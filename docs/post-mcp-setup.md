@@ -1,15 +1,15 @@
 # Claude Code / Codex で long-term-memory MCP を使う
 
-この文書は、Cloud Run の `long-term-memory` MCPをClaude CodeまたはCodex CLIから利用するための、クライアント別の追加設定です。一般のCodex CLI利用者はOAuth認証、Claude Code curator・CI・Cloud Run smokeはPATを使います。設定ファイルと自動リマインダーの仕組みはクライアントごとに異なるため、Claude Codeの`settings.json`/`CLAUDE.md`形式と、Codexの`hooks.json`/`AGENTS.md`形式を混同しないでください。
+この文書は、Cloud Run の `long-term-memory` MCPをClaude CodeまたはCodex CLIから利用するための、クライアント別の追加設定です。一般のClaude Code・Codex CLI利用者はOAuth認証、Claude Code curator・CI・Cloud Run smokeはPATを使います。設定ファイルと自動リマインダーの仕組みはクライアントごとに異なるため、Claude Codeの`settings.json`/`CLAUDE.md`形式と、Codexの`hooks.json`/`AGENTS.md`形式を混同しないでください。
 
 ## 共通の前提
 
 - MCPサーバー名は `long-term-memory`、エンドポイントは `https://<Cloud RunのベースURL>/api/mcp` です。URLに`project_id` queryは付けません。
 - 1つのMCP接続を登録し、`list_projects`で利用可能projectを確認します。`list_projects`と`setup_client_environment`だけがproject指定を省略し、他の15 toolsは各callのtop-level `project_id`で対象を指定し、membershipとtool別権限はcallごとに再検証されます。
 - projectの作成とowner/member管理はDashboardで行います。`__shared__`はread-onlyで、curatorのwriteには許可済みPATとmaintenance tokenが必要です。
-- Codexの通常利用はDCR/PKCE OAuthで行い、PAT本文を入力・環境変数へ保存しません。ブラウザのFirebaseログインと同意画面を完了すると、Codexがaccess/refresh tokenを管理します。
+- Claude CodeとCodexの通常利用はDCR/PKCE OAuthで行い、PAT本文を入力・環境変数へ保存しません。ブラウザのFirebaseログインと同意画面を完了すると、各クライアントがaccess/refresh tokenを管理します。OAuth callbackはCodexの`http://127.0.0.1[:port]/<path>`とClaude Codeの`http://localhost[:port]/<path>`だけを受け付けます。
 - PATは`/settings/tokens`で発行します。本文は発行直後に一度だけ表示され、Claude Code curator・CI・Cloud Run smokeの機械接続だけで使います。チャット、repository、ログへ貼り付けません。
-- OAuth接続は`/settings/tokens`の`Codex / OAuth 接続`から失効できます。失効後はOAuth grantのaccess tokenとrefresh tokenが使えなくなります。
+- OAuth接続はClaude Code・Codexとも`/settings/tokens`の`Codex / OAuth 接続`から失効できます。失効後はOAuth grantのaccess tokenとrefresh tokenが使えなくなります。
 - `docs/mcp-config.cloud-run.json`はcurator接続の設定例です。GitHub Actionsはこのファイルを読み込まず、環境変数を`run-dated-curation.ts`へ渡します。Codexの`~/.codex/config.toml`へそのまま追加するファイルではありません。
 
 ## Dashboardでプロジェクトを作成する
@@ -64,6 +64,21 @@ codex mcp get long-term-memory
 `codex mcp login`が開くブラウザで許可済み`@okakam.net`アカウントを使ってFirebaseへログインし、同意画面でMCP接続を許可します。接続後に`list_projects`を呼び、返された利用可能projectをtool callごとに指定します。OAuth access token、refresh token、authorization code、Firebase ID tokenを環境変数、repository、ログへコピーしないでください。
 
 登録後は次で確認し、起動中のCodexを再起動します。TUIでは`/mcp`でも確認できます。
+
+## Claude Codeの設定
+
+Claude Codeの通常利用もOAuthで接続します。user scopeへheaderなしのHTTP MCPサーバーを登録し、Claude Codeの`/mcp`からブラウザログインします。
+
+```bash
+export MCP_PUBLIC_URL='https://ltm.okakam.net'
+
+claude mcp add --transport http --scope user long-term-memory \
+  "${MCP_PUBLIC_URL%/}/api/mcp"
+```
+
+Claude Codeを起動して`/mcp`を開き、`long-term-memory`を選んで`Authenticate`を実行します。開いたブラウザで許可済み`@okakam.net`アカウントを使ってFirebaseへログインし、同意画面でMCP接続を許可します。access/refresh tokenはClaude Codeが管理するため、`~/.claude.json`や環境変数へtokenを書き込みません。
+
+以前PATの`Authorization` header付きで登録していた場合は、`claude mcp remove --scope user long-term-memory`で削除してから上の手順で再登録し、不要になったPATを`/settings/tokens`で失効します。再認証が必要な場合は`/mcp`の`Re-authenticate`、認証情報の削除は`Clear authentication`を使います。
 
 ## MCP接続後にクライアント設定を適用する
 
