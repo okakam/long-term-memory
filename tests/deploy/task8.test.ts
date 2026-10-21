@@ -144,7 +144,7 @@ test('Cloud Run smokeのinventoryはsetupを含む17 toolsを要求する', () =
   expect(() => assertTools({ result: { tools: expectedTools.slice(0, -1).map((name) => ({ name })) } })).toThrow('unexpected MCP tool catalog');
 });
 
-function stubSmoke(setup: object) {
+function stubSmoke(setup: object, failingTool?: string) {
   vi.stubEnv('CLOUD_RUN_URL', 'https://smoke.example');
   vi.stubEnv('LTM_MCP_TOKEN', 'test-bearer');
   vi.stubEnv('LTM_AUTO_MAINTENANCE_TOKEN', 'test-auto-maintenance');
@@ -165,6 +165,9 @@ function stubSmoke(setup: object) {
     if (request.method === 'initialize') return Response.json({ result: {} });
     const { name, arguments: args } = request.params;
     requests.push({ name, arguments: args, authorization: new Headers(init.headers).get('authorization') });
+    if (name === failingTool) {
+      return Response.json({ result: { isError: true, content: [{ type: 'text', text: 'storage unavailable' }] } });
+    }
     let value: unknown = {};
     if (name === 'setup_client_environment') value = setup;
     if (name === 'list_projects') value = [{ project_id: 'smoke' }];
@@ -198,4 +201,9 @@ test.each([
 ])('Cloud Run smokeは不正setup応答 %j を拒否する', async (patch) => {
   stubSmoke({ ...SETUP_MANIFEST, client: 'codex', ...patch });
   await expect(smoke()).rejects.toThrow('smoke setup');
+});
+
+test('Cloud Run smokeは失敗したtool名とtool error本文を報告する', async () => {
+  stubSmoke({ ...SETUP_MANIFEST, client: 'codex' }, 'remember_reference');
+  await expect(smoke()).rejects.toThrow('MCP tool error (remember_reference): storage unavailable');
 });

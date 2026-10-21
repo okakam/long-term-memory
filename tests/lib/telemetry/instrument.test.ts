@@ -5,7 +5,7 @@ import type { MemoryService } from '@/lib/memory/service';
 import { handleMcpRequest } from '@/lib/mcp/transport';
 import { resetSessionState } from '@/lib/mcp/session';
 import { resetTelemetryStore, setTelemetryStoreForTests, TelemetryStore } from '@/lib/telemetry/store';
-import { measure } from '@/lib/telemetry/instrument';
+import { instrumentRegistrar, measure } from '@/lib/telemetry/instrument';
 
 let db: Database.Database | undefined;
 
@@ -99,4 +99,28 @@ test('失敗 tool と reindex は入力 project を、list_projects は global/m
     ['reindex', 'alpha', 1, 'meta'],
     ['list_projects', '__global__', 1, 'meta'],
   ]);
+});
+
+test('tool失敗は入力を含めずtool名とerror codeをログに出し、internalだけmessageを含める', async () => {
+  const handlers = new Map<string, (input: unknown, extra: unknown) => Promise<unknown>>();
+  const server = {
+    registerTool: (name: string, _config: unknown, handler: (input: unknown, extra: unknown) => Promise<unknown>) => {
+      handlers.set(name, handler);
+    },
+  };
+  const record = vi.fn(async () => undefined);
+  instrumentRegistrar(server as never, 'write', record);
+  server.registerTool('remember_reference', {}, async () => { throw new Error('index store unavailable'); });
+  server.registerTool('get_memory', {}, async () => { throw new Error('memory not found: private-memory'); });
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    await expect(handlers.get('remember_reference')!({ body: 'private body' }, {})).rejects.toThrow();
+    await expect(handlers.get('get_memory')!({ id_or_name: 'private-memory' }, {})).rejects.toThrow();
+    expect(errors.mock.calls.map(([line]) => line)).toEqual([
+      'mcp tool error remember_reference [internal] Error: index store unavailable',
+      'mcp tool error get_memory [not_found] Error',
+    ]);
+  } finally {
+    errors.mockRestore();
+  }
 });
