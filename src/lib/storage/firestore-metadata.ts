@@ -95,6 +95,25 @@ export class FirestoreDataError extends Error {
   }
 }
 
+/**
+ * Firestore rejects `undefined` values, while optional record fields are carried as
+ * `undefined` in memory. Drop them before writing so an absent field stays absent.
+ */
+export function withoutUndefined(data: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue;
+    result[key] = isPlainObject(value) ? withoutUndefined(value) : value;
+  }
+  return result;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 export class AdminFirestoreGateway implements FirestoreGateway {
   constructor(private readonly firestore: Firestore) {}
 
@@ -124,11 +143,11 @@ export class AdminFirestoreGateway implements FirestoreGateway {
   }
 
   async set(path: string, data: Record<string, unknown>, merge = false): Promise<void> {
-    await this.firestore.doc(path).set(data, { merge });
+    await this.firestore.doc(path).set(withoutUndefined(data), { merge });
   }
 
   async update(path: string, data: Record<string, unknown>): Promise<void> {
-    await this.firestore.doc(path).update(data);
+    await this.firestore.doc(path).update(withoutUndefined(data));
   }
 
   async delete(path: string): Promise<void> {
@@ -173,11 +192,11 @@ class AdminFirestoreTransaction implements FirestoreTransaction {
   }
 
   set(path: string, data: Record<string, unknown>, merge = false): void {
-    this.transaction.set(this.firestore.doc(path), data, { merge });
+    this.transaction.set(this.firestore.doc(path), withoutUndefined(data), { merge });
   }
 
   update(path: string, data: Record<string, unknown>): void {
-    this.transaction.update(this.firestore.doc(path), data);
+    this.transaction.update(this.firestore.doc(path), withoutUndefined(data));
   }
 
   delete(path: string): void {
