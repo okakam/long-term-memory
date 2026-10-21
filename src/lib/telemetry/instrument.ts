@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { TOOL_CATALOG } from './catalog';
-import { recordToolCall } from './recorder';
+import { errorCode, recordToolCall } from './recorder';
 import type { TelemetryKind } from './store';
 
 export interface InstrumentContext {
@@ -66,6 +66,17 @@ function elapsedMs(start: number): number {
 }
 
 /**
+ * Log tool failures without input arguments. Only internal failures include the
+ * error message, because user-facing failures can echo memory names.
+ */
+function logToolError(tool: string, error: unknown): void {
+  const code = errorCode(error);
+  const name = error instanceof Error ? error.name : typeof error;
+  const message = code === 'internal' && error instanceof Error ? `: ${error.message.slice(0, 500)}` : '';
+  console.error(`mcp tool error ${tool} [${code}] ${name}${message}`);
+}
+
+/**
  * Wrap McpServer.registerTool so every protocol tool invocation is measured.
  * The wrapper records only aggregate fields; input arguments and response bodies
  * are never passed to the recorder.
@@ -102,6 +113,7 @@ export function instrumentRegistrar(
           });
           return value;
         } catch (error) {
+          logToolError(name, error);
           await record({
             projectId,
             sessionId: ctx.sessionId,
