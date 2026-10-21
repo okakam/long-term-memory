@@ -8,8 +8,10 @@ import type {
 } from '@/lib/storage/firestore-metadata';
 import { FirestoreCurationStore } from '@/lib/curation/firestore-store';
 import {
+  AdminFirestoreGateway,
   FirestoreDataError,
   FirestoreMetadataStore,
+  withoutUndefined,
   type TombstoneRecord,
 } from '@/lib/storage/firestore-metadata';
 
@@ -203,6 +205,34 @@ describe('FirestoreMetadataStore', () => {
       project_id: 'demo',
       user_id: 'uid/with/slash',
       role: 'owner',
+    });
+  });
+});
+
+describe('AdminFirestoreGateway', () => {
+  test('optional fieldのundefinedを除いてFirestoreへ書き込む', async () => {
+    const writes: Array<{ path: string; data: Record<string, unknown> }> = [];
+    const firestore = {
+      doc: (path: string) => ({
+        set: async (data: Record<string, unknown>) => { writes.push({ path, data }); },
+        update: async (data: Record<string, unknown>) => { writes.push({ path, data }); },
+      }),
+    };
+    const gateway = new AdminFirestoreGateway(firestore as never);
+    await gateway.set('projects/p/memories/m', {
+      name: 'memory', status: 'active', archived_at: undefined, archived_by: undefined, tags: ['a'],
+    });
+    await gateway.update('projects/p/members/u', { role: 'member', note: undefined });
+    expect(writes).toStrictEqual([
+      { path: 'projects/p/memories/m', data: { name: 'memory', status: 'active', tags: ['a'] } },
+      { path: 'projects/p/members/u', data: { role: 'member' } },
+    ]);
+  });
+
+  test('withoutUndefinedはnested plain objectも処理しclass instanceと配列は保つ', () => {
+    const date = new Date('2026-10-21T00:00:00.000Z');
+    expect(withoutUndefined({ event: { reason: undefined, at: date }, ids: ['x'], empty: null })).toStrictEqual({
+      event: { at: date }, ids: ['x'], empty: null,
     });
   });
 });
