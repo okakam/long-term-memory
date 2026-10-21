@@ -16,22 +16,16 @@ codex mcp login long-term-memory
 
 ## Claude Codeから接続する
 
-Claude CodeはPATで接続します。OAuth認可サーバーは`http://127.0.0.1`のcallbackだけを受け付けるため、Claude Codeの`/mcp`からのOAuthログインは使いません。
-
-1. Dashboardの`/settings/tokens`でPATを発行します。本文は発行直後に一度だけ表示されます。
-2. PATを環境変数`LTM_MCP_TOKEN`へ設定し、user scopeでHTTP MCPサーバーを登録します。
+Claude CodeもCodexと同じくOAuthで接続します。PAT本文を入力する必要はありません。
 
 ```bash
-read -rs LTM_MCP_TOKEN && export LTM_MCP_TOKEN
-
 claude mcp add --transport http --scope user long-term-memory \
-  'https://ltm.okakam.net/api/mcp' \
-  --header "Authorization: Bearer ${LTM_MCP_TOKEN}"
+  'https://ltm.okakam.net/api/mcp'
 ```
 
-登録したPATは`~/.claude.json`に保存されます。このファイルをrepositoryへコミットしたり共有したりしないでください。登録状態は`claude mcp list`、または起動後のClaude Codeで`/mcp`を実行して確認できます。PATを失効・再発行した場合は`claude mcp remove --scope user long-term-memory`で削除してから再登録します。
+Claude Codeを起動して`/mcp`を開き、`long-term-memory`を選んで`Authenticate`を実行します。ブラウザでFirebaseログインと接続の同意を完了すると、Claude Codeがtokenを管理します。登録状態は`claude mcp list`又は`/mcp`で確認でき、接続は`/settings/tokens`の`OAuth 接続（Claude Code / Codex）`から失効できます。以前PAT付きで登録していた場合は、`claude mcp remove --scope user long-term-memory`で削除してから再登録してください。
 
-接続後、Claude Codeで`setup_client_environment`を`{"client": "claude-code"}`で呼ぶと、skill・hook・`CLAUDE.md`ルールをユーザー設定へ配置する手順を取得できます。projectの選び方はCodexと同じで、`list_projects`で確認して各tool callの`project_id`で指定します。
+接続後、Claude Codeで`setup_client_environment`を`{"client": "claude-code"}`で呼ぶと、skill・hook・`CLAUDE.md`ルールをユーザー設定へ配置する手順を取得できます。projectの選び方はCodexと同じで、`list_projects`で確認して各tool callの`project_id`で指定します。PATはcurator・CI・Cloud Run smokeなどの機械接続用です。
 
 ## ローカル開発
 

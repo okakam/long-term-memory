@@ -134,7 +134,7 @@ test('DCR schemaは許可値を正規化し、未知・unsupported metadataを�
     { redirect_uris: [callback], grant_types: ['client_credentials'] },
     { redirect_uris: [callback], response_types: ['token'] },
     { redirect_uris: [callback], token_endpoint_auth_method: 'client_secret_post' },
-    { redirect_uris: ['http://localhost/callback'] },
+    { redirect_uris: ['http://localhost:0/callback'] },
     { redirect_uris: [callback], unknown: 'discard-me' },
   ]) {
     expect(() => DcrClientRegistrationSchema.parse(input)).toThrow();

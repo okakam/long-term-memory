@@ -44,7 +44,7 @@ export function OAuthGrantSettings({ initialGrants }: { initialGrants: OAuthGran
   }
 
   return <section aria-labelledby="oauth-grants-heading">
-    <h2 id="oauth-grants-heading">Codex / OAuth 接続</h2>
+    <h2 id="oauth-grants-heading">OAuth 接続（Claude Code / Codex）</h2>
     <p>この接続のaccess tokenとrefresh tokenを無効化します。</p>
     {error ? <p className="error" role="alert">{error}</p> : null}
     {grants.length === 0 ? <p className="muted">OAuth接続はありません。</p> : <ul className="token-list">

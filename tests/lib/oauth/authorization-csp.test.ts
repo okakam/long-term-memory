@@ -11,8 +11,16 @@ describe('OAuth authorization page CSP', () => {
     expect(csp).not.toContain('?');
   });
 
+  test('Claude Codeのlocalhost callbackはoriginだけをform-actionへ加える', () => {
+    const csp = getOAuthAuthorizationPageCsp('http://localhost:53124/callback');
+
+    expect(csp).toContain("form-action 'self' http://localhost:53124");
+    expect(csp).not.toContain('/callback');
+  });
+
   test.each([
-    'http://localhost/callback/codex',
+    'http://localhost:0/callback/codex',
+    'http://localhost.example/callback/codex',
     'http://[::1]/callback/codex',
     'https://127.0.0.1/callback/codex',
     'http://127.0.0.1:0/callback/codex',

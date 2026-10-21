@@ -17,21 +17,35 @@ describe('OAuth redirect URI', () => {
       'http://127.0.0.1:53124/callback/other',
     )).toBe(false);
     expect(redirectUriMatches(
-      'http://localhost/callback/abc',
-      'http://localhost:53124/callback/abc',
+      'http://localhost/callback',
+      'http://localhost:53124/callback',
+    )).toBe(true);
+    expect(redirectUriMatches(
+      'http://localhost:49210/callback',
+      'http://127.0.0.1:49210/callback',
+    )).toBe(false);
+    expect(redirectUriMatches(
+      'http://localhost/callback',
+      'http://localhost:53124/other',
     )).toBe(false);
   });
 
-  test('DCRはportの有無を問わず127.0.0.1の非root callbackを受け入れる', () => {
+  test('DCRはportの有無を問わず127.0.0.1とlocalhostの非root callbackを受け入れる', () => {
     expect(validateDcrRedirectUri('http://127.0.0.1/callback/abc').href)
       .toBe('http://127.0.0.1/callback/abc');
     expect(validateDcrRedirectUri('http://127.0.0.1:53124/callback/abc').href)
       .toBe('http://127.0.0.1:53124/callback/abc');
+    expect(validateDcrRedirectUri('http://localhost:53124/callback').href)
+      .toBe('http://localhost:53124/callback');
 
     for (const value of [
       'http://127.0.0.1/',
       'http://127.0.0.1:0/callback/abc',
-      'http://localhost/callback/abc',
+      'http://localhost/',
+      'http://localhost:0/callback',
+      'http://LOCALHOST/callback',
+      'http://localhost.example/callback',
+      'https://localhost/callback',
       'http://[::1]/callback/abc',
       'https://127.0.0.1/callback/abc',
       'com.example.app:/callback',
