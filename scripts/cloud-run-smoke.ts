@@ -30,9 +30,9 @@ async function call(baseUrl: string, token: string, message: object, extraHeader
   return payload;
 }
 
-function resultText(response: JsonRpcResponse): string {
-  if (response.result?.isError) throw new Error('MCP tool error');
+function resultText(response: JsonRpcResponse, tool: string): string {
   const text = response.result?.content?.find((item) => item.type === 'text')?.text;
+  if (response.result?.isError) throw new Error(`MCP tool error (${tool}): ${(text ?? '').slice(0, 500)}`);
   if (!text) throw new Error('MCP result text missing');
   return text;
 }
@@ -55,7 +55,7 @@ export function assertMaintenanceTools(response: JsonRpcResponse): void {
 async function callTool(baseUrl: string, projectId: string, token: string, id: number, name: string, arguments_: object): Promise<string> {
   return resultText(await call(baseUrl, token, {
     jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: { ...arguments_, project_id: projectId } },
-  }));
+  }), name);
 }
 
 function assertSetup(text: string): void {
@@ -96,7 +96,7 @@ export async function smoke(): Promise<void> {
   assertTools(await call(baseUrl, token, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }));
   assertSetup(resultText(await call(baseUrl, token, {
     jsonrpc: '2.0', id: 14, method: 'tools/call', params: { name: 'setup_client_environment', arguments: { client: 'codex' } },
-  })));
+  }), 'setup_client_environment'));
   const autoMaintenanceToken = required('LTM_AUTO_MAINTENANCE_TOKEN');
   const maintenanceHeaders = { 'x-ltm-operation-mode': 'maintenance' };
   assertMaintenanceTools(await call(baseUrl, autoMaintenanceToken, {
@@ -105,11 +105,11 @@ export async function smoke(): Promise<void> {
   const optedIn = JSON.parse(resultText(await call(baseUrl, autoMaintenanceToken, {
     jsonrpc: '2.0', id: 16, method: 'tools/call',
     params: { name: 'maintenance_list_projects', arguments: {} },
-  }, maintenanceHeaders))) as unknown;
+  }, maintenanceHeaders), 'maintenance_list_projects')) as unknown;
   if (!Array.isArray(optedIn)) throw new Error('maintenance project registry response is invalid');
   const projects = JSON.parse(resultText(await call(baseUrl, token, {
     jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'list_projects', arguments: {} },
-  }))) as Array<{ project_id?: string }>;
+  }), 'list_projects')) as Array<{ project_id?: string }>;
   if (!projects.some((project) => project.project_id === projectId)) throw new Error('smoke project is not accessible');
   const name = `cloud-run-smoke-${Date.now().toString(36)}`;
   const targetName = `${name}-target`;
