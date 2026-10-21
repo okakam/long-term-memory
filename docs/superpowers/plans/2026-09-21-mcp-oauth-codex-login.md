@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-10-21追記:** Claude CodeのOAuthログイン対応で`http://localhost[:port]/<path>`のcallbackも許可した。本計画内の`localhost`拒否の記述は当時の仕様であり、現行仕様は`docs/superpowers/specs/2026-09-21-mcp-oauth-codex-login-design.md`を正本とする。
+
 **Goal:** long-term-memoryのリモートMCPを、PATを手入力せず `codex mcp login long-term-memory` で認証・利用できるようにする。
 
 **Architecture:** Firebase AuthenticationはWebの本人確認と`@okakam.net`制限に残し、同じCloud Run/Next.jsアプリにDCR対応のOAuth 2.1 authorization serverを追加する。OAuth tokenはFirestore（local/testはSQLite）にhashだけを保存するopaque tokenとし、MCP到達後もFirestore membership・owner権限・shared curator gateを必ず再評価する。PATはcurator、CI、Cloud Run smokeとの互換用として維持する。

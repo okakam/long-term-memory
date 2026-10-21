@@ -54,7 +54,7 @@ Bearer resource_metadata="https://ltm.okakam.net/.well-known/oauth-protected-res
 
 OAuth tokenに`mcp:access`がない場合はHTTP 403、`error="insufficient_scope"`、必要scope、同じresource metadata URLを返す。PATの失効・形式不正も、tokenの有無や種類を開示せず同じ401契約を使う。
 
-初期DCRは`http://127.0.0.1[:port]/<callback-path>`形式のIPv4 loopback callbackだけを登録可能にする。authorize時はscheme、host、pathを一致させ、`127.0.0.1`のportだけを可変とする。`localhost`、`[::1]`、HTTPS、custom scheme、port 0、root path、query、fragmentを持つURIは拒否する。Native Appのloopback redirectはlistenerの空きportを使うため、登録時とauthorize時のport差を許可する（[RFC 8252 §7.3](https://www.rfc-editor.org/rfc/rfc8252.html#section-7.3)）。
+DCRはCodex用の`http://127.0.0.1[:port]/<callback-path>`と、Claude Code用の`http://localhost[:port]/<callback-path>`形式のloopback callbackだけを登録可能にする（2026-10-21にClaude CodeのOAuthログイン対応として`localhost`を追加）。authorize時はscheme、host、pathを一致させ、portだけを可変とする。`127.0.0.1`と`localhost`の相互置換は許可しない。`[::1]`、`localhost`以外のホスト名、HTTPS、custom scheme、port 0、root path、query、fragmentを持つURIは拒否する。Native Appのloopback redirectはlistenerの空きportを使うため、登録時とauthorize時のport差を許可する（[RFC 8252 §7.3](https://www.rfc-editor.org/rfc/rfc8252.html#section-7.3)）。RFC 8252 §8.3は名前解決が環境に依存する`localhost`より`127.0.0.1`を推奨するが、Claude Codeは`localhost` callbackを登録するため、受け入れたリスクとして許可する。主要ブラウザは`localhost`をloopbackへ解決し、PKCE S256必須とtoken交換時のredirect URI完全一致により、別listenerへ届いたauthorization codeだけではtokenを取得できない。
 
 ## 4. OAuthデータモデル
 
@@ -111,10 +111,10 @@ MCP transportはBearer tokenをOAuth access tokenとして先に検証し、OAut
 
 - 本番OAuth endpointとissuerはHTTPSだけを許可する。`MCP_OAUTH_ENABLED=1`かつ`AUTH_REQUIRED=0`の構成ではtokenを発行しない。
 - PKCE S256は必須とし、plain method、implicit flow、password grant、client credentials grantを実装しない。
-- DCRはpublic native clientを対象にする。requestは正確に1件の`redirect_uris`、任意`client_name`、任意`grant_types`、任意`response_types`、任意`token_endpoint_auth_method`、任意`scope`、任意`application_type: 'native'`だけを読み、未指定のgrant/response/auth methodは`['authorization_code', 'refresh_token']`、`['code']`、`'none'`へ正規化する。`scope`は省略可能だが指定時は`mcp:access`だけ、`application_type`は指定時`native`だけを受け付け、指定値をregistration responseにも返す。これ以外のscope/application type/grant/response/auth methodとmetadataの未知fieldは`invalid_client_metadata`で拒否し、未知fieldは保存しない。redirect URIは有効なportを任意で持つ`http://127.0.0.1`の非root callbackだけを受け付け、認可時はport差のみ許容する。wildcard、custom scheme、query、fragment、port 0、`localhost`、IPv6、HTTPSを拒否する。
+- DCRはpublic native clientを対象にする。requestは正確に1件の`redirect_uris`、任意`client_name`、任意`grant_types`、任意`response_types`、任意`token_endpoint_auth_method`、任意`scope`、任意`application_type: 'native'`だけを読み、未指定のgrant/response/auth methodは`['authorization_code', 'refresh_token']`、`['code']`、`'none'`へ正規化する。`scope`は省略可能だが指定時は`mcp:access`だけ、`application_type`は指定時`native`だけを受け付け、指定値をregistration responseにも返す。これ以外のscope/application type/grant/response/auth methodとmetadataの未知fieldは`invalid_client_metadata`で拒否し、未知fieldは保存しない。redirect URIは有効なportを任意で持つ`http://127.0.0.1`又は`http://localhost`の非root callbackだけを受け付け、認可時はport差のみ許容する。wildcard、custom scheme、query、fragment、port 0、他のホスト名、IPv6、HTTPSを拒否する。
 - OAuth endpointsは`Cache-Control: no-store`を返す。authorization code、access token、refresh token、Firebase ID token、cookieを構造化ログ、例外本文、analyticsへ出力しない。queryを含むauthorize requestもrequest loggingではredactする。
 - `/oauth/authorize`の同意POSTはCSRF防御を必須にする。token、register、revokeにはcookie認証を使わず、client/tokenの検証だけを行う。Settingsのgrant一覧・失効は既存Firebase sessionとsame-origin検証を必須にする。
-- OAuth同意画面(`/oauth/authorize`)はtransactionに保存されたredirect URIを再検証し、CSPの`form-action`にそのloopback origin (`http://127.0.0.1[:port]`)だけを追加する。callback path/queryはCSPへ含めない。静的CSPはこのrouteだけ対象外とし、他のrouteでは`form-action 'self'`と既存security headerを維持する。
+- OAuth同意画面(`/oauth/authorize`)はtransactionに保存されたredirect URIを再検証し、CSPの`form-action`にそのloopback origin (`http://127.0.0.1[:port]`又は`http://localhost[:port]`)だけを追加する。callback path/queryはCSPへ含めない。静的CSPはこのrouteだけ対象外とし、他のrouteでは`form-action 'self'`と既存security headerを維持する。
 - DCR、authorize、token、revokeにはFirestore-backedの固定window rate limitを適用し、process-local counterだけには依存しない。DCRはglobal 30/10分に加えCloud Runが付与する`X-Forwarded-For`先頭の正規化IP hashごとに5/10分、authorizeはIP hashごとに20/10分、tokenは`client_id + IP hash`ごとに60/10分、revokeはIP hashごとに30/10分とする。forwarded IPは認可identityには使わずrate-limit admission keyとしてのみ扱い、`X-Real-IP`など任意headerは読まない。IPが欠ける/不正なら`unknown` bucketに集約し、DCR global bucketも必ず評価する。超過は`Retry-After`付き429とOAuth `temporarily_unavailable`を返す。counterはFirestore Timestampの`expires_at`を持ち、`oauthRateLimits` collection groupの`expires_at`をTTL fieldに設定する。TTL削除は遅延し得るため、window判定は常に`expires_at`をアプリ側でも評価する。
 - revokeまたはSettingsでgrantを失効すると、対応するaccess token、refresh token、未使用codeを失効する。member削除は既存membership検証により即時にMCP利用を止める。
 - `__shared__` writeはOAuth scopeやOAuth grantで許可しない。`LTM_CURATOR_USER_ID`と`LTM_MAINTENANCE_TOKEN`を持つ既存PAT機械処理だけが維持書き込みを行う。
@@ -160,7 +160,7 @@ Git Flowでは、実装PRを`feature/mcp-oauth-codex-login`から`develop`へ作
 ローカルではOAuth storeとFirebase identity providerをfakeにしたunit/integration testを実行し、実在するtokenやFirebase設定は使わない。本番のbrowser loginは外部認証情報を必要とするため、別途実環境smokeとして記録する。
 
 - protected-resource metadataとauthorization-server metadataが正しいissuer、endpoint、`mcp:access`、DCR、PKCE S256を返す。
-- DCRはCodex native metadata、任意の有効なportを持つ`http://127.0.0.1`のcallbackだけを登録し、unsupported application type/scope、port以外のURI不一致、`localhost`、IPv6、非loopback HTTP、HTTPS、wildcard、unsupported grant/response/auth methodを拒否する。
+- DCRはCodex native metadataとClaude Code metadata、任意の有効なportを持つ`http://127.0.0.1`又は`http://localhost`のcallbackだけを登録し、unsupported application type/scope、port以外のURI不一致、他のホスト名、IPv6、非loopback HTTP、HTTPS、wildcard、unsupported grant/response/auth methodを拒否する。
 - rate limitはDCR global/IP、authorize IP、token client/IP、revoke IPの各上限、429/OAuth error、transaction競合、TTL期限切れcounterを検証する。
 - 無効client、PKCE不一致、code再利用、code期限切れ、redirect URI不一致、resource不一致、scope不正をOAuth errorとして拒否する。
 - refresh tokenはrotateし、旧token再利用時は同familyを失効する。Settings失効と`/oauth/revoke`はアクセス/refresh tokenを直ちに無効化する。

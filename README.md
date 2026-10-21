@@ -14,11 +14,26 @@ codex mcp login long-term-memory
 
 ブラウザーでFirebaseログインと接続の同意を完了します。登録状態は`codex mcp list`で確認できます。詳しい運用手順は[Codex / Claude Code向けMCP設定](docs/post-mcp-setup.md)を参照してください。
 
-## ローカル開発
+## Claude Codeから接続する
 
-Node.js 22とpnpmを使います。
+Claude CodeもCodexと同じくOAuthで接続します。PAT本文を入力する必要はありません。
 
 ```bash
+claude mcp add --transport http --scope user long-term-memory \
+  'https://ltm.okakam.net/api/mcp'
+```
+
+Claude Codeを起動して`/mcp`を開き、`long-term-memory`を選んで`Authenticate`を実行します。ブラウザでFirebaseログインと接続の同意を完了すると、Claude Codeがtokenを管理します。登録状態は`claude mcp list`又は`/mcp`で確認でき、接続は`/settings/tokens`の`OAuth 接続（Claude Code / Codex）`から失効できます。以前PAT付きで登録していた場合は、`claude mcp remove --scope user long-term-memory`で削除してから再登録してください。
+
+接続後、Claude Codeで`setup_client_environment`を`{"client": "claude-code"}`で呼ぶと、skill・hook・`CLAUDE.md`ルールをユーザー設定へ配置する手順を取得できます。projectの選び方はCodexと同じで、`list_projects`で確認して各tool callの`project_id`で指定します。PATはcurator・CI・Cloud Run smokeなどの機械接続用です。
+
+## ローカル開発
+
+Node.js 22とpnpmを使います。nvmを使う場合は`.nvmrc`のバージョンへ切り替えます。
+
+```bash
+nvm install
+nvm use
 pnpm install --frozen-lockfile
 cp .env.example .env
 pnpm dev

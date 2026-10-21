@@ -2,6 +2,8 @@
 
 > **実行手順:** `superpowers:executing-plans`に従い、各タスクをテスト先行で実施する。
 
+> **2026-10-21追記:** Claude CodeのOAuthログイン対応で`http://localhost[:port]/<path>`のcallbackも許可した。本計画内の`localhost`拒否の記述は当時の仕様であり、現行仕様は`docs/superpowers/specs/2026-09-21-mcp-oauth-codex-login-design.md`を正本とする。
+
 **目標:** ChromiumがOAuth同意フォームの302 callback redirectを`form-action 'self'`で遮断せず、検証済みCodex loopback listenerへ到達できるようにする。
 
 **構成:** 全体のCSPは厳格な`form-action 'self'`を維持する。`/oauth/authorize`の同意画面だけ、保存済みtransactionから復元した検証済み`http://127.0.0.1[:port]` callbackのoriginを追加した同等のCSPを返す。静的な全体CSPはこのrouteだけ除外し、同意画面のCSPが複数ポリシーの積で再び遮断されないようにする。

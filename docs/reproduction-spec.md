@@ -46,7 +46,7 @@ Markdown本文が唯一の本文正本であり、FirestoreとSQLiteへ本文全
 - Google OAuthの`hd=okakam.net`は表示上のヒントであり、認可判定には使わない。`user@sub.okakam.net`、類似ドメイン、メールアドレスなしは拒否する。
 - Cloud RunのInvoker IAMは公開にし、Firebase session、OAuth access token、既存MCP PATによるアプリ層認証を必須にする。Cloud Run IAM認証を重ねるとブラウザのFirebase認証フローを遮断するため採用しない。
 - API routeへ直接ID tokenを送る場合だけ `Authorization: Bearer <Firebase ID token>` を許可する。MCPはFirebase ID tokenではなくOAuth access tokenまたはMCP PATを使う。
-- MCP OAuthはDCR、authorization code、PKCE S256、15分access token、30日refresh tokenを使い、Firebase sessionで本人確認した同意画面から発行する。DCRはscopeを省略可能とし、指定時は`mcp:access`だけを許可して登録responseには常に`mcp:access`を返す。`application_type`も省略可能とし、指定時は`native`だけを許可して登録responseへ返す。それ以外のscope/application typeは拒否する。Codex loopback callbackは`http://127.0.0.1[:port]/<path>`を使い、認可時はportだけ可変、pathは完全一致とする。VS Code Dev Container内の利用ではprocessベースの自動port転送を使い、必要な場合は現在のcallback portだけを一時転送する。OAuthは `mcp:access` scopeだけを持ち、project roleをtokenへ複製しない。
+- MCP OAuthはDCR、authorization code、PKCE S256、15分access token、30日refresh tokenを使い、Firebase sessionで本人確認した同意画面から発行する。DCRはscopeを省略可能とし、指定時は`mcp:access`だけを許可して登録responseには常に`mcp:access`を返す。`application_type`も省略可能とし、指定時は`native`だけを許可して登録responseへ返す。それ以外のscope/application typeは拒否する。loopback callbackはCodexの`http://127.0.0.1[:port]/<path>`とClaude Codeの`http://localhost[:port]/<path>`を使い、認可時はportだけ可変、hostとpathは完全一致とする。VS Code Dev Container内の利用ではprocessベースの自動port転送を使い、必要な場合は現在のcallback portだけを一時転送する。OAuthは `mcp:access` scopeだけを持ち、project roleをtokenへ複製しない。
 - PAT本文は発行レスポンスで一度だけ返し、FirestoreにはSHA-256 hash、prefix、所有UID、期限、失効日時だけを保存する。OAuth client、authorization code、access/refresh tokenも本文を保存せずhashとprefixだけを保存する。
 - project accessはtool invocationごとにFirestore membershipで判定する。`list_projects`は認証主体がowner/memberであるprojectを返し、空projectも含める。`list_projects`と`setup_client_environment`だけがproject指定を省略し、残り15 toolsは必須top-level `project_id`で対象を指定する。`__shared__` はread-onlyで、writeはcurator UIDのPAT principalと`LTM_MAINTENANCE_TOKEN`を満たすcuratorだけに限定し、OAuth credentialでは許可しない。
 - Firestore client SDKからの直接read/writeは `firestore.rules` で全拒否し、Admin SDK経由だけでアクセスする。
@@ -82,7 +82,7 @@ SQLiteは `/tmp/long-term-memory/index.db` に作成し、WAL、foreign key、FT
 ## 6. API・MCP・UI
 
 未ログイン時のOAuth `/sign-in` redirectは`MCP_PUBLIC_URL`を基準にし、受信`Request.url`や内部Host名を公開しない。
-OAuth consentの`/oauth/authorize`では、transaction保存済みのredirect URIを再検証し、response CSPの`form-action`へCodex loopback callbackのorigin (`http://127.0.0.1[:port]`)だけを加える。callback pathやqueryは追加しない。Next.jsの静的CSPはこのrouteを除外し、その他のrouteでは`form-action 'self'`を維持する。共通security headersは全routeへ適用する。
+OAuth consentの`/oauth/authorize`では、transaction保存済みのredirect URIを再検証し、response CSPの`form-action`へloopback callbackのorigin (`http://127.0.0.1[:port]`又は`http://localhost[:port]`)だけを加える。callback pathやqueryは追加しない。Next.jsの静的CSPはこのrouteを除外し、その他のrouteでは`form-action 'self'`を維持する。共通security headersは全routeへ適用する。
 
 - `GET /api/health`: 認証不要のCloud Run health check。
 - `/api/auth/session`: Firebase ID tokenを短期session cookieへ交換。余計なquery parameterは拒否。

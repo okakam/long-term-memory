@@ -71,7 +71,9 @@ Firebase AuthenticationのWebアプリ登録、Email/Password・Google provider�
 
 devcontainer.jsonの customizations.vscode.extensions に openai.chatgptを指定しています。既存のコンテナに反映するには、VS Codeで「Dev Containers: Rebuild Container」を実行してください。
 
-## Codex MCP OAuth loopback callback
+## Codex / Claude Code MCP OAuth loopback callback
+
+Claude Codeの`/mcp`の`Authenticate`も同様に、実行ごとに異なる`localhost`のcallback portを使います。以下のport転送とブラウザー承認の手順はClaude Codeでも同じです。
 
 `codex mcp login long-term-memory`は、実行ごとに異なる`127.0.0.1`のcallback portを使います。`.devcontainer/devcontainer.json`ではVS Codeの`remote.autoForwardPorts`を有効にし、`remote.autoForwardPortsSource`を`process`にして、Codexが開くlistener processからportを検出できるようにしています。固定portやport rangeを`forwardPorts`へ追加しないでください。
 
