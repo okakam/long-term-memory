@@ -22,7 +22,7 @@
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
 - コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
-- VS Code Dev Containerでは`remote.autoForwardPorts=true`と`remote.autoForwardPortsSource="process"`を既定にし、Codex OAuthの動的loopback callback portを転送する。callback用の固定port/rangeを`forwardPorts`へ追加せず、自動検出されない場合は`.devcontainer/README.md`の手順で現在のportだけを一時転送する。
+- VS Code Dev Containerでは`remote.autoForwardPorts=true`と`remote.autoForwardPortsSource="process"`を既定にし、Codex・Claude Code OAuthの動的loopback callback portを転送する。callback用の固定port/rangeを`forwardPorts`へ追加せず、自動検出されない場合は`.devcontainer/README.md`の手順で現在のportだけを一時転送する。
 - `.devcontainer/devcontainer.json` の `shutdownAction` は `none` とし、VS Codeを閉じても開発コンテナを停止しない。不要時は明示的に停止する。
 - 開発用 `sshd` は Compose の root PID 1 で foreground 起動し、ホストの `127.0.0.1:2222` からコンテナの22番ポートへ接続できるようにする。VS Codeの通常操作は `remoteUser: node` とし、パスワード・秘密鍵をリポジトリへ記載しない。
 - Codex の設定・認証状態は `CODEX_HOME=/home/node/.codex` に保存し、`long-term-memory-codex` volume で永続化する。

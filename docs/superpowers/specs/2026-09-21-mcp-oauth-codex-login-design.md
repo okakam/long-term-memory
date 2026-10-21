@@ -54,7 +54,7 @@ Bearer resource_metadata="https://ltm.okakam.net/.well-known/oauth-protected-res
 
 OAuth tokenに`mcp:access`がない場合はHTTP 403、`error="insufficient_scope"`、必要scope、同じresource metadata URLを返す。PATの失効・形式不正も、tokenの有無や種類を開示せず同じ401契約を使う。
 
-DCRはCodex用の`http://127.0.0.1[:port]/<callback-path>`と、Claude Code用の`http://localhost[:port]/<callback-path>`形式のloopback callbackだけを登録可能にする（2026-10-21にClaude CodeのOAuthログイン対応として`localhost`を追加）。authorize時はscheme、host、pathを一致させ、portだけを可変とする。`127.0.0.1`と`localhost`の相互置換は許可しない。`[::1]`、`localhost`以外のホスト名、HTTPS、custom scheme、port 0、root path、query、fragmentを持つURIは拒否する。Native Appのloopback redirectはlistenerの空きportを使うため、登録時とauthorize時のport差を許可する（[RFC 8252 §7.3](https://www.rfc-editor.org/rfc/rfc8252.html#section-7.3)）。
+DCRはCodex用の`http://127.0.0.1[:port]/<callback-path>`と、Claude Code用の`http://localhost[:port]/<callback-path>`形式のloopback callbackだけを登録可能にする（2026-10-21にClaude CodeのOAuthログイン対応として`localhost`を追加）。authorize時はscheme、host、pathを一致させ、portだけを可変とする。`127.0.0.1`と`localhost`の相互置換は許可しない。`[::1]`、`localhost`以外のホスト名、HTTPS、custom scheme、port 0、root path、query、fragmentを持つURIは拒否する。Native Appのloopback redirectはlistenerの空きportを使うため、登録時とauthorize時のport差を許可する（[RFC 8252 §7.3](https://www.rfc-editor.org/rfc/rfc8252.html#section-7.3)）。RFC 8252 §8.3は名前解決が環境に依存する`localhost`より`127.0.0.1`を推奨するが、Claude Codeは`localhost` callbackを登録するため、受け入れたリスクとして許可する。主要ブラウザは`localhost`をloopbackへ解決し、PKCE S256必須とtoken交換時のredirect URI完全一致により、別listenerへ届いたauthorization codeだけではtokenを取得できない。
 
 ## 4. OAuthデータモデル
 

@@ -14,6 +14,7 @@ function isLoopbackHttp(url: URL): boolean {
 
 export function validateDcrRedirectUri(value: string): URL {
   const url = parseUrl(value);
+  // URL parserの正規化前に生文字列でもhostを固定し、大文字・userinfo等の別表記を拒否する。
   if (!url
     || !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::[0-9]+)?\//.test(value)
     || !isLoopbackHttp(url)
@@ -40,9 +41,7 @@ export function redirectUriMatches(registered: string, requested: string): boole
     } catch {
       return false;
     }
-    return left.hostname === right.hostname
-      && left.pathname === right.pathname
-      && left.search === right.search;
+    return left.hostname === right.hostname && left.pathname === right.pathname;
   }
   return left.href === right.href;
 }

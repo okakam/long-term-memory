@@ -9,7 +9,7 @@
 - projectの作成とowner/member管理はDashboardで行います。`__shared__`はread-onlyで、curatorのwriteには許可済みPATとmaintenance tokenが必要です。
 - Claude CodeとCodexの通常利用はDCR/PKCE OAuthで行い、PAT本文を入力・環境変数へ保存しません。ブラウザのFirebaseログインと同意画面を完了すると、各クライアントがaccess/refresh tokenを管理します。OAuth callbackはCodexの`http://127.0.0.1[:port]/<path>`とClaude Codeの`http://localhost[:port]/<path>`だけを受け付けます。
 - PATは`/settings/tokens`で発行します。本文は発行直後に一度だけ表示され、Claude Code curator・CI・Cloud Run smokeの機械接続だけで使います。チャット、repository、ログへ貼り付けません。
-- OAuth接続はClaude Code・Codexとも`/settings/tokens`の`Codex / OAuth 接続`から失効できます。失効後はOAuth grantのaccess tokenとrefresh tokenが使えなくなります。
+- OAuth接続はClaude Code・Codexとも`/settings/tokens`の`OAuth 接続（Claude Code / Codex）`から失効できます。失効後はOAuth grantのaccess tokenとrefresh tokenが使えなくなります。
 - `docs/mcp-config.cloud-run.json`はcurator接続の設定例です。GitHub Actionsはこのファイルを読み込まず、環境変数を`run-dated-curation.ts`へ渡します。Codexの`~/.codex/config.toml`へそのまま追加するファイルではありません。
 
 ## Dashboardでプロジェクトを作成する
