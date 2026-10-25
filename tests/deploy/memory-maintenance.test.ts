@@ -5,16 +5,6 @@ import { assertMaintenanceTools } from '../../scripts/cloud-run-smoke';
 
 const root = resolve(import.meta.dirname, '../..');
 
-test('workflow_serializes_jobs', () => {
-  const workflow = readFileSync(resolve(root, '.github/workflows/curator.yml'), 'utf8');
-  expect(workflow).toContain('group: ltm-curator');
-  expect(workflow).toMatch(/memory-maintenance:[\s\S]*?LTM_AUTO_MAINTENANCE_TOKEN:/);
-  expect(workflow).toMatch(/remote-curation:[\s\S]*?needs: memory-maintenance/);
-  expect(workflow).toContain("if: always() && !cancelled()");
-  expect(workflow).toContain("cron: '0 1 * * *'");
-  expect(workflow).toContain('default: true');
-});
-
 test('Cloud Runデプロイはauto maintenance tokenをSecret Managerから参照する', () => {
   const workflow = readFileSync(resolve(root, '.github/workflows/cloud-run.yml'), 'utf8');
   expect(workflow).toContain('LTM_AUTO_MAINTENANCE_TOKEN=');

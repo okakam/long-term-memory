@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily long-term-memory curator run
+
+[Timer]
+OnCalendar=*-*-* 01:00:00 UTC
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

@@ -130,6 +130,9 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
     'DRY_RUN_VALUE',
     'LTM_MODE',
     'pnpm exec tsx scripts/curator/run-dated-curation.ts',
+    'pnpm exec tsx scripts/curator/run-maintenance.ts',
+    'env -u LTM_MCP_TOKEN -u LTM_MAINTENANCE_TOKEN',
+    'env -u LTM_AUTO_MAINTENANCE_TOKEN',
     'last-success',
   ]) {
     expect(wrapper).toContain(requirement);
@@ -139,7 +142,7 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   expect(wrapper).not.toContain('pkill');
 
   const env = read('scripts/curator/env.example');
-  for (const name of ['LTM_MCP_TOKEN', 'LTM_MAINTENANCE_TOKEN']) {
+  for (const name of ['LTM_MCP_TOKEN', 'LTM_MAINTENANCE_TOKEN', 'LTM_AUTO_MAINTENANCE_TOKEN']) {
     expect(env).toMatch(new RegExp('^' + name + '=\\s*$', 'm'));
   }
 
@@ -149,6 +152,13 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   expect(plist).toContain('<integer>10</integer>');
   expect(plist).toContain('<integer>0</integer>');
   expect(plist).not.toContain('Documents');
+
+  const service = read('systemd/ltm-curator.service');
+  expect(service).toContain('ExecStart=/bin/bash __LIBEXEC__/run-curation.sh');
+  expect(service).toContain('LTM_CURATOR_REPO_ROOT=__REPO_ROOT__');
+  const timer = read('systemd/ltm-curator.timer');
+  expect(timer).toContain('OnCalendar=*-*-* 01:00:00 UTC');
+  expect(timer).toContain('Persistent=true');
 
   const config = JSON.parse(read('docs/mcp-config.cloud-run.json')) as {
     mcpServers: { 'long-term-memory': { url: string; headers: Record<string, string> } };
@@ -163,16 +173,7 @@ test('curatorのlocal/Cloud Run設定は秘密を露出せず権限を絞る', (
   expect(localCurator.mcpServers['long-term-memory'].url).toBe('http://localhost:3939/api/mcp');
   expect(existsSync(resolve(root, 'scripts/curator/install.sh'))).toBe(true);
 
-  const workflow = read('.github/workflows/curator.yml');
-  expect(workflow).toContain("cron: '0 1 * * *'");
-  expect(workflow).toContain('runs-on: [self-hosted, ltm-curator]');
-  expect(workflow).toContain('scripts/curator/run-dated-curation.ts');
-  expect(workflow.match(/^\s*MCP_PUBLIC_URL:/gm) ?? []).toHaveLength(2);
-  expect(workflow).toContain("default: true");
-  expect(workflow).toContain('FROM_DATE: ${{ inputs.from_date }}');
-  expect(workflow).toContain('TO_DATE: ${{ inputs.to_date }}');
-  expect(workflow).not.toContain('VERCEL_AUTOMATION_BYPASS_SECRET');
-  expect(workflow).not.toContain('cat > "$LTM_CURATOR_ENV"');
+  expect(existsSync(resolve(root, '.github/workflows/curator.yml'))).toBe(false);
 });
 
 test('接続後setupは17-tool契約とクライアント側適用を案内する', () => {
