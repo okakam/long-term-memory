@@ -15,6 +15,16 @@ import {
   type TombstoneRecord,
 } from '@/lib/storage/firestore-metadata';
 
+// Mirror the Firestore constraint the Admin gateway does not normalize.
+function assertNoNestedArrays(value: unknown, insideArray = false): void {
+  if (Array.isArray(value)) {
+    if (insideArray) throw new Error('Nested arrays are not allowed');
+    for (const item of value) assertNoNestedArrays(item, true);
+  } else if (typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+    for (const item of Object.values(value)) assertNoNestedArrays(item);
+  }
+}
+
 class FakeFirestore implements FirestoreGateway {
   readonly documents = new Map<string, Record<string, unknown>>();
   private transactionDepth = 0;
@@ -31,6 +41,7 @@ class FakeFirestore implements FirestoreGateway {
   }
 
   async set(path: string, data: Record<string, unknown>, merge = false): Promise<void> {
+    assertNoNestedArrays(data);
     const previous = this.documents.get(path);
     this.documents.set(path, merge && previous ? { ...previous, ...data } : { ...data });
   }
@@ -153,6 +164,20 @@ describe('FirestoreMetadataStore', () => {
     expect(await store.getMemoryIndex('demo', 'memory-1')).toEqual({ ...record(), status: 'active' });
     expect(await store.getNameIndex('demo', 'note')).toMatchObject({ memory_id: 'memory-1' });
     expect((await store.getProject('demo'))?.revision).toBe(1);
+  });
+
+  test('triplesはnested arrayを避けたobjectで保存し、配列として読み戻す', async () => {
+    const gateway = new FakeFirestore();
+    const store = new FirestoreMetadataStore(gateway);
+    stores.push(store);
+    await store.createProject('demo', 'owner');
+    const triples: MemoryIndexRecord['triples'] = [['Firestore', 'rejects', 'nested arrays']];
+    await store.putMemoryIndex('demo', record({ triples }));
+
+    expect(gateway.documents.get('projects/demo/memories/memory-1')?.triples).toStrictEqual([
+      { subject: 'Firestore', predicate: 'rejects', object: 'nested arrays' },
+    ]);
+    expect((await store.getMemoryIndex('demo', 'memory-1'))?.triples).toStrictEqual(triples);
   });
 
   test('同一projectのname重複はMemoryConflictErrorになる', async () => {
