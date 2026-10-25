@@ -29,7 +29,7 @@ GCS: Markdown本文のimmutable object
 
 ## 2. 実行・認証構成
 
-- Cloud RunはNode.js 22の単一コンテナで、初期値はregion `asia-northeast1`、min 0、max 1、concurrency 1、1 vCPU、512 MiB、timeout 300秒とする。
+- Cloud RunはNode.js 24（`.nvmrc`が正本）の単一コンテナで、初期値はregion `asia-northeast1`、min 0、max 1、concurrency 1、1 vCPU、512 MiB、timeout 300秒とする。
 - Cloud Run Invokerは公開にし、WebとAPIはFirebase session/ID token、MCPはMCP PATでアプリ層認証する。
 - Firebase Admin SDKとGCS clientはCloud RunランタイムサービスアカウントのApplication Default Credentialsを使う。サービスアカウントJSONやGCS HMAC keyはrepository・image・環境変数へ保存しない。
 - FirestoreクライアントSDKからの直接read/writeは`firestore.rules`で拒否し、サーバーのAdmin SDKだけがデータへアクセスする。

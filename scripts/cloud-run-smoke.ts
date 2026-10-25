@@ -83,12 +83,24 @@ function assertSetup(text: string): void {
   if (setup.config_version !== version) throw new Error('smoke setup config version mismatch');
 }
 
+/**
+ * New revisions with concurrency 1 can briefly answer 429/503 while the first
+ * instance starts, so only the health check retries those statuses.
+ */
+export async function waitForHealth(baseUrl: string, attempts = 6, delayMs = 5000): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    const health = await fetch(`${baseUrl}/api/health`);
+    if (health.ok) return;
+    if (![429, 503].includes(health.status) || attempt >= attempts) throw new Error(`health HTTP ${health.status}`);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+}
+
 export async function smoke(): Promise<void> {
   const baseUrl = required('CLOUD_RUN_URL').replace(/\/+$/, '');
   const token = required('LTM_MCP_TOKEN');
   const projectId = process.env.LTM_SMOKE_PROJECT_ID ?? 'smoke';
-  const health = await fetch(`${baseUrl}/api/health`);
-  if (!health.ok) throw new Error(`health HTTP ${health.status}`);
+  await waitForHealth(baseUrl);
   await call(baseUrl, token, {
     jsonrpc: '2.0', id: 1, method: 'initialize',
     params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'cloud-run-smoke', version: '1' } },

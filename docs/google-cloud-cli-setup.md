@@ -268,13 +268,23 @@ repository の functions/ には、@okakam.net 以外を拒否する beforeUserC
     pnpm --dir functions --ignore-workspace build
     firebase deploy --project="$LTM_PROJECT_ID" --only functions
 
-Cloud Build は functions/ だけを upload して pnpm install するため、ルートの pnpm-workspace.yaml は使われません。pnpm 11 は未許可の build script を `ERR_PNPM_IGNORED_BUILDS` で拒否するので、functions/pnpm-workspace.yaml にも `allowBuilds` を置きます。依存を追加して build script を持つpackageが増えた場合は、ここにも許可/不許可を追記します。
+Cloud Build は functions/ だけを upload して pnpm install するため、ルートの pnpm-workspace.yaml は使われません。pnpm 11 は未許可の build script を `ERR_PNPM_IGNORED_BUILDS` で拒否するので、functions/pnpm-workspace.yaml にも `allowBuilds` を置きます。依存を追加して build script を持つpackageが増えた場合は、ここにも許可/不許可を追記します。また、pnpm project の Functions build は `@google-cloud/functions-framework` を dependencies に明示しないと失敗します。`firebase-admin` も `firebase-functions` の必須 peer dependency として明示します。
 
 初回 deploy で Artifact Registry の cleanup policy が未設定と表示された場合は、`firebase functions:artifacts:setpolicy --project="$LTM_PROJECT_ID" --location=asia-northeast1` で古い image を自動削除します。Functions は `functions/src/index.ts` の `FUNCTION_REGION`（`asia-northeast1`）で Cloud Run・Firestore・GCS と同じ東京リージョンへ deploy します。
 
 deploy 後、Firebase Console の Authentication → Settings → Blocking functions で、before user created と before user signed in の両方が登録されていることを確認します。
 
 Functions のコードを変更した場合は、この Firebase deploy を再実行します。Cloud Run deploy workflow は Functions を自動 deploy しません。
+
+## リージョン方針（東京に統一）
+
+region を持つリソースはすべて `asia-northeast1` に置きます（2026-10-25 に実環境で確認）。
+
+- Cloud Run、Firestore、GCS bucket、Artifact Registry、Cloud Functions（`FUNCTION_REGION`）: `asia-northeast1`
+- Secret Manager: `--replication-policy=user-managed --locations=asia-northeast1`。replication は作成後に変更できないため、既存 Secret を移す場合は一時 Secret へ値を複写し、同名で再作成して値と runtime SA の `roles/secretmanager.secretAccessor` を戻します（値は表示せず hash で一致確認）。
+- Cloud Logging: `_Default` sink の宛先を `asia-northeast1` の log bucket `default-tokyo`（保持30日）にします。`_Required` bucket は Google 管理で global のままです。
+- 未使用の default VPC network（全リージョンの subnet と default firewall）は削除済みです。Cloud Run は VPC 接続を使いません。
+- IAM、Service Usage、Identity Platform、Firebase project、Firestore Rules は region を持たない global サービスです。
 
 ## 9. Firestore Rules と Indexes を適用する
 
@@ -344,7 +354,7 @@ Secret 本文を repository、GitHub variable、Cloud Run の環境変数へ直�
     umask 077
     openssl rand -base64 48 > "$LTM_SECRET_FILE"
 
-    gcloud secrets create "$LTM_SECRET_ID" --project="$LTM_PROJECT_ID" --replication-policy=automatic
+    gcloud secrets create "$LTM_SECRET_ID" --project="$LTM_PROJECT_ID" --replication-policy=user-managed --locations=asia-northeast1
     gcloud secrets versions add "$LTM_SECRET_ID" --project="$LTM_PROJECT_ID" --data-file="$LTM_SECRET_FILE"
     gcloud secrets add-iam-policy-binding "$LTM_SECRET_ID" --project="$LTM_PROJECT_ID" --member="serviceAccount:$LTM_RUNTIME_SA" --role='roles/secretmanager.secretAccessor'
 
