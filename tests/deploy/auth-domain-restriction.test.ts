@@ -24,3 +24,13 @@ test('Functionsはupload単体でpnpm installできるようbuild script許可�
   expect(functionsWorkspace).toContain("'@firebase/util': false");
   expect(functionsWorkspace).toContain('protobufjs: false');
 });
+
+test('FunctionsはCloud Buildのpnpm buildpackが要求する依存を明示する', async () => {
+  // pnpm projectではFunctions Frameworkの明示が必須。firebase-adminはfirebase-functionsの必須peer。
+  const manifest = JSON.parse(await readFile('functions/package.json', 'utf8')) as {
+    dependencies: Record<string, string>;
+  };
+  expect(manifest.dependencies).toHaveProperty('@google-cloud/functions-framework');
+  expect(manifest.dependencies).toHaveProperty('firebase-admin');
+  expect(manifest.dependencies).toHaveProperty('firebase-functions');
+});
