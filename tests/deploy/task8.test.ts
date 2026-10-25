@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { assertTools, smoke } from '../../scripts/cloud-run-smoke';
+import { assertTools, smoke, waitForHealth } from '../../scripts/cloud-run-smoke';
 import { SETUP_MANIFEST } from '../../src/lib/mcp/setup-manifest.generated';
 
 import nextConfig from '../../next.config';
@@ -225,4 +225,15 @@ test.each([
 test('Cloud Run smokeは失敗したtool名とtool error本文を報告する', async () => {
   stubSmoke({ ...SETUP_MANIFEST, client: 'codex' }, 'remember_reference');
   await expect(smoke()).rejects.toThrow('MCP tool error (remember_reference): storage unavailable');
+});
+
+test('Cloud Run smokeのhealth checkは起動中の429/503だけを再試行する', async () => {
+  const statuses = [429, 503, 200];
+  vi.stubGlobal('fetch', async () => new Response(null, { status: statuses.shift() ?? 200 }));
+  await expect(waitForHealth('https://smoke.example', 6, 0)).resolves.toBeUndefined();
+  expect(statuses).toEqual([]);
+  vi.stubGlobal('fetch', async () => new Response(null, { status: 500 }));
+  await expect(waitForHealth('https://smoke.example', 6, 0)).rejects.toThrow('health HTTP 500');
+  vi.stubGlobal('fetch', async () => new Response(null, { status: 429 }));
+  await expect(waitForHealth('https://smoke.example', 2, 0)).rejects.toThrow('health HTTP 429');
 });
