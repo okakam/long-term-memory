@@ -8,7 +8,7 @@
 
 ## 0. 開発コンテナとCLI
 
-開発コンテナには Node.js 22、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
+開発コンテナには Node.js 24、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
 
 開発用 `sshd` はコンテナ起動時に root の PID 1 として foreground 起動し、ホストの `127.0.0.1:2222` からコンテナの `22` 番ポートへ接続できるようにする。パスワード・秘密鍵はイメージやリポジトリへ含めず、SSH認証は公開鍵の登録を前提とする。
 
@@ -28,7 +28,7 @@ Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret 
 
 | 層 | 正本・役割 |
 |---|---|
-| Cloud Run | Next.js単一コンテナ。Invokerは公開、アプリ層で`AUTH_REQUIRED=1`を強制する。Node.js 22、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
+| Cloud Run | Next.js単一コンテナ。Invokerは公開、アプリ層で`AUTH_REQUIRED=1`を強制する。Node.js 24、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
 | Firebase Authentication with Identity Platform | Webのemail/password・Google認証。`@okakam.net`だけを許可するBlocking FunctionsとCloud Run側の二重検証を使う |
 | Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hash、OAuth client/grant/token hashの永続保存 |
 | GCS | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
@@ -116,13 +116,13 @@ MCP toolsは次の17個を維持する。
 
 `.github/workflows/cloud-run.yml` はPR作成時とPRブランチへのpush時にrootのtest・lint・production build・Docker build・built image上の`/api/health`起動確認に加えてFunctions専用のinstall・test・buildを実行し、runtime secretを渡さない。Next.jsは`next start`時にも`next.config.ts`を読み込むため、runner imageにはそこから参照するproject module依存を含める。Firebase Functionsの本番デプロイはFirebase CLIの認証済み操作としてCloud Run deployとは分離する。mainへのPRマージで発生するpush、またはmainブランチからのmanual dispatchだけがWorkload Identity Federationでdeployする。deploy jobは `production` Environmentを使い、verify完了後にProduction deployを1本だけ実行する。`GCP_PROJECT_ID`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`GCP_RUNTIME_SERVICE_ACCOUNT` はGitHub Environment secretから読み、非秘密のFirebase/GCS/OAuth flagはEnvironment variables、maintenance tokenだけはSecret Manager secret参照でCloud Runへ注入する。Environmentの詳細は`docs/cloud-run-production-deployment.md`を参照する。
 
-`.github/workflows/curator.yml` は毎日01:00 UTCに通常projectの自動棚卸しと共通記憶集約を同一runner上で順に実行し、workflow concurrencyで直列化する。通常棚卸しはownerが有効化したprojectだけを専用`LTM_AUTO_MAINTENANCE_TOKEN`で処理する。shared集約はcurator PATと`LTM_MAINTENANCE_TOKEN`を使い、curator principalから読めるprojectのactive記憶を作成日時のUTC半開期間で全type（sessionを含む）読み、元projectを変更せず`__shared__`に`source_refs`付きで反映する。runnerは25件単位で全pageを処理し、各pageのoutcome確認後にのみ完了扱いとする。日次cursorとhash manifestは`__shared__`配下へ保存し、本文は保存しない。手動dispatchはUTC `YYYY-MM-DD`の`from_date`/`to_date`を対で受け、`dry_run=true`が既定値。手動処理とdry-runは日次cursorを更新しない。手順は`docs/memory-automation.md`を正本とする。
+ローカルのsystemd user timer(Linux)又はlaunchd(macOS)が毎日01:00 UTCに`scripts/curator/run-curation.sh`を起動し、通常projectの自動棚卸しと共通記憶集約を順に実行する。publicリポジトリのためself-hosted runnerは登録せず、curatorのGitHub Actions workflowは置かない。wrapperのlockで定期実行と手動実行を直列化する。通常棚卸しはownerが有効化したprojectだけを専用`LTM_AUTO_MAINTENANCE_TOKEN`で処理する。shared集約はcurator PATと`LTM_MAINTENANCE_TOKEN`を使い、curator principalから読めるprojectのactive記憶を作成日時のUTC半開期間で全type（sessionを含む）読み、元projectを変更せず`__shared__`に`source_refs`付きで反映する。runnerは25件単位で全pageを処理し、各pageのoutcome確認後にのみ完了扱いとする。日次cursorとhash manifestは`__shared__`配下へ保存し、本文は保存しない。手動実行はUTC `YYYY-MM-DD`の`FROM_DATE`/`TO_DATE`を対で受ける。手動処理とdry-runは日次cursorを更新しない。手順は`docs/memory-automation.md`を正本とする。
 
 deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1 --memory 512Mi --timeout 300` を初期値とする。Cloud Run URL、PAT、Firebase設定はproduction environmentからsmokeへ渡し、OAuth tokenはCodex CLIのlogin storeで扱い、ログへ出力しない。flag offのPAT smoke後にだけOAuth flagをonへ切り替え、失敗時はoffへ戻してPAT経路を確認する。
 
 ## 9. 検証コマンド
 
-依存ライブラリはNode.js 22・pnpm 11.1.3で管理する。現行の固定バージョンはNext.js / eslint-config-next 16.4.0、React / React DOM 19.3.0とする。これらはユーザー指定により最新安定版へ更新した。その他の依存範囲内の更新では`package.json`の範囲・固定指定を維持し、ルートと`functions/`それぞれの`pnpm-lock.yaml`へ解決済みバージョンを記録する。更新コマンドがmanifestの下限を書き換えた場合は元の指定へ戻し、lockfileを同期してからfrozen installを確認する。Functionsは独立パッケージとして`--ignore-workspace`を指定し、CIと同じ`--ignore-scripts`でインストールする。2026-10-12の更新内容・検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`を参照する。
+依存ライブラリはNode.js 24・pnpm 11.1.3で管理する。現行の固定バージョンはNext.js / eslint-config-next 16.4.1、React / React DOM 19.3.0とする。これらはユーザー指定により最新安定版へ更新した。その他の依存範囲内の更新では`package.json`の範囲・固定指定を維持し、ルートと`functions/`それぞれの`pnpm-lock.yaml`へ解決済みバージョンを記録する。更新コマンドがmanifestの下限を書き換えた場合は元の指定へ戻し、lockfileを同期してからfrozen installを確認する。Functionsは独立パッケージとして`--ignore-workspace`を指定し、CIと同じ`--ignore-scripts`でインストールする。2026-10-12の更新内容・検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`を参照する。
 
 ```bash
 pnpm install --frozen-lockfile

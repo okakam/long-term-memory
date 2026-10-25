@@ -312,10 +312,16 @@ function asEntities(value: unknown): Entity[] {
 function asTriples(value: unknown): Triple[] {
   if (!Array.isArray(value) || value.length > 1000) throw new FirestoreDataError('triples must be a bounded array');
   return value.map((item, index) => {
-    if (!Array.isArray(item) || item.length !== 3 || item.some((part) => typeof part !== 'string')) {
+    // Firestore cannot store nested arrays, so triples are written as objects.
+    const parts = Array.isArray(item)
+      ? item
+      : typeof item === 'object' && item !== null
+        ? [(item as Record<string, unknown>).subject, (item as Record<string, unknown>).predicate, (item as Record<string, unknown>).object]
+        : [];
+    if (parts.length !== 3 || parts.some((part) => typeof part !== 'string')) {
       throw new FirestoreDataError(`triples[${index}] must contain three strings`);
     }
-    return item as Triple;
+    return parts as Triple;
   });
 }
 
@@ -467,7 +473,10 @@ function linkObservationRecord(document: FirestoreDocument): LinkObservation {
 }
 
 function memoryData(record: MemoryIndexRecord): Record<string, unknown> {
-  return { ...record };
+  return {
+    ...record,
+    triples: record.triples.map(([subject, predicate, object]) => ({ subject, predicate, object })),
+  };
 }
 
 export class FirestoreMetadataStore {

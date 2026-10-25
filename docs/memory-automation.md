@@ -2,7 +2,9 @@
 
 ## 実行の流れ
 
-GitHub Actionsの`curator` workflowが毎日01:00 UTCに動き、同じself-hosted `ltm-curator` runner上で通常projectの自動棚卸しを実行してから、curator principalから読めるprojectの共通記憶集約を実行します。workflow単位のconcurrencyで二重実行を防ぎます。通常棚卸しにproject単位の失敗があっても、共有集約jobは続行します。
+日次実行はローカルの定期実行(Linuxはsystemd user timer、macOSはlaunchd)で行います。毎日01:00 UTCに`scripts/curator/run-curation.sh`が通常projectの自動棚卸し(`run-maintenance.ts`)を実行してから、curator principalから読めるprojectの共通記憶集約(`run-dated-curation.ts`)を実行します。通常棚卸しが失敗しても共有集約は実行し、全体は失敗で終えます。各stepには専用credentialだけを渡し、通常棚卸しへcurator PATと`LTM_MAINTENANCE_TOKEN`を、共有集約へ`LTM_AUTO_MAINTENANCE_TOKEN`を渡しません。
+
+curatorはGitHub Actionsで実行しません。このrepositoryはpublicで、self-hosted runnerを登録すると外部PRのworkflowがrunner上で任意のcodeを実行できるためです。ローカルではログイン済みの`claude` CLI(サブスクリプション)を使い、Anthropic API keyは使いません。wrapperは`~/.local/state/ltm-curator/run.lock`で定期実行と手動実行の重複を防ぎます。
 
 通常projectの棚卸しはDashboardでownerが有効化したprojectだけを対象にします。初期値はdisabledです。Dashboardではmemory type別review周期とsession archive日数をprojectごとに変更できます。`__shared__`は通常棚卸しの対象外です。
 
@@ -14,13 +16,30 @@ GitHub Actionsの`curator` workflowが毎日01:00 UTCに動き、同じself-host
 
 ## 手動実行
 
-GitHub Actionsで`curator` workflowを開き、`Run workflow`を選びます。`dry_run`はtrueが既定です。期間を指定する場合、UTC `YYYY-MM-DD`の`from_date`と`to_date`を両方入力します。範囲は`from_date`当日00:00 UTCを含み、`to_date`当日00:00 UTCを含まない半開区間です。片方だけの指定や存在しない日付、空範囲は拒否します。空欄の場合は初回全履歴（以後は日次cursor）を基準とします。
+ローカルでは`DRY_RUN=1 GITHUB_EVENT_NAME=workflow_dispatch ~/.local/libexec/ltm-curator/run-curation.sh`のように環境変数で上書きして実行します。設定ファイルの値より実行時の`DRY_RUN`が優先されます。`GITHUB_EVENT_NAME`を`schedule`以外にすると手動実行扱いになり、日次cursorを更新しません。手動実行は書き込みを避けるため`DRY_RUN=1`から始めてください。共有集約の期間を指定する場合、UTC `YYYY-MM-DD`の`FROM_DATE`と`TO_DATE`を両方指定します。範囲は`FROM_DATE`当日00:00 UTCを含み、`TO_DATE`当日00:00 UTCを含まない半開区間です。片方だけの指定や存在しない日付、空範囲は拒否します。空欄の場合は初回全履歴（以後は日次cursor）を基準とします。
 
 手動write実行でも日次cursorは変更しません。dry-runはproposal作成までで、MCP write、outcome checkpoint、cursor更新を行いません。スケジュール実行だけが完了したprojectのcursorを進めます。再実行やbackfillは安定したoperation IDと`source_refs`で重複登録を避けます。project単位でsnapshot・Claude・applyに失敗した場合、そのprojectのcursorは進めません。
 
 ## ローカル定期実行
 
-macOSでは`launchd/com.user.ltm-shared-curator.plist`を使い、日次curationをユーザーのローカルMCPへ接続できます。repositoryの依存関係をinstallし、`.env.example`と同じローカルserver設定でMCP serverを起動してください。設定ファイルを用意します。
+Linuxでは`systemd/ltm-curator.service`と`systemd/ltm-curator.timer`、macOSでは`launchd/com.user.ltm-shared-curator.plist`を使います。`install.sh`が`uname`で選び、`LTM_CURATOR_SCHEDULER=systemd|launchd`で上書きできます。runnerはinstall時のrepository checkoutのcodeを実行するため、mainを追う専用checkoutからinstallし、更新時は`git pull`と`pnpm install --frozen-lockfile`の後にinstall scriptを再実行してください。
+
+### Linux(systemd user timer)
+
+本番Cloud Runへ接続する場合は`LTM_MODE=remote`とし、設定ファイルへ`MCP_PUBLIC_URL`、curator UIDのPAT(`LTM_MCP_TOKEN`)、`LTM_MAINTENANCE_TOKEN`、`LTM_AUTO_MAINTENANCE_TOKEN`を設定します。後者2つはSecret Managerの`ltm-maintenance-prod`、`ltm-auto-maintenance-prod`と同じ値です。値を画面やlogへ出さず、設定ファイルは`chmod 600`にします。`CLAUDE_BIN`はログイン済みClaude CLIの絶対pathとし、`LTM_CURATOR_PATH`にnode・pnpm・claudeのdirectoryを含めます。
+
+```bash
+CLAUDE_BIN="$(command -v claude)" scripts/curator/install.sh
+systemctl --user daemon-reload
+systemctl --user enable --now ltm-curator.timer
+systemctl --user list-timers ltm-curator.timer
+```
+
+timerは毎日01:00 UTC(日本時間10:00)に実行し、`Persistent=true`により停止中に過ぎた実行は次回起動後に1回実行します。ログアウト中も動かすには`loginctl enable-linger "$USER"`を有効にします。結果は`~/.local/state/ltm-curator/systemd.{out,err}.log`と`journalctl --user -u ltm-curator.service`で確認し、すぐ試す場合は`systemctl --user start ltm-curator.service`を使います。
+
+### macOS(launchd)
+
+macOSでは日次curationをユーザーのローカルMCPまたはCloud Runへ接続できます。repositoryの依存関係をinstallし、`.env.example`と同じローカルserver設定でMCP serverを起動してください。設定ファイルを用意します。
 
 ```bash
 mkdir -p "$HOME/.config/ltm-curator"
@@ -41,14 +60,14 @@ launchdはmacOSのローカル時刻10:00に実行します。変更後にrunner
 
 ## Secret設定
 
-自動棚卸し専用tokenはランダムな長いsecretを1つ生成し、同じ値をCloud Run Secret ManagerとGitHub repository secretに登録します。値をrepository、`.env`、issue、workflow logへ貼らないでください。
+自動棚卸し専用tokenはランダムな長いsecretを1つ生成し、同じ値をCloud Run Secret Manager、GitHub repository secret(Cloud Run smoke用)、ローカルcuratorの設定ファイルに登録します。値をrepository、`.env`、issue、workflow logへ貼らないでください。
 
 1. Secret Managerにtoken値を登録し、Cloud Run runtime service accountへ対象secretの`Secret Manager Secret Accessor`を付与します。
-2. GitHub repository secret `LTM_AUTO_MAINTENANCE_TOKEN`に同じ値を登録します。curator workflowの通常棚卸しjobだけが読みます。
+2. GitHub repository secret `LTM_AUTO_MAINTENANCE_TOKEN`に同じ値を登録します。Cloud Run deploy後のsmokeだけが読みます。ローカルcuratorの設定ファイル(`~/.config/ltm-curator/env`)にも同じ値を設定します。
 3. GitHub production Environment variable `GCP_SECRET_LTM_AUTO_MAINTENANCE_TOKEN`にSecret Managerのsecret名を登録します。
 4. Production deploy後、Cloud Run revisionの`LTM_AUTO_MAINTENANCE_TOKEN`がSecret Manager version `latest`を参照していることを確認します。token値を画面やlogから読み返しません。
 
-従来のshared curator PATと`LTM_MAINTENANCE_TOKEN`は別credentialのままにします。通常棚卸しjobへ共有maintenance tokenやcurator PATを渡しません。共有集約jobにはcurator PATとmaintenance tokenを渡します。PAT失効やtoken rotation時はGitHub secretとSecret Managerのversionを同じ更新作業で切り替えます。
+従来のshared curator PATと`LTM_MAINTENANCE_TOKEN`は別credentialのままにします。通常棚卸しへ共有maintenance tokenやcurator PATを渡しません。共有集約にはcurator PATとmaintenance tokenを渡します。PAT失効やtoken rotation時はGitHub secret、Secret Managerのversion、ローカルcuratorの設定ファイルを同じ更新作業で切り替えます。
 
 ## 履歴と復元
 
@@ -58,12 +77,12 @@ Dashboardのproject管理からownerが自動棚卸し設定、最新処理statu
 
 ## 失敗の確認
 
-- `memory-maintenance` jobのsummaryはproject数、適用数、skip数、失敗数だけを出します。`failed`が1以上ならjobを失敗扱いにし、shared curation jobは続行します。
-- `remote-curation`が失敗した場合、日次cursorは未完了projectで進みません。次回scheduleで再試行します。
+- 通常棚卸しのsummaryはproject数、適用数、skip数、失敗数だけを出します。`failed`が1以上なら通常棚卸しを失敗扱いにし、共有集約は続行します。
+- 共有集約が失敗した場合、日次cursorは未完了projectで進みません。次回の定期実行で再試行します。
 - 共有restore requestの読み取り・revision確認・適用で一時障害が起きた場合はrequestをpendingのまま保ち、runnerは結果checkpointを送らず次のwrite実行で再試行します。hash/revision競合など安全に再試行できない状態はrequestをfailedとしてDashboardへ表示します。
 - URL取得の失敗・曖昧な根拠・矛盾は候補を変更せず、再確認予定にします。
 - `LTM_AUTO_MAINTENANCE_TOKEN`が欠落・無効なら通常棚卸しjobが失敗します。共有集約tokenの代替にはしません。
-- runnerのraw Claude stdoutやstderrはlogへ出しません。原因調査にはsafe summary、Actions job status、memory IDと監査eventを使います。
+- runnerのraw Claude stdoutやstderrはlogへ出しません。原因調査にはsafe summary、systemd・launchdのlogと終了status、memory IDと監査eventを使います。
 
 ## ローカル受入
 

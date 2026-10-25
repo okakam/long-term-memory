@@ -20,7 +20,8 @@
 ## 開発環境
 
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
-- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
+- Node.jsのバージョンは`.nvmrc`を正本とし、GitHub Actionsは`node-version-file: .nvmrc`、Dockerfile・Dev Containerのimage tagと`engines`はテストで`.nvmrc`との一致を検証する。
+- コンテナには Node.js 24、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
 - VS Code Dev Containerでは`remote.autoForwardPorts=true`と`remote.autoForwardPortsSource="process"`を既定にし、Codex・Claude Code OAuthの動的loopback callback portを転送する。callback用の固定port/rangeを`forwardPorts`へ追加せず、自動検出されない場合は`.devcontainer/README.md`の手順で現在のportだけを一時転送する。
 - `.devcontainer/devcontainer.json` の `shutdownAction` は `none` とし、VS Codeを閉じても開発コンテナを停止しない。不要時は明示的に停止する。
@@ -36,7 +37,7 @@
 - OAuth同意画面(`/oauth/authorize`)のresponse CSPはtransactionから再検証したCodex loopback callbackのoriginだけを`form-action`へ追加する。静的CSPはこのrouteだけを除外し、他routeの`form-action 'self'`と共通security headersを維持する。callback path/queryや任意originを許可しない。本番受入はdeploy後のCodex browser consent/callback smokeで確認し、ローカル成功と混同しない。
 - Dashboardのproject作成者はFirestore membershipのownerとし、ownerだけが登録済み許可ドメインのemailでmemberを管理する。認可の正本はUID membershipであり、email directory lookupは表示・追加時だけに使う。最後のownerを削除又はmemberへ変更してはならない。
 - Dashboardの自動棚卸し設定、履歴、archive復元はowner専用とする。設定更新・復元の直前にFirestore membershipを再取得し、same-origin guardを通す。shared履歴はcurator UIDだけが読め、shared復元はDashboard APIから許可しない。履歴応答に記憶本文、source URL、内部GCS keyを含めない。
-- curator workflowは`group: ltm-curator`で直列化し、通常棚卸しjobが失敗しても共有集約jobを実行する。手動共有集約はUTC `YYYY-MM-DD`の開始・終了日を対で受け、既定dry-runとし、schedule以外は日次cursorを更新しない。専用curation registryはcurator UIDのPATと`LTM_MAINTENANCE_TOKEN`を要求し、`list_projects`・`curation_snapshot`・`curation_apply`・`curation_checkpoint`だけを公開する。日次cursor・hash manifest・page outcomeは`__shared__`配下へ保存し、本文は保存しない。共有昇格時はsourceとproposalの全フィールドを機密filterで検査し、反映時にsourceが変わった候補は現在のactive記憶/hashで保留して再評価する。共有復元はcurator Dashboardがrequestを作成し、次のwrite実行で同じgateを再検証して処理する。一時的な読み取り・適用障害ではrequestをpendingに保ち、hash/revision競合など既知の安全な停止条件をfailedにする。ローカルlaunchd wrapperはrepository rootを明示し、local HTTPをloopbackに限定する。運用手順は`docs/memory-automation.md`を正本とする。
+- curatorはローカルの`scripts/curator/run-curation.sh`だけで実行し、lockで直列化して、通常棚卸しが失敗しても共有集約を実行する。手動共有集約はUTC `YYYY-MM-DD`の開始・終了日を対で受け、schedule以外は日次cursorを更新しない。専用curation registryはcurator UIDのPATと`LTM_MAINTENANCE_TOKEN`を要求し、`list_projects`・`curation_snapshot`・`curation_apply`・`curation_checkpoint`だけを公開する。日次cursor・hash manifest・page outcomeは`__shared__`配下へ保存し、本文は保存しない。共有昇格時はsourceとproposalの全フィールドを機密filterで検査し、反映時にsourceが変わった候補は現在のactive記憶/hashで保留して再評価する。共有復元はcurator Dashboardがrequestを作成し、次のwrite実行で同じgateを再検証して処理する。一時的な読み取り・適用障害ではrequestをpendingに保ち、hash/revision競合など既知の安全な停止条件をfailedにする。日次実行はローカルのsystemd user timer(Linux)/launchd(macOS)の`run-curation.sh`で行い、通常棚卸しと共有集約へ各専用credentialだけを渡す。publicリポジトリのためself-hosted runnerを登録せず、curatorのGitHub Actions workflowを置かない。wrapperはrepository rootを明示し、local HTTPをloopbackに限定する。運用手順は`docs/memory-automation.md`を正本とする。
 - Cloud Run runner imageには、起動時に読み込まれる`next.config.ts`とそのproject module依存を含める。Docker imageの`/api/health`起動確認をdeploy前の回帰ゲートとする。
 
 - YAML/JSON の構文を検証し、`docker compose -f .devcontainer/compose.yaml config --quiet` を実行する。
@@ -57,7 +58,7 @@
 - Cloud Runの公開MCP URLは`https://ltm.okakam.net`へ統一する。DNS・Google-managed certificateの有効化後、Production Environmentの`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`CLOUD_RUN_URL`を揃えてから再デプロイする。
 - GCPリソース、IAM、Workload Identity Federation、Secret Manager、Firestore Rules/Indexes、Identity Platform/Blocking FunctionsのCLI手順は `docs/google-cloud-cli-setup.md` に記録する。Firebase Storageは使用せず、Markdown本文はCloud RunからGCS APIで扱う。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
-- 依存範囲内のライブラリ更新はルートと`functions/`の独立した`pnpm-lock.yaml`を対象にし、manifestの範囲・固定指定を維持する。ユーザーが指定したNext.js・Reactの更新では対応する`eslint-config-next`・`react-dom`も揃え、検証済み安定版を固定する（現行Next.js 16.4.0、React 19.3.0）。Functionsの更新・再現確認では既存CIと同じ`--ignore-workspace`・`--ignore-scripts`を使う。更新計画と検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`に記録する。
+- 依存範囲内のライブラリ更新はルートと`functions/`の独立した`pnpm-lock.yaml`を対象にし、manifestの範囲・固定指定を維持する。ユーザーが指定したNext.js・Reactの更新では対応する`eslint-config-next`・`react-dom`も揃え、検証済み安定版を固定する（現行Next.js 16.4.1、React 19.3.0。16.4.1はGHSA-2464-fhr4-w9xw・GHSA-673q-mjm6-r5xr等のセキュリティ修正）。Functionsの更新・再現確認では既存CIと同じ`--ignore-workspace`・`--ignore-scripts`を使う。更新計画と検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`に記録する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
 
 <!-- ltm:begin -->

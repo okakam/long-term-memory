@@ -4,7 +4,7 @@
   "type": "module",
   "main": "lib/index.js",
   "engines": {
-    "node": "22"
+    "node": "24"
   },
   "scripts": {
     "build": "tsc",
@@ -14,7 +14,7 @@
     "firebase-functions": "7.4.0"
   },
   "devDependencies": {
-    "@types/node": "^20",
+    "@types/node": "^24",
     "typescript": "^5",
     "vitest": "^4.1.11"
   }
