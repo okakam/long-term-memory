@@ -8,7 +8,7 @@
 
 ## 0. 開発コンテナとCLI
 
-開発コンテナには Node.js 22、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
+開発コンテナには Node.js 24、pnpm、Codex CLI、GitHub CLI、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils`を導入する。Turso CLIは使用しない。CLIの導入と認証手順は `docs/google-cloud-cli-setup.md` と `.devcontainer/README.md` を正本とする。
 
 開発用 `sshd` はコンテナ起動時に root の PID 1 として foreground 起動し、ホストの `127.0.0.1:2222` からコンテナの `22` 番ポートへ接続できるようにする。パスワード・秘密鍵はイメージやリポジトリへ含めず、SSH認証は公開鍵の登録を前提とする。
 
@@ -28,7 +28,7 @@ Google Cloudのリソース作成・IAM・Workload Identity Federation・Secret 
 
 | 層 | 正本・役割 |
 |---|---|
-| Cloud Run | Next.js単一コンテナ。Invokerは公開、アプリ層で`AUTH_REQUIRED=1`を強制する。Node.js 22、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
+| Cloud Run | Next.js単一コンテナ。Invokerは公開、アプリ層で`AUTH_REQUIRED=1`を強制する。Node.js 24、1 vCPU、512 MiB、min 0、max 1、concurrency 1、region `asia-northeast1` |
 | Firebase Authentication with Identity Platform | Webのemail/password・Google認証。`@okakam.net`だけを許可するBlocking FunctionsとCloud Run側の二重検証を使う |
 | Firestore | project、membership、memory metadata、name index、tombstone、MCP PAT hash、OAuth client/grant/token hashの永続保存 |
 | GCS | Markdown本文のimmutable object。keyは `<prefix>/<project_id>/memories/<name>/<sha256>.md` |
@@ -122,7 +122,7 @@ deploy設定は `gcloud run deploy` の `--min 0 --max 1 --concurrency 1 --cpu 1
 
 ## 9. 検証コマンド
 
-依存ライブラリはNode.js 22・pnpm 11.1.3で管理する。現行の固定バージョンはNext.js / eslint-config-next 16.4.0、React / React DOM 19.3.0とする。これらはユーザー指定により最新安定版へ更新した。その他の依存範囲内の更新では`package.json`の範囲・固定指定を維持し、ルートと`functions/`それぞれの`pnpm-lock.yaml`へ解決済みバージョンを記録する。更新コマンドがmanifestの下限を書き換えた場合は元の指定へ戻し、lockfileを同期してからfrozen installを確認する。Functionsは独立パッケージとして`--ignore-workspace`を指定し、CIと同じ`--ignore-scripts`でインストールする。2026-10-12の更新内容・検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`を参照する。
+依存ライブラリはNode.js 24・pnpm 11.1.3で管理する。現行の固定バージョンはNext.js / eslint-config-next 16.4.1、React / React DOM 19.3.0とする。これらはユーザー指定により最新安定版へ更新した。その他の依存範囲内の更新では`package.json`の範囲・固定指定を維持し、ルートと`functions/`それぞれの`pnpm-lock.yaml`へ解決済みバージョンを記録する。更新コマンドがmanifestの下限を書き換えた場合は元の指定へ戻し、lockfileを同期してからfrozen installを確認する。Functionsは独立パッケージとして`--ignore-workspace`を指定し、CIと同じ`--ignore-scripts`でインストールする。2026-10-12の更新内容・検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`を参照する。
 
 ```bash
 pnpm install --frozen-lockfile

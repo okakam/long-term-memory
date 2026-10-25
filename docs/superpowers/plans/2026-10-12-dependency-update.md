@@ -77,3 +77,16 @@ Functionsの直接依存は既存範囲内の解決済み最新版だったた�
 - package manifest・Dev Container・Firebase設定のJSON、および両lockfile・pnpm workspace・Compose・Cloud Run workflowのYAML構文: 成功。
 - ホストにCompose pluginがなかったため、一時ディレクトリへ公式Compose v5.6.0を導入し、`docker --config /tmp/ltm-docker-cli compose -f .devcontainer/compose.yaml config --quiet`: 成功。
 - Docker imageビルド・コンテナhealth確認・本番Cloud Run/Firebase smokeは未実行。前者は既存GitHub Actionsの回帰ゲート、後者は外部資格情報が必要な本番受入ゲートとする。
+
+## 2026-10-25 Next.js 16.4.1 セキュリティ更新
+
+`NODE_ENV=production pnpm build`が既知脆弱性の通知で停止し、`pnpm audit --prod`でNext.js `>=16.0.0 <=16.4.0`のcritical advisory（GHSA-2464-fhr4-w9xw: SVG使用時のImage Optimization API RCE、GHSA-673q-mjm6-r5xr: `use cache`のtyped array RCE）とhigh（Server ActionsのDoS）を確認した。修正版の`next`・`eslint-config-next` 16.4.1へ固定指定を更新した。React/React DOMは19.3.0を維持する。更新後の`pnpm audit --prod`にNext.jsのadvisoryは残っていない（間接依存の別advisoryは別途扱う）。
+
+## 2026-10-25 Node.js 24 LTS への更新
+
+ユーザー指定により、Node.jsを22から当時のActive LTSである24（v24.22.1 Krypton）へ全体で上げた。Node.js 26はCurrentでLTS昇格前のため対象外とした。
+
+- 対象: `.nvmrc`、`package.json`の`engines`（`>=24.11.0 <25`）と`@types/node ^24`、`functions/package.json`の`engines.node`（Cloud Functions runtime 24）と`@types/node ^24`、Cloud Run `Dockerfile`・Dev Containerの`node:24-bookworm-slim`、GitHub Actionsの`node-version-file: .nvmrc`、関連ドキュメントとテスト。`.nvmrc`を`24.22.1`に固定して正本とし、Dockerfile・Dev Containerの`node:24.22.1-bookworm-slim`と`engines`の一致をテストで検証する。
+- Node.js 24でルート・Functionsのfrozen install、全テスト（116ファイル・403テスト）、lint、型検査、`NODE_ENV=production pnpm build`、Functionsのtest/build: 成功。
+- 既存の`node_modules`はNode.js 22向けにbuildされた`better-sqlite3`のnative binary（`NODE_MODULE_VERSION 127`）を含むため、Node.js 24では`pnpm rebuild better-sqlite3`（又は再install）が必要。
+- Docker imageとCloud Run/Functionsの本番受入は既存CI・deploy smokeで確認する。
