@@ -14,7 +14,7 @@ function read(relativePath: string): string {
 
 test('Docker配布設定はCloud RunのPORTと一時SQLiteを使う', () => {
   const dockerfile = read('Dockerfile');
-  expect(dockerfile).toContain('ARG NODE_IMAGE=node:22-bookworm-slim');
+  expect(dockerfile).toContain('ARG NODE_IMAGE=node:24-bookworm-slim');
   expect(dockerfile).toContain('pnpm install --frozen-lockfile');
   expect(dockerfile).toContain('LTM_HOME=/tmp/long-term-memory');
   expect(dockerfile).toContain('LTM_STORAGE_DRIVER=cloud');

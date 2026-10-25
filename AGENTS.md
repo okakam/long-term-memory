@@ -20,7 +20,7 @@
 ## 開発環境
 
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
-- コンテナには Node.js 22、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
+- コンテナには Node.js 24、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
 - VS Code Dev Containerでは`remote.autoForwardPorts=true`と`remote.autoForwardPortsSource="process"`を既定にし、Codex・Claude Code OAuthの動的loopback callback portを転送する。callback用の固定port/rangeを`forwardPorts`へ追加せず、自動検出されない場合は`.devcontainer/README.md`の手順で現在のportだけを一時転送する。
 - `.devcontainer/devcontainer.json` の `shutdownAction` は `none` とし、VS Codeを閉じても開発コンテナを停止しない。不要時は明示的に停止する。
@@ -57,7 +57,7 @@
 - Cloud Runの公開MCP URLは`https://ltm.okakam.net`へ統一する。DNS・Google-managed certificateの有効化後、Production Environmentの`MCP_PUBLIC_URL`、`MCP_ALLOWED_ORIGINS`、`CLOUD_RUN_URL`を揃えてから再デプロイする。
 - GCPリソース、IAM、Workload Identity Federation、Secret Manager、Firestore Rules/Indexes、Identity Platform/Blocking FunctionsのCLI手順は `docs/google-cloud-cli-setup.md` に記録する。Firebase Storageは使用せず、Markdown本文はCloud RunからGCS APIで扱う。
 - pnpm は `packageManager` の 11.1.3 を使用する。仕様の依存範囲を維持し、解決済みバージョンは `pnpm-lock.yaml` に固定する。
-- 依存範囲内のライブラリ更新はルートと`functions/`の独立した`pnpm-lock.yaml`を対象にし、manifestの範囲・固定指定を維持する。ユーザーが指定したNext.js・Reactの更新では対応する`eslint-config-next`・`react-dom`も揃え、検証済み安定版を固定する（現行Next.js 16.4.0、React 19.3.0）。Functionsの更新・再現確認では既存CIと同じ`--ignore-workspace`・`--ignore-scripts`を使う。更新計画と検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`に記録する。
+- 依存範囲内のライブラリ更新はルートと`functions/`の独立した`pnpm-lock.yaml`を対象にし、manifestの範囲・固定指定を維持する。ユーザーが指定したNext.js・Reactの更新では対応する`eslint-config-next`・`react-dom`も揃え、検証済み安定版を固定する（現行Next.js 16.4.1、React 19.3.0。16.4.1はGHSA-2464-fhr4-w9xw・GHSA-673q-mjm6-r5xr等のセキュリティ修正）。Functionsの更新・再現確認では既存CIと同じ`--ignore-workspace`・`--ignore-scripts`を使う。更新計画と検証結果は`docs/superpowers/plans/2026-10-12-dependency-update.md`に記録する。
 - ホストが `NODE_ENV=development` を設定している場合、本番ビルド検証は `NODE_ENV=production pnpm build` で実行する。
 
 <!-- ltm:begin -->

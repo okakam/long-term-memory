@@ -29,7 +29,7 @@ Claude Codeを起動して`/mcp`を開き、`long-term-memory`を選んで`Authe
 
 ## ローカル開発
 
-Node.js 22とpnpmを使います。nvmを使う場合は`.nvmrc`のバージョンへ切り替えます。
+Node.js 24 (LTS)とpnpmを使います。nvmを使う場合は`.nvmrc`のバージョンへ切り替えます。
 
 ```bash
 nvm install
