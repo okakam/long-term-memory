@@ -1,0 +1,5 @@
+# Cloud Build (Firebase Functions deploy) は functions/ だけを upload して pnpm install する。
+# ルートの pnpm-workspace.yaml は届かないため、build script の許可設定をここにも置く。
+allowBuilds:
+  '@firebase/util': false
+  protobufjs: false

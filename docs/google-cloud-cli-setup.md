@@ -268,6 +268,10 @@ repository の functions/ には、@okakam.net 以外を拒否する beforeUserC
     pnpm --dir functions --ignore-workspace build
     firebase deploy --project="$LTM_PROJECT_ID" --only functions
 
+Cloud Build は functions/ だけを upload して pnpm install するため、ルートの pnpm-workspace.yaml は使われません。pnpm 11 は未許可の build script を `ERR_PNPM_IGNORED_BUILDS` で拒否するので、functions/pnpm-workspace.yaml にも `allowBuilds` を置きます。依存を追加して build script を持つpackageが増えた場合は、ここにも許可/不許可を追記します。
+
+初回 deploy で Artifact Registry の cleanup policy が未設定と表示された場合は、`firebase functions:artifacts:setpolicy --project="$LTM_PROJECT_ID" --location=asia-northeast1` で古い image を自動削除します。Functions は `functions/src/index.ts` の `FUNCTION_REGION`（`asia-northeast1`）で Cloud Run・Firestore・GCS と同じ東京リージョンへ deploy します。
+
 deploy 後、Firebase Console の Authentication → Settings → Blocking functions で、before user created と before user signed in の両方が登録されていることを確認します。
 
 Functions のコードを変更した場合は、この Firebase deploy を再実行します。Cloud Run deploy workflow は Functions を自動 deploy しません。
