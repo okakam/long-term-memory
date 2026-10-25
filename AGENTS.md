@@ -20,6 +20,7 @@
 ## 開発環境
 
 - 開発コンテナは `.devcontainer/` の `Dockerfile` と `compose.yaml` を正本とする。
+- Node.jsのバージョンは`.nvmrc`を正本とし、GitHub Actionsは`node-version-file: .nvmrc`、Dockerfile・Dev Containerのimage tagと`engines`はテストで`.nvmrc`との一致を検証する。
 - コンテナには Node.js 24、pnpm、OpenAI Codex CLI、Git、Git Flow、GitHub CLI（`gh`）、Google Cloud CLI（`gcloud`）、Firebase CLI、OpenSSH Server（`sshd`）、`nc`（`netcat-openbsd`）、`jq`、`xz-utils` を用意する。Turso CLIは使用しない。
 - VS Code 拡張機能 `openai.chatgpt` は `.devcontainer/devcontainer.json` の `customizations.vscode.extensions` で導入する。
 - VS Code Dev Containerでは`remote.autoForwardPorts=true`と`remote.autoForwardPortsSource="process"`を既定にし、Codex・Claude Code OAuthの動的loopback callback portを転送する。callback用の固定port/rangeを`forwardPorts`へ追加せず、自動検出されない場合は`.devcontainer/README.md`の手順で現在のportだけを一時転送する。

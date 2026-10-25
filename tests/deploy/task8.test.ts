@@ -12,9 +12,28 @@ function read(relativePath: string): string {
   return readFileSync(resolve(root, relativePath), 'utf8');
 }
 
+test('Node.jsのバージョンは.nvmrcを正本として各設定と揃える', () => {
+  const version = read('.nvmrc').trim();
+  expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+  const major = version.split('.')[0];
+  const image = `node:${version}-bookworm-slim`;
+  expect(read('Dockerfile')).toContain(`ARG NODE_IMAGE=${image}`);
+  expect(read('.devcontainer/Dockerfile')).toContain(`ARG NODE_IMAGE=${image}`);
+  expect(read('.devcontainer/compose.yaml')).toContain(`NODE_IMAGE: ${image}`);
+  for (const workflow of ['.github/workflows/test.yml', '.github/workflows/cloud-run.yml']) {
+    const text = read(workflow);
+    expect(text).toContain('node-version-file: .nvmrc');
+    expect(text).not.toMatch(/node-version:\s/);
+  }
+  const engines = (JSON.parse(read('package.json')) as { engines: { node: string } }).engines.node;
+  expect(engines).toBe(`>=${major}.11.0 <${Number(major) + 1}`);
+  const functionsEngines = (JSON.parse(read('functions/package.json')) as { engines: { node: string } }).engines.node;
+  expect(functionsEngines).toBe(major);
+});
+
 test('Docker配布設定はCloud RunのPORTと一時SQLiteを使う', () => {
   const dockerfile = read('Dockerfile');
-  expect(dockerfile).toContain('ARG NODE_IMAGE=node:24-bookworm-slim');
+  expect(dockerfile).toContain(`ARG NODE_IMAGE=node:${read('.nvmrc').trim()}-bookworm-slim`);
   expect(dockerfile).toContain('pnpm install --frozen-lockfile');
   expect(dockerfile).toContain('LTM_HOME=/tmp/long-term-memory');
   expect(dockerfile).toContain('LTM_STORAGE_DRIVER=cloud');

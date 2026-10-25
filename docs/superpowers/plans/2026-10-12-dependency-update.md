@@ -86,7 +86,7 @@ Functionsの直接依存は既存範囲内の解決済み最新版だったた�
 
 ユーザー指定により、Node.jsを22から当時のActive LTSである24（v24.22.1 Krypton）へ全体で上げた。Node.js 26はCurrentでLTS昇格前のため対象外とした。
 
-- 対象: `.nvmrc`、`package.json`の`engines`（`>=24.11.0 <25`）と`@types/node ^24`、`functions/package.json`の`engines.node`（Cloud Functions runtime 24）と`@types/node ^24`、Cloud Run `Dockerfile`・Dev Containerの`node:24-bookworm-slim`、GitHub Actionsの`node-version: 24`、関連ドキュメントとテスト。
+- 対象: `.nvmrc`、`package.json`の`engines`（`>=24.11.0 <25`）と`@types/node ^24`、`functions/package.json`の`engines.node`（Cloud Functions runtime 24）と`@types/node ^24`、Cloud Run `Dockerfile`・Dev Containerの`node:24-bookworm-slim`、GitHub Actionsの`node-version-file: .nvmrc`、関連ドキュメントとテスト。`.nvmrc`を`24.22.1`に固定して正本とし、Dockerfile・Dev Containerの`node:24.22.1-bookworm-slim`と`engines`の一致をテストで検証する。
 - Node.js 24でルート・Functionsのfrozen install、全テスト（116ファイル・403テスト）、lint、型検査、`NODE_ENV=production pnpm build`、Functionsのtest/build: 成功。
 - 既存の`node_modules`はNode.js 22向けにbuildされた`better-sqlite3`のnative binary（`NODE_MODULE_VERSION 127`）を含むため、Node.js 24では`pnpm rebuild better-sqlite3`（又は再install）が必要。
 - Docker imageとCloud Run/Functionsの本番受入は既存CI・deploy smokeで確認する。

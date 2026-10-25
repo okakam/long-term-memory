@@ -24,7 +24,7 @@ jobs:
           version: 11.1.3
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir functions --ignore-workspace install --frozen-lockfile --ignore-scripts

@@ -29,7 +29,7 @@ Claude Codeを起動して`/mcp`を開き、`long-term-memory`を選んで`Authe
 
 ## ローカル開発
 
-Node.js 24 (LTS)とpnpmを使います。nvmを使う場合は`.nvmrc`のバージョンへ切り替えます。
+Node.js 24 (LTS)とpnpmを使います。Node.jsのバージョンは`.nvmrc`（現在`24.22.1`）を正本とし、nvmでは`nvm use`で切り替えます。GitHub Actionsは`node-version-file: .nvmrc`で同じ版を使い、Dockerfile・Dev Containerのimage tagはテストで`.nvmrc`と一致することを検証します。
 
 ```bash
 nvm install
