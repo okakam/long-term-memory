@@ -4,6 +4,7 @@ import {
   authBeforeUserCreated,
   authBeforeUserSignedIn,
   enforceAllowedEmail,
+  FUNCTION_REGION,
 } from '../src/index.js';
 
 type BlockingTrigger = {
@@ -45,4 +46,9 @@ test.each(triggers)('Blocking Functionの%s triggerが境界値を正しく判�
   expect(() => invoke(trigger, 'user@sub.okakam.net')).toThrow();
   expect(() => invoke(trigger, 'user@okakam.net.evil')).toThrow();
   expect(() => invoke(trigger, 'user@example.com')).toThrow();
+});
+
+test.each(triggers)('Blocking Functionの%s triggerは東京リージョンにdeployする', (_, trigger) => {
+  expect(FUNCTION_REGION).toBe('asia-northeast1');
+  expect((trigger as unknown as { __endpoint: { region?: string[] } }).__endpoint.region).toEqual([FUNCTION_REGION]);
 });
