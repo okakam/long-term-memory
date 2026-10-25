@@ -16,3 +16,11 @@ test('運用ドキュメントはokakam.net制限とFunctions deployを記載す
   expect(setup).toContain('eventarcpublishing.googleapis.com');
   expect(production).toContain('okakam.net');
 });
+
+test('Functionsはupload単体でpnpm installできるようbuild script許可設定を持つ', async () => {
+  // Cloud Buildはfunctions/だけを受け取るため、ルートのpnpm-workspace.yamlは使われない。
+  const functionsWorkspace = await readFile('functions/pnpm-workspace.yaml', 'utf8');
+  expect(functionsWorkspace).toMatch(/^allowBuilds:$/m);
+  expect(functionsWorkspace).toContain("'@firebase/util': false");
+  expect(functionsWorkspace).toContain('protobufjs: false');
+});
