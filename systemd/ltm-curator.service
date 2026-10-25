@@ -1,0 +1,13 @@
+[Unit]
+Description=long-term-memory project maintenance and shared curation
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash __LIBEXEC__/run-curation.sh
+WorkingDirectory=/tmp
+Environment=LTM_CURATOR_REPO_ROOT=__REPO_ROOT__
+TimeoutStartSec=90min
+StandardOutput=append:__HOME__/.local/state/ltm-curator/systemd.out.log
+StandardError=append:__HOME__/.local/state/ltm-curator/systemd.err.log

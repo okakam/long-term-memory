@@ -60,11 +60,36 @@ fi
 LOG_DIR="${LTM_CURATOR_LOG_DIR:-$HOME/.local/state/ltm-curator}"
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR"
+# Serialize runs (timer and manual) without relying on flock, which macOS lacks.
+LOCK_DIR="$LOG_DIR/run.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "another curator run is in progress" >&2
+  exit 1
+fi
+trap 'rmdir "$LOCK_DIR"' EXIT
 export PATH="${LTM_CURATOR_PATH:-$PATH}"
 cd "$REPO_ROOT"
 umask 077
 
-DRY_RUN="$RUN_DRY_RUN" \
+# Normal-project maintenance uses only its dedicated token; shared curation
+# never receives it. A maintenance failure does not skip shared curation.
+MAINTENANCE_STATUS=0
+if [[ -n "${LTM_AUTO_MAINTENANCE_TOKEN:-}" ]]; then
+  env -u LTM_MCP_TOKEN -u LTM_MAINTENANCE_TOKEN \
+    DRY_RUN="$RUN_DRY_RUN" \
+    MCP_PUBLIC_URL="$MCP_PUBLIC_URL" \
+    CLAUDE_BIN="$CLAUDE_BIN" \
+    pnpm exec tsx scripts/curator/run-maintenance.ts || MAINTENANCE_STATUS=$?
+elif [[ "$MODE" == "remote" ]]; then
+  echo "remote maintenance configuration is incomplete" >&2
+  MAINTENANCE_STATUS=1
+else
+  echo "LTM_AUTO_MAINTENANCE_TOKEN is empty: project maintenance skipped"
+fi
+
+CURATION_STATUS=0
+env -u LTM_AUTO_MAINTENANCE_TOKEN \
+  DRY_RUN="$RUN_DRY_RUN" \
   LTM_MODE="$MODE" \
   MCP_PUBLIC_URL="$MCP_PUBLIC_URL" \
   LTM_MCP_TOKEN="$LTM_MCP_TOKEN" \
@@ -72,7 +97,12 @@ DRY_RUN="$RUN_DRY_RUN" \
   TO_DATE="${TO_DATE:-}" \
   GITHUB_EVENT_NAME="${GITHUB_EVENT_NAME:-schedule}" \
   CLAUDE_BIN="$CLAUDE_BIN" \
-  pnpm exec tsx scripts/curator/run-dated-curation.ts
+  pnpm exec tsx scripts/curator/run-dated-curation.ts || CURATION_STATUS=$?
+
+if [[ "$MAINTENANCE_STATUS" != "0" || "$CURATION_STATUS" != "0" ]]; then
+  echo "curator run failed: maintenance=$MAINTENANCE_STATUS curation=$CURATION_STATUS" >&2
+  exit 1
+fi
 
 if [[ "$RUN_DRY_RUN" == "0" ]]; then
   STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
