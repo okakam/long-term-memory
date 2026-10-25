@@ -276,6 +276,16 @@ deploy 後、Firebase Console の Authentication → Settings → Blocking funct
 
 Functions のコードを変更した場合は、この Firebase deploy を再実行します。Cloud Run deploy workflow は Functions を自動 deploy しません。
 
+## リージョン方針（東京に統一）
+
+region を持つリソースはすべて `asia-northeast1` に置きます（2026-10-25 に実環境で確認）。
+
+- Cloud Run、Firestore、GCS bucket、Artifact Registry、Cloud Functions（`FUNCTION_REGION`）: `asia-northeast1`
+- Secret Manager: `--replication-policy=user-managed --locations=asia-northeast1`。replication は作成後に変更できないため、既存 Secret を移す場合は一時 Secret へ値を複写し、同名で再作成して値と runtime SA の `roles/secretmanager.secretAccessor` を戻します（値は表示せず hash で一致確認）。
+- Cloud Logging: `_Default` sink の宛先を `asia-northeast1` の log bucket `default-tokyo`（保持30日）にします。`_Required` bucket は Google 管理で global のままです。
+- 未使用の default VPC network（全リージョンの subnet と default firewall）は削除済みです。Cloud Run は VPC 接続を使いません。
+- IAM、Service Usage、Identity Platform、Firebase project、Firestore Rules は region を持たない global サービスです。
+
 ## 9. Firestore Rules と Indexes を適用する
 
 firebase.json は firestore.rules と firestore.indexes.json を参照します。対象 project を明示して deploy します。
@@ -344,7 +354,7 @@ Secret 本文を repository、GitHub variable、Cloud Run の環境変数へ直�
     umask 077
     openssl rand -base64 48 > "$LTM_SECRET_FILE"
 
-    gcloud secrets create "$LTM_SECRET_ID" --project="$LTM_PROJECT_ID" --replication-policy=automatic
+    gcloud secrets create "$LTM_SECRET_ID" --project="$LTM_PROJECT_ID" --replication-policy=user-managed --locations=asia-northeast1
     gcloud secrets versions add "$LTM_SECRET_ID" --project="$LTM_PROJECT_ID" --data-file="$LTM_SECRET_FILE"
     gcloud secrets add-iam-policy-binding "$LTM_SECRET_ID" --project="$LTM_PROJECT_ID" --member="serviceAccount:$LTM_RUNTIME_SA" --role='roles/secretmanager.secretAccessor'
 
