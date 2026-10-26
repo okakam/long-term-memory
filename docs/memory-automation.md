@@ -56,7 +56,7 @@ CLAUDE_BIN="$(command -v claude)" scripts/curator/install.sh
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.user.ltm-shared-curator.plist"
 ```
 
-launchdはmacOSのローカル時刻10:00に実行します。変更後にrunnerを更新するときはinstall scriptを再実行し、既存LaunchAgentをbootoutしてからbootstrapし直してください。Cloud Runを使う`LTM_MODE=remote`ではHTTPSの`MCP_PUBLIC_URL`、curator UIDのPAT、`LTM_MAINTENANCE_TOKEN`が必要です。GitHub Actionsのscheduleは毎日01:00 UTCにwrite実行し、manual dispatchはdry-runが既定です。
+launchdはmacOSのローカル時刻10:00に実行します。変更後にrunnerを更新するときはinstall scriptを再実行し、既存LaunchAgentをbootoutしてからbootstrapし直してください。Cloud Runを使う`LTM_MODE=remote`ではHTTPSの`MCP_PUBLIC_URL`、curator UIDのPAT、`LTM_MAINTENANCE_TOKEN`が必要です。curatorのGitHub Actions workflowは置かず、日次write実行はローカルのsystemd timer・launchdだけで行います。試験実行は設定ファイルの`DRY_RUN=1`で行い、`systemctl --user start`の呼び出し元環境変数はserviceへ渡らない点に注意してください。`LTM_MAINTENANCE_TOKEN`をSecret Managerへ登録するときは末尾改行を含めないでください(`printf '%s'`を使う)。改行が入るとCloud Run側の照合が一致せず、curation modeが`403 curator access required`になります。
 
 ## Secret設定
 
