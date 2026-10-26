@@ -36,7 +36,7 @@
 
 **Files:** Create `src/lib/curation/types.ts`, `src/lib/curation/window.ts`, `src/lib/curation/store.ts`, `src/lib/curation/firestore-store.ts`, `src/lib/curation/local-store.ts`, `src/lib/curation/service.ts`; Modify `src/lib/storage/firestore-metadata.ts`, `firestore.indexes.json`; Test `tests/lib/curation/window.test.ts`, `tests/lib/curation/checkpoint.test.ts`。
 
-**Interfaces:** `parseCurationWindow(input:{from_date?:string;to_date?:string;mode:'schedule'|'manual';dry_run:boolean}, now:string): CurationWindow`、`CurationStore.begin(sourceProjectId:string, window:CurationWindow): Promise<{run_id:string}>`。Firestoreは`projects/__shared__/sharedCurationCursors/{sourceProjectId}`と`curationRuns/{runId}`配下へmanifest/page結果を保存し、本文は保存しない。source projectへcursorを書かない。日時未指定ならbeginで当該projectの前cursorをfromへ補い、cursorなしの場合だけ下限なしにする。
+**Interfaces:** `parseCurationWindow(input:{from_date?:string;to_date?:string;mode:'schedule'|'manual';dry_run:boolean}, now:string): CurationWindow`、`CurationStore.begin(sourceProjectId:string, window:CurationWindow): Promise<{run_id:string}>`。Firestoreは`projects/_shared/sharedCurationCursors/{sourceProjectId}`と`curationRuns/{runId}`配下(`__shared__`はFirestore予約IDのため`_shared`へ写像)へmanifest/page結果を保存し、本文は保存しない。source projectへcursorを書かない。日時未指定ならbeginで当該projectの前cursorをfromへ補い、cursorなしの場合だけ下限なしにする。
 
 `inWindow(createdAt:string, window:CurationWindow): boolean`をwindow.tsで提供する。初回from=nullは下限なし。CurationStoreはbegin/page結果/outcomes/completeのrecordを扱い、completeは保存済みmanifestと結果をtransactionで照合する。dry-runではbeginも永続保存せず、request間を結ぶ署名付きsnapshot tokenで入力hashを検証する。
 
