@@ -10,19 +10,33 @@ import { FirestoreMetadataStore, type FirestoreDocument, type FirestoreGateway, 
 import { CloudMemoryService } from '@/lib/memory/cloud-service';
 import type { IndexStore, MarkdownStore, SqlValue, StoredObject } from '@/lib/storage/contracts';
 
+// Firestore rejects IDs matching __.*__ as reserved (INVALID_ARGUMENT), and
+// documents need an even number of path segments while collections need an odd one.
+function assertFirestorePath(path: string, kind: 'document' | 'collection'): void {
+  const segments = path.split('/');
+  if (segments.some((segment) => /^__.*__$/.test(segment))) {
+    throw new Error(`Resource id in "${path}" is invalid because it is reserved.`);
+  }
+  if ((segments.length % 2 === 0) !== (kind === 'document')) {
+    throw new Error(`Value for ${kind}Path must point to a ${kind}: ${path}`);
+  }
+}
+
 class FakeFirestore implements FirestoreGateway {
   readonly documents = new Map<string, Record<string, unknown>>();
   failNextTransaction = false;
-  async get(path: string): Promise<FirestoreDocument> { return this.snapshot(path); }
+  async get(path: string): Promise<FirestoreDocument> { assertFirestorePath(path, 'document'); return this.snapshot(path); }
   async list(collectionPath: string): Promise<FirestoreDocument[]> {
+    assertFirestorePath(collectionPath, 'collection');
     const prefix = `${collectionPath}/`;
     return [...this.documents.keys()].filter((path) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/')).map((path) => this.snapshot(path));
   }
   async set(path: string, data: Record<string, unknown>, merge = false): Promise<void> {
+    assertFirestorePath(path, 'document');
     this.documents.set(path, merge && this.documents.has(path) ? { ...this.documents.get(path), ...data } : { ...data });
   }
   async update(path: string, data: Record<string, unknown>): Promise<void> { await this.set(path, data, true); }
-  async delete(path: string): Promise<void> { this.documents.delete(path); }
+  async delete(path: string): Promise<void> { assertFirestorePath(path, 'document'); this.documents.delete(path); }
   async runTransaction<T>(fn: (transaction: FirestoreTransaction) => Promise<T>): Promise<T> {
     if (this.failNextTransaction) {
       this.failNextTransaction = false;
@@ -190,6 +204,25 @@ test('maintenance cloud pages use canonical active records and Firestore link ob
   });
   expect(prune.outcome).toBe('conflict');
   await expect(service.get('demo', linkOwner.id)).resolves.toMatchObject({ links: ['existing-target'] });
+});
+
+test('shared昇格はFirestore予約IDを避けて共有projectを作成し、maintenance pageで読み戻せる', async () => {
+  const index = openLocalDb(':memory:');
+  resources.push(index);
+  const firestore = new FakeFirestore();
+  const metadata = new FirestoreMetadataStore(firestore);
+  const service = new CloudMemoryService(Promise.resolve(index), new FakeMarkdownStore(), metadata, new KeyedMutex(), 'projects');
+  await expect(service.listMaintenanceMemories('__shared__')).resolves.toEqual({ items: [], next_after: null });
+
+  const created = await service.applyMutationAsync({
+    operation_id: 'promote-shared-memory', project_id: '__shared__', expected_hashes: {}, max_active_memories: 10,
+    action: { type: 'create', input: { name: 'shared-fact', description: 'shared', type: 'reference', body: 'Shared fact.' } },
+    reason_code: 'shared_promoted', now: '2026-10-26T00:00:00.000Z',
+  });
+
+  expect(created.outcome).toBe('applied');
+  expect((await service.listMaintenanceMemories('__shared__')).items.map((item) => item.memory.name)).toEqual(['shared-fact']);
+  expect(firestore.documents.get('projects/_shared')).toMatchObject({ project_id: '__shared__', revision: 1 });
 });
 
 test('CloudMemoryService mutation は旧GCS本文をrevisionへ保持し、current metadataを更新する', async () => {

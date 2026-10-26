@@ -1,7 +1,7 @@
 import { ulid } from 'ulid';
 import { createHash } from 'node:crypto';
 
-import type { FirestoreDocument, FirestoreGateway } from '@/lib/storage/firestore-metadata';
+import { firestoreProjectPath, type FirestoreDocument, type FirestoreGateway } from '@/lib/storage/firestore-metadata';
 import { assertProjectId, SHARED_PROJECT_ID } from '@/lib/slug';
 import type { CurationManifestPage, CurationOutcome, CurationRun, CurationWindow, DeferredCandidate, SharedRestoreRequest } from './types';
 import type { CurationStore } from './store';
@@ -11,12 +11,12 @@ function path(...parts: string[]): string {
 }
 
 function cursorPath(sourceProjectId: string): string {
-  return path('projects', SHARED_PROJECT_ID, 'sharedCurationCursors', assertProjectId(sourceProjectId));
+  return path(firestoreProjectPath(SHARED_PROJECT_ID), 'sharedCurationCursors', assertProjectId(sourceProjectId));
 }
 
 function runPath(runId: string): string {
   if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(runId)) throw new Error('invalid curation run ID');
-  return path('projects', SHARED_PROJECT_ID, 'curationRuns', runId);
+  return path(firestoreProjectPath(SHARED_PROJECT_ID), 'curationRuns', runId);
 }
 
 function pagePath(runId: string, pageIndex: number): string {
@@ -26,12 +26,12 @@ function pagePath(runId: string, pageIndex: number): string {
 
 function deferredPath(sourceProjectId: string, sourceMemoryId: string): string {
   const id = createHash('sha256').update(`${assertProjectId(sourceProjectId)}\n${sourceMemoryId}`).digest('hex');
-  return path('projects', SHARED_PROJECT_ID, 'deferredCandidates', id);
+  return path(firestoreProjectPath(SHARED_PROJECT_ID), 'deferredCandidates', id);
 }
 
 function restoreRequestPath(requestId: string): string {
   if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(requestId)) throw new Error('invalid shared restore request ID');
-  return path('projects', SHARED_PROJECT_ID, 'sharedRestoreRequests', requestId);
+  return path(firestoreProjectPath(SHARED_PROJECT_ID), 'sharedRestoreRequests', requestId);
 }
 
 function restoreRequestOf(document: FirestoreDocument): SharedRestoreRequest {
@@ -173,7 +173,7 @@ export class FirestoreCurationStore implements CurationStore {
 
   async listDeferred(sourceProjectId: string, after?: string, limit = 25): Promise<DeferredCandidate[]> {
     const project = assertProjectId(sourceProjectId);
-    const records = (await this.gateway.list(path('projects', SHARED_PROJECT_ID, 'deferredCandidates')))
+    const records = (await this.gateway.list(path(firestoreProjectPath(SHARED_PROJECT_ID), 'deferredCandidates')))
       .filter((document) => document.exists)
       .map((document): DeferredCandidate => {
         const data = dataOf(document);
@@ -225,7 +225,7 @@ export class FirestoreCurationStore implements CurationStore {
   }
 
   async listRestoreRequests(limit = 50): Promise<SharedRestoreRequest[]> {
-    const documents = await this.gateway.list(path('projects', SHARED_PROJECT_ID, 'sharedRestoreRequests'));
+    const documents = await this.gateway.list(path(firestoreProjectPath(SHARED_PROJECT_ID), 'sharedRestoreRequests'));
     return documents.filter((document) => document.exists).map(restoreRequestOf)
       .sort((left, right) => Number(right.state === 'pending') - Number(left.state === 'pending')
         || right.requested_at.localeCompare(left.requested_at) || right.id.localeCompare(left.id))
