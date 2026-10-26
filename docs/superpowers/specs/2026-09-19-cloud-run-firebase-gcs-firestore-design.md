@@ -64,8 +64,15 @@ projects/{projectId}
 projects/{projectId}/memories/{memoryId}
 projects/{projectId}/names/{encodedMemoryName}
 projects/{projectId}/tombstones/{tombstoneId}
+projects/{projectId}/maintenance/settings
+projects/{projectId}/maintenanceEvents/{operationId}
+projects/{projectId}/maintenanceOperations/{operationId}
+projects/{projectId}/maintenanceLinkObservations/{observationId}
+projects/_shared/...   # 共有scope `__shared__` の格納先
 mcpTokens/{tokenHash}
 ```
+
+Firestoreは`__.*__`形式のdocument IDを予約しているため、共有scope `__shared__`はFirestore上だけ`_shared`へ写像する(`firestoreProjectPath`)。通常projectのslugは`[a-z0-9-]`だけなので衝突しない。共有projectにはDashboard ownerがないため、`projects/_shared`のrevision documentは最初の書き込みで作成する。collection pathは奇数、document pathは偶数segmentでなければならず、テストのFakeFirestoreも両制約を検証する。
 
 Firestoreはmembership、memory/name index、tombstone、MCP PAT hashをtransactionまたはatomic batchで更新する。PAT本文は発行時だけ返し、Firestoreにはhash、prefix、owner UID、期限、失効日時だけを保存する。
 

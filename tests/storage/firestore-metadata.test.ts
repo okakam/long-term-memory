@@ -25,15 +25,29 @@ function assertNoNestedArrays(value: unknown, insideArray = false): void {
   }
 }
 
+// Firestore rejects IDs matching __.*__ as reserved (INVALID_ARGUMENT), and
+// documents need an even number of path segments while collections need an odd one.
+function assertFirestorePath(path: string, kind: 'document' | 'collection'): void {
+  const segments = path.split('/');
+  if (segments.some((segment) => /^__.*__$/.test(segment))) {
+    throw new Error(`Resource id in "${path}" is invalid because it is reserved.`);
+  }
+  if ((segments.length % 2 === 0) !== (kind === 'document')) {
+    throw new Error(`Value for ${kind}Path must point to a ${kind}: ${path}`);
+  }
+}
+
 class FakeFirestore implements FirestoreGateway {
   readonly documents = new Map<string, Record<string, unknown>>();
   private transactionDepth = 0;
 
   async get(path: string): Promise<FirestoreDocument> {
+    assertFirestorePath(path, 'document');
     return this.snapshot(path);
   }
 
   async list(collectionPath: string): Promise<FirestoreDocument[]> {
+    assertFirestorePath(collectionPath, 'collection');
     const prefix = `${collectionPath}/`;
     return [...this.documents.entries()]
       .filter(([path]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
@@ -41,6 +55,7 @@ class FakeFirestore implements FirestoreGateway {
   }
 
   async set(path: string, data: Record<string, unknown>, merge = false): Promise<void> {
+    assertFirestorePath(path, 'document');
     assertNoNestedArrays(data);
     const previous = this.documents.get(path);
     this.documents.set(path, merge && previous ? { ...previous, ...data } : { ...data });
@@ -52,6 +67,7 @@ class FakeFirestore implements FirestoreGateway {
   }
 
   async delete(path: string): Promise<void> {
+    assertFirestorePath(path, 'document');
     this.documents.delete(path);
   }
 
@@ -118,7 +134,7 @@ describe('FirestoreMetadataStore', () => {
       memory_id: 'memory-1', revision_id: 'revision-1', expected_hash: 'a'.repeat(64),
       requested_by: 'curator-uid', requested_at: '2026-10-12T00:00:00.000Z',
     });
-    expect([...gateway.documents.keys()].some((path) => path.startsWith('projects/__shared__/sharedRestoreRequests/'))).toBe(true);
+    expect([...gateway.documents.keys()].some((path) => path.startsWith('projects/_shared/sharedRestoreRequests/'))).toBe(true);
     await expect(store.listRestoreRequests()).resolves.toEqual([request]);
     await expect(store.completeRestoreRequest(request.id, {
       state: 'succeeded', completed_at: '2026-10-12T01:00:00.000Z',
@@ -126,6 +142,16 @@ describe('FirestoreMetadataStore', () => {
     await expect(store.completeRestoreRequest(request.id, {
       state: 'failed', completed_at: '2026-10-12T02:00:00.000Z', failure_reason: 'restore_conflict',
     })).resolves.toMatchObject({ state: 'succeeded', completed_at: '2026-10-12T01:00:00.000Z' });
+  });
+
+  test('共有projectのmemory indexをFirestore予約IDを避けて保存する', async () => {
+    const gateway = new FakeFirestore();
+    const store = new FirestoreMetadataStore(gateway);
+    stores.push(store);
+    await expect(store.listMemoryIndexes('__shared__')).resolves.toEqual([]);
+    await store.putMemoryIndex('__shared__', record({ project_id: '__shared__', content_key: 'projects/__shared__/memories/note/hash.md' }));
+    await expect(store.listMemoryIndexes('__shared__')).resolves.toMatchObject([{ id: 'memory-1', project_id: '__shared__' }]);
+    expect([...gateway.documents.keys()]).toContain('projects/_shared/memories/memory-1');
   });
 
   test('pages_all_records_with_same_timestamp', async () => {

@@ -5,7 +5,7 @@ import type { MemberRecord, ProjectRecord, TokenRecord } from '@/lib/auth/store'
 import { getFirebaseAdminApp } from '@/lib/auth/firebase';
 import { MemoryConflictError } from '@/lib/memory/types';
 import type { Entity, MemoryStatus, MemoryType, Triple } from '@/lib/memory/types';
-import { assertMemoryName, assertProjectId } from '@/lib/slug';
+import { assertMemoryName, assertProjectId, SHARED_PROJECT_ID } from '@/lib/slug';
 import { DEFAULT_MAINTENANCE_SETTINGS, MISSING_LINK_GRACE_DAYS } from '@/lib/maintenance/policy';
 import { decodeMaintenanceEventCursor } from '@/lib/maintenance/cursor';
 import { MaintenanceSettingsSchema, type MaintenanceSettings } from '@/lib/maintenance/types';
@@ -208,8 +208,17 @@ function documentPath(...parts: string[]): string {
   return parts.join('/');
 }
 
+/**
+ * Firestore reserves document IDs matching __.*__, so the shared scope is stored
+ * under a slug-incompatible ID that ordinary project IDs can never collide with.
+ */
+export function firestoreProjectPath(projectId: string): string {
+  const id = assertProjectId(projectId);
+  return documentPath('projects', id === SHARED_PROJECT_ID ? '_shared' : id);
+}
+
 function projectPath(projectId: string): string {
-  return documentPath('projects', assertProjectId(projectId));
+  return firestoreProjectPath(projectId);
 }
 
 function membersPath(projectId: string): string {
@@ -241,16 +250,18 @@ function maintenanceSettingsPath(projectId: string): string {
   return documentPath(maintenancePath(projectId), 'settings');
 }
 
+// Collections must have an odd number of segments, so these sit beside
+// maintenance/settings instead of under the maintenance collection.
 function maintenanceEventsPath(projectId: string): string {
-  return documentPath(maintenancePath(projectId), 'events');
+  return documentPath(projectPath(projectId), 'maintenanceEvents');
 }
 
 function maintenanceOperationsPath(projectId: string): string {
-  return documentPath(maintenancePath(projectId), 'operations');
+  return documentPath(projectPath(projectId), 'maintenanceOperations');
 }
 
 function maintenanceLinkObservationsPath(projectId: string): string {
-  return documentPath(maintenancePath(projectId), 'linkObservations');
+  return documentPath(projectPath(projectId), 'maintenanceLinkObservations');
 }
 
 function linkObservationDocumentId(memoryId: string, dstName: string): string {
@@ -333,6 +344,13 @@ function asIso(value: unknown, context: string): string {
 
 function isTimestamp(value: unknown): value is { toDate(): Date } {
   return typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function';
+}
+
+// The shared scope has no Dashboard owner, so its revision document is created by its first write.
+function writableProjectRecord(document: FirestoreDocument, projectId: string, now: string): FirestoreProjectRecord {
+  if (document.exists) return projectRecord(document);
+  if (projectId !== SHARED_PROJECT_ID) throw new Error(`project not found: ${projectId}`);
+  return { project_id: SHARED_PROJECT_ID, owner_user_id: SHARED_PROJECT_ID, created_at: now, updated_at: now, revision: 0 };
 }
 
 function projectRecord(document: FirestoreDocument): FirestoreProjectRecord {
@@ -603,9 +621,7 @@ export class FirestoreMetadataStore {
         } satisfies MutationResult;
       }
 
-      const projectDocument = await transaction.get(projectPathValue);
-      if (!projectDocument.exists) throw new Error(`project not found: ${projectId}`);
-      const currentProject = projectRecord(projectDocument);
+      const currentProject = writableProjectRecord(await transaction.get(projectPathValue), projectId, data.request.now);
       let settings: MaintenanceSettings | undefined;
       if (data.request.expected_settings_version !== undefined) {
         const settingsDocument = await transaction.get(maintenanceSettingsPath(projectId));
@@ -706,6 +722,7 @@ export class FirestoreMetadataStore {
         created_at: data.request.now,
       });
       await transaction.set(projectPathValue, {
+        ...currentProject,
         revision: currentProject.revision + 1,
         updated_at: data.request.now,
       }, true);
@@ -835,9 +852,7 @@ export class FirestoreMetadataStore {
     const memory = documentPath(memoriesPath(projectId), record.id);
     const name = documentPath(namesPath(projectId), nameDocumentId(record.name));
     await this.gateway.runTransaction(async (transaction) => {
-      const projectDocument = await transaction.get(project);
-      if (!projectDocument.exists) throw new Error(`project not found: ${projectId}`);
-      const currentProject = projectRecord(projectDocument);
+      const currentProject = writableProjectRecord(await transaction.get(project), projectId, new Date().toISOString());
       if (expectedRevision !== undefined && currentProject.revision !== expectedRevision) {
         throw new MemoryConflictError(`project revision: ${projectId}`);
       }
@@ -853,7 +868,7 @@ export class FirestoreMetadataStore {
         content_key: record.content_key,
         content_hash: record.content_hash,
       });
-      await transaction.set(project, { revision: currentProject.revision + 1, updated_at: record.updated_at }, true);
+      await transaction.set(project, { ...currentProject, revision: currentProject.revision + 1, updated_at: record.updated_at }, true);
     });
   }
 
@@ -1047,9 +1062,7 @@ export class FirestoreMetadataStore {
       name: documentPath(namesPath(projectId), nameDocumentId(record.name)),
     }));
     await this.gateway.runTransaction(async (transaction) => {
-      const projectDocument = await transaction.get(project);
-      if (!projectDocument.exists) throw new Error(`project not found: ${projectId}`);
-      const currentProject = projectRecord(projectDocument);
+      const currentProject = writableProjectRecord(await transaction.get(project), projectId, new Date().toISOString());
       for (const item of names) {
         const existingName = await transaction.get(item.name);
         if (existingName.exists) {
@@ -1074,7 +1087,7 @@ export class FirestoreMetadataStore {
         );
       }
       const updatedAt = records.reduce((latest, record) => latest > record.updated_at ? latest : record.updated_at, currentProject.updated_at);
-      await transaction.set(project, { revision: currentProject.revision + 1, updated_at: updatedAt }, true);
+      await transaction.set(project, { ...currentProject, revision: currentProject.revision + 1, updated_at: updatedAt }, true);
     });
   }
 
