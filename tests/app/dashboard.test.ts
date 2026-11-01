@@ -50,3 +50,28 @@ test('dashboard は JST 窓、7/30/90 プリセット、日次系列、全 tool 
   expect(html).toContain('readless connection');
   expect((html.match(/<time /g) ?? []).length).toBe(365);
 });
+
+test('dashboard は昨日までの利用を期間内に集計する', async () => {
+  vi.stubEnv('AUTH_REQUIRED', '0');
+  const telemetry = TelemetryStore.open();
+  setTelemetryStoreForTests(telemetry);
+  telemetry.recordToolCall({
+    projectId: 'project', sessionId: 'session', tool: 'get_memory', kind: 'read', ok: true, durationMs: 1,
+    ts: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+  });
+
+  const html = renderToStaticMarkup(await DashboardPage({ searchParams: Promise.resolve({ days: '7' }) }));
+  expect(html).toMatch(/<strong>read<\/strong><div class="metric-value">1<\/div>/);
+});
+
+test('dashboard は履歴の読み込み失敗を0件と区別して表示する', async () => {
+  vi.stubEnv('AUTH_REQUIRED', '0');
+  const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const telemetry = TelemetryStore.open();
+  vi.spyOn(telemetry, 'rows').mockImplementation(() => { throw new Error('unavailable'); });
+  setTelemetryStoreForTests(telemetry);
+
+  const html = renderToStaticMarkup(await DashboardPage({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('利用履歴を読み込めませんでした');
+  expect(error).toHaveBeenCalled();
+});

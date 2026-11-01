@@ -14,7 +14,7 @@
 
 - 設計書、`docs/reproduction-spec.md`、`AGENTS.md`を実装前に読む。仕様・計画・運用説明は日本語。
 - Git Flowの`feature/*`を使い、main/developへの統合はPR経由。実行開始時にusing-git-worktreesで隔離を確保する。
-- Cloud Runはscale to zero。Cloud Scheduler、常駐worker、独立した永続telemetry DBを追加しない。
+- Cloud Runはscale to zero。Cloud Scheduler、常駐workerを追加しない。(当初の「永続telemetry DBを追加しない」は2026-11-01に撤回し、利用履歴はFirestore `telemetryEvents`へ保存する)
 - Markdown本文の正本はGCS、Firestoreはmetadata、SQLiteは再構築可能cache。localは既存のファイル保存契約を維持する。
 - `project` 90日、`reference` 180日、`user`/`feedback` 365日、`session`のアーカイブ初期値90日。ownerがproject単位に調整する。
 - 取得URLは公開HTTPS/443のみ、redirect最大3回、総時間10秒/URL、展開後本文1 MiB、HTML/plain textのみ。
