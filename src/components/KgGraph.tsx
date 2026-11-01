@@ -63,17 +63,17 @@ const ENT_W = 132;
 const ENT_H = 44;
 
 const TYPE_ACCENT: Record<MemoryType, { accent: string; tint: string; ring: string; label: string }> = {
-  user: { accent: '#2563eb', tint: '#eff6ff', ring: '#bfdbfe', label: 'USER' },
-  feedback: { accent: '#d97706', tint: '#fffbeb', ring: '#fde68a', label: 'FEEDBACK' },
-  project: { accent: '#059669', tint: '#ecfdf5', ring: '#a7f3d0', label: 'PROJECT' },
-  reference: { accent: '#7c3aed', tint: '#f5f3ff', ring: '#ddd6fe', label: 'REFERENCE' },
-  session: { accent: '#4b5563', tint: '#f9fafb', ring: '#d1d5db', label: 'SESSION' },
+  user: { accent: '#60a5fa', tint: 'rgba(37, 99, 235, .14)', ring: 'rgba(96, 165, 250, .28)', label: 'USER' },
+  feedback: { accent: '#fbbf24', tint: 'rgba(217, 119, 6, .14)', ring: 'rgba(251, 191, 36, .28)', label: 'FEEDBACK' },
+  project: { accent: '#34d399', tint: 'rgba(5, 150, 105, .14)', ring: 'rgba(52, 211, 153, .28)', label: 'PROJECT' },
+  reference: { accent: '#a78bfa', tint: 'rgba(124, 58, 237, .16)', ring: 'rgba(167, 139, 250, .3)', label: 'REFERENCE' },
+  session: { accent: '#94a3b8', tint: 'rgba(75, 85, 99, .2)', ring: 'rgba(148, 163, 184, .25)', label: 'SESSION' },
 };
 
 const EDGE_STYLE: Record<KgEdgeKind, { stroke: string; width: number; opacity: number }> = {
-  membership: { stroke: '#cbd5e1', width: 1.25, opacity: 0.45 },
-  triple: { stroke: '#6366f1', width: 1.75, opacity: 0.75 },
-  link: { stroke: '#f97316', width: 2.5, opacity: 0.85 },
+  membership: { stroke: '#475569', width: 1.25, opacity: 0.55 },
+  triple: { stroke: '#818cf8', width: 1.75, opacity: 0.8 },
+  link: { stroke: '#fb923c', width: 2.5, opacity: 0.9 },
 };
 
 const EDGE_LABEL: Record<KgEdgeKind, string> = {
@@ -99,13 +99,13 @@ function MemoryFlowNode({ data }: NodeProps<FlowNode>) {
   const type = node.memoryType ?? 'reference';
   const accent = TYPE_ACCENT[type];
   return (
-    <div style={{ color: '#0f172a', fontSize: 12 }}>
+    <div style={{ color: '#e2e8f0', fontSize: 12 }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <strong style={{ color: accent.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.label}</strong>
         {node.href ? <Link href={node.href} onClick={(event) => event.stopPropagation()} aria-label={'Open ' + node.label}>↗</Link> : null}
       </div>
-      <small style={{ color: '#475569' }}>{accent.label}</small>
+      <small style={{ color: '#94a3b8', letterSpacing: '.06em' }}>{accent.label}</small>
       {node.description ? <div style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.description}</div> : null}
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
@@ -115,7 +115,7 @@ function MemoryFlowNode({ data }: NodeProps<FlowNode>) {
 function EntityFlowNode({ data }: NodeProps<FlowNode>) {
   const node = asGraphData(data);
   return (
-    <div style={{ color: '#334155', fontSize: 12, textAlign: 'center' }}>
+    <div style={{ color: '#cbd5e1', fontSize: 12, textAlign: 'center' }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <strong>{node.label}</strong>
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
@@ -180,8 +180,8 @@ function nodeStyle(node: KgNode, neighbors: Set<string> | null) {
       width: ENT_W,
       minHeight: ENT_H,
       borderRadius: 22,
-      border: '2px solid #94a3b8',
-      background: '#f8fafc',
+      border: '1px solid rgba(148, 163, 184, .45)',
+      background: 'rgba(15, 23, 42, .85)',
       opacity: focused ? 1 : 0.28,
     };
   }
@@ -191,8 +191,8 @@ function nodeStyle(node: KgNode, neighbors: Set<string> | null) {
     width: MEM_W,
     minHeight: MEM_H,
     borderRadius: 10,
-    border: '2px solid ' + accent.accent,
-    boxShadow: '0 0 0 2px ' + accent.ring,
+    border: '1px solid ' + accent.accent,
+    boxShadow: '0 0 0 3px ' + accent.ring + ', 0 0 22px ' + accent.ring,
     background: accent.tint,
     opacity: focused ? 1 : 0.28,
   };
@@ -240,7 +240,7 @@ export function KgGraph({ data, projectId }: KgGraphProps) {
       target: edge.target,
       label: edge.kind === 'triple' ? edge.label : EDGE_LABEL[edge.kind],
       style: { stroke: style.stroke, strokeWidth: style.width, opacity: style.opacity },
-      labelStyle: { fontSize: 11, fill: '#475569' },
+      labelStyle: { fontSize: 11, fill: '#94a3b8' },
     };
   });
 
@@ -303,7 +303,7 @@ export function KgGraph({ data, projectId }: KgGraphProps) {
             onNodeClick={(_event, node) => handleNodeClick(node.id)}
             onNodeDoubleClick={(_event, node) => handleDoubleClick(node.id)}
           >
-            <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#d3dbe6" />
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1e2638" />
             <Controls showInteractive={false} />
           </ReactFlow>
           <div className="graph-legend">
