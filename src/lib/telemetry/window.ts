@@ -21,8 +21,9 @@ function dateParts(date: Date): { year: number; month: number; day: number } {
 export function resolveTelemetryWindow(days = 30, now = new Date()): TelemetryWindow {
   const count = Math.min(365, Math.max(1, Math.floor(days)));
   const local = dateParts(now);
-  const start = new Date(Date.UTC(local.year, local.month - 1, local.day) - 9 * 60 * 60 * 1000);
-  const end = new Date(start.getTime() + count * 86_400_000);
+  const todayStart = Date.UTC(local.year, local.month - 1, local.day) - 9 * 60 * 60 * 1000;
+  const end = new Date(todayStart + 86_400_000);
+  const start = new Date(end.getTime() - count * 86_400_000);
   const previousStart = new Date(start.getTime() - count * 86_400_000);
   return { start, end, previousStart, previousEnd: start, days: count };
 }
