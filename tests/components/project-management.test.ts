@@ -29,3 +29,13 @@ test('memberにはmember追加操作を表示しない', () => {
 
   expect(html).not.toContain('メールアドレスで追加');
 });
+
+test('project作成と対象選択を左列にまとめ、member管理を右列の独立した領域に置く', () => {
+  const html = renderToStaticMarkup(createElement(ProjectManagementPanel, {
+    initialProjects: [{ project_id: 'alpha', role: 'owner' }],
+    currentUserId: 'owner',
+    selectedProjectId: 'alpha',
+  }));
+
+  expect(html).toMatch(/<div class="project-management-sidebar"><form class="project-create-form"[\s\S]*id="managed-project"[\s\S]*?<\/select><\/div><section class="member-management"/);
+});

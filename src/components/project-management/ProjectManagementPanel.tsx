@@ -132,7 +132,7 @@ export function ProjectManagementPanel({ initialProjects, currentUserId, selecte
 
   return <section className="project-management-panel" aria-labelledby="project-management-heading">
     <div className="section-heading"><div><p className="eyebrow">ACCESS</p><h2 id="project-management-heading">プロジェクト管理</h2></div></div>
-    <form className="project-create-form" onSubmit={createProject}>
+    <div className="project-management-sidebar"><form className="project-create-form" onSubmit={createProject}>
       <label htmlFor="project-slug">新しいプロジェクト</label>
       <div className="inline-form"><input id="project-slug" value={projectSlug} onChange={(event) => setProjectSlug(event.target.value)} placeholder="project-slug" required />
         <button className="primary" type="submit" disabled={pending !== null}>{pending === 'project' ? '作成中…' : '作成'}</button></div>
@@ -142,6 +142,8 @@ export function ProjectManagementPanel({ initialProjects, currentUserId, selecte
       <select id="managed-project" value={selectedId} onChange={(event) => selectProject(event.target.value)}>
         {projects.map((project) => <option key={project.project_id} value={project.project_id}>{project.project_id} ({project.role})</option>)}
       </select>
+    </>}</div>
+    {projects.length === 0 ? null : <>
       <section className="member-management" aria-labelledby="member-management-heading">
         <div><h3 id="member-management-heading">メンバー</h3><p className="muted">権限はMCPリクエストごとに確認されます。</p></div>
         {canManage ? <form className="member-add-form" onSubmit={addMember}>
