@@ -1,5 +1,4 @@
 import { getTelemetryStore, type TelemetryErrorCode, type ToolCallEvent, type ConnectEvent } from './store';
-import { latestConnection, registerConnection } from './connection';
 
 let brokenStore = false;
 let warned = false;
@@ -31,7 +30,7 @@ export async function recordToolCall(event: Omit<ToolCallEvent, 'sessionId' | 'e
     const { error, ...fields } = event;
     await getTelemetryStore().recordToolCall({
       ...fields,
-      sessionId: event.sessionId ?? latestConnection(event.projectId),
+      sessionId: event.sessionId ?? null,
       errorCode: event.errorCode ?? (error ? errorCode(error) : null),
     });
   } catch (error) {
@@ -43,8 +42,7 @@ export async function recordToolCall(event: Omit<ToolCallEvent, 'sessionId' | 'e
 export async function recordConnect(event: ConnectEvent): Promise<void> {
   if (!telemetryEnabled()) return;
   try {
-    const sessionId = registerConnection(event.projectId, event.sessionId);
-    await getTelemetryStore().recordConnect({ ...event, sessionId });
+    await getTelemetryStore().recordConnect(event);
   } catch (error) {
     void error;
     disableTelemetry();

@@ -5,7 +5,7 @@ import { authRequired } from '@/lib/auth/config';
 import { requireWebPrincipal } from '@/lib/auth/web-principal';
 import { getAuthStore } from '@/lib/auth/store';
 import { formatJst } from '@/lib/datetime';
-import { curatorStatus, dailySeries, errorBreakdown, perProject, perTool, summarize } from '@/lib/telemetry/query';
+import { curatorStatus, dailySeries, errorBreakdown, perProject, perTool, summarize, visibleRows } from '@/lib/telemetry/query';
 import { getTelemetryStore, type TelemetryRow } from '@/lib/telemetry/store';
 import { resolveTelemetryWindow } from '@/lib/telemetry/window';
 
@@ -21,10 +21,6 @@ function first(value: string | string[] | undefined): string | undefined {
 function parseDays(value: string | undefined): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.min(365, Math.max(1, Math.floor(parsed))) : 30;
-}
-
-function filterRows(rows: TelemetryRow[], projectIds: Set<string> | undefined): TelemetryRow[] {
-  return projectIds ? rows.filter((row) => projectIds.has(row.project_id)) : rows;
 }
 
 function inRange(row: TelemetryRow, from: Date, to: Date): boolean {
@@ -78,7 +74,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     telemetryUnavailable = true;
     console.error(`telemetry read failed: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown'}`);
   }
-  const allVisibleRows = filterRows(storedRows, projectIds);
+  const allVisibleRows = visibleRows(storedRows, {
+    projectIds,
+    userId: authRequired() ? principal.userId : undefined,
+    selectedProject: requestedProject,
+  });
   const currentRows = allVisibleRows.filter((row) => inRange(row, window.start, window.end));
   const previousRows = allVisibleRows.filter((row) => inRange(row, window.previousStart, window.previousEnd));
   const summary = summarize(currentRows, allVisibleRows);

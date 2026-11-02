@@ -23,6 +23,7 @@ export interface ToolContext {
   operationMode?: 'ordinary' | 'maintenance' | 'curation';
   maintenanceToken?: string | null;
   requireProjectAccess: RequireProjectAccess;
+  /** Telemetry-only connection ID. Never used for authorization. */
   sessionId?: string;
 }
 

@@ -15,6 +15,27 @@ function calls(rows: TelemetryRow[]): TelemetryRow[] {
   return rows.filter((row) => row.event === 'tool_call');
 }
 
+export interface RowVisibility {
+  /** Accessible projects; undefined means every row is visible (auth disabled, no filter). */
+  projectIds?: Set<string>;
+  userId?: string;
+  selectedProject?: string;
+}
+
+/**
+ * Events without a project are visible only to the user who made them. A project view
+ * adds the viewer's own connections that called that project.
+ */
+export function visibleRows(rows: TelemetryRow[], { projectIds, userId, selectedProject }: RowVisibility): TelemetryRow[] {
+  if (!projectIds) return rows;
+  const isOwnGlobal = (row: TelemetryRow) => row.project_id === '__global__' && userId !== undefined && row.user_id === userId;
+  if (!selectedProject) return rows.filter((row) => projectIds.has(row.project_id) || isOwnGlobal(row));
+  const projectRows = rows.filter((row) => row.project_id === selectedProject);
+  const sessions = new Set(projectRows.map((row) => row.session_id));
+  return rows.filter((row) => row.project_id === selectedProject
+    || (row.event === 'connect' && isOwnGlobal(row) && sessions.has(row.session_id)));
+}
+
 export interface TelemetrySummary {
   calls: number;
   reads: number;

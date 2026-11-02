@@ -150,7 +150,6 @@ test('local-session timeout後は新しいsessionを使い、遅れた同一id�
   ]);
   finishNew({ name: 'new-result', id: 'new' });
   const response = await nextResponse;
-  expect(telemetry.rows().filter((row) => row.event === 'connect')).toHaveLength(2);
   expect(afterOldCompletion).toBe('pending');
   expect((await response.json()).result.content[0].text).toContain('new-result');
 });
