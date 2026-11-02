@@ -35,9 +35,10 @@
 
 - OAuthからFirebaseログインへ戻すredirectは設定済みの公開issuer (`MCP_PUBLIC_URL`) を基準にする。Cloud Runの内部`Request.url`、`Host`、forwarded-hostを使って内部アドレスを外部へ返さない。
 - OAuth同意画面(`/oauth/authorize`)のresponse CSPはtransactionから再検証したCodex loopback callbackのoriginだけを`form-action`へ追加する。静的CSPはこのrouteだけを除外し、他routeの`form-action 'self'`と共通security headersを維持する。callback path/queryや任意originを許可しない。本番受入はdeploy後のCodex browser consent/callback smokeで確認し、ローカル成功と混同しない。
-- Dashboardのproject作成者はFirestore membershipのownerとし、ownerだけが登録済み許可ドメインのemailでmemberを管理する。認可の正本はUID membershipであり、email directory lookupは表示・追加時だけに使う。最後のownerを削除又はmemberへ変更してはならない。
-- Dashboardの自動棚卸し設定、履歴、archive復元はowner専用とする。設定更新・復元の直前にFirestore membershipを再取得し、same-origin guardを通す。shared履歴はcurator UIDだけが読め、shared復元はDashboard APIから許可しない。履歴応答に記憶本文、source URL、内部GCS keyを含めない。
-- curatorはローカルの`scripts/curator/run-curation.sh`だけで実行し、lockで直列化して、通常棚卸しが失敗しても共有集約を実行する。手動共有集約はUTC `YYYY-MM-DD`の開始・終了日を対で受け、schedule以外は日次cursorを更新しない。専用curation registryはcurator UIDのPATと`LTM_MAINTENANCE_TOKEN`を要求し、`list_projects`・`curation_snapshot`・`curation_apply`・`curation_checkpoint`だけを公開する。日次cursor・hash manifest・page outcomeは`__shared__`配下へ保存し、本文は保存しない。共有昇格時はsourceとproposalの全フィールドを機密filterで検査し、反映時にsourceが変わった候補は現在のactive記憶/hashで保留して再評価する。共有復元はcurator Dashboardがrequestを作成し、次のwrite実行で同じgateを再検証して処理する。一時的な読み取り・適用障害ではrequestをpendingに保ち、hash/revision競合など既知の安全な停止条件をfailedにする。日次実行はローカルのsystemd user timer(Linux)/launchd(macOS)の`run-curation.sh`で行い、通常棚卸しと共有集約へ各専用credentialだけを渡す。publicリポジトリのためself-hosted runnerを登録せず、curatorのGitHub Actions workflowを置かない。wrapperはrepository rootを明示し、local HTTPをloopbackに限定する。運用手順は`docs/memory-automation.md`を正本とする。
+- 利用状況は`/dashboard`、プロジェクトの作成・member・自動棚卸し・共有履歴は`/projects`(プロジェクト管理画面)に分離する。Dashboardのproject絞り込みは利用状況の表示だけに作用する。
+- プロジェクト管理画面のproject作成者はFirestore membershipのownerとし、ownerだけが登録済み許可ドメインのemailでmemberを管理する。認可の正本はUID membershipであり、email directory lookupは表示・追加時だけに使う。最後のownerを削除又はmemberへ変更してはならない。
+- プロジェクト管理画面の自動棚卸し設定、履歴、archive復元はowner専用とする。設定更新・復元の直前にFirestore membershipを再取得し、same-origin guardを通す。shared履歴はcurator UIDだけが読め、shared復元はプロジェクト管理画面のAPIから許可しない。履歴応答に記憶本文、source URL、内部GCS keyを含めない。
+- curatorはローカルの`scripts/curator/run-curation.sh`だけで実行し、lockで直列化して、通常棚卸しが失敗しても共有集約を実行する。手動共有集約はUTC `YYYY-MM-DD`の開始・終了日を対で受け、schedule以外は日次cursorを更新しない。専用curation registryはcurator UIDのPATと`LTM_MAINTENANCE_TOKEN`を要求し、`list_projects`・`curation_snapshot`・`curation_apply`・`curation_checkpoint`だけを公開する。日次cursor・hash manifest・page outcomeは`__shared__`配下へ保存し、本文は保存しない。共有昇格時はsourceとproposalの全フィールドを機密filterで検査し、反映時にsourceが変わった候補は現在のactive記憶/hashで保留して再評価する。共有復元はcuratorがプロジェクト管理画面からrequestを作成し、次のwrite実行で同じgateを再検証して処理する。一時的な読み取り・適用障害ではrequestをpendingに保ち、hash/revision競合など既知の安全な停止条件をfailedにする。日次実行はローカルのsystemd user timer(Linux)/launchd(macOS)の`run-curation.sh`で行い、通常棚卸しと共有集約へ各専用credentialだけを渡す。publicリポジトリのためself-hosted runnerを登録せず、curatorのGitHub Actions workflowを置かない。wrapperはrepository rootを明示し、local HTTPをloopbackに限定する。運用手順は`docs/memory-automation.md`を正本とする。
 - Firestore pathは本番SDKの制約に従い、collectionは奇数・documentは偶数segmentとし、`__.*__`形式のIDを使わない。共有scope `__shared__`は`firestoreProjectPath`で`_shared`へ写像する。テストのFakeFirestoreも両制約を検証する。
 - Cloud Run runner imageには、起動時に読み込まれる`next.config.ts`とそのproject module依存を含める。Docker imageの`/api/health`起動確認をdeploy前の回帰ゲートとする。
 
@@ -52,8 +53,8 @@
 - Cloud Run用GCS Markdown adapter、Firestore metadata/auth store、`/tmp` SQLite cache、Firebase ID token/session cookie、OAuth/PAT Bearer principal、API認可、Invoker公開・アプリ層認証のCloud Run workflow/smoke、認証必須のimage既定値、Firestore memory/name indexを実装する。旧データのexport/import/verifyはfresh start方針のため対象外とする。
 - Dashboardの利用履歴は、cloud modeではFirestore `telemetryEvents` に1イベント1文書で保存し、集計fieldのみを持つ(本文・tool inputは保存しない)。`expires_at`のTTLで400日後に削除し、書き込みは2秒で打ち切ってMCP呼び出しを失敗させない。local modeはプロセス内メモリのみ。旧方針の「永続telemetry DBを持たない」は撤回済み。connectはクライアントの実際の`initialize`だけで記録し、その応答で発行するUUIDの`Mcp-Session-Id`(集計専用、認可には使わない)を以降の呼び出しの`session_id`として保存する。project指定のないイベントだけに呼び出したUIDを`user_id`として保存し、Dashboardには本人の分だけ表示する。Next.jsのroute handlerとpageはモジュールを共有しないため、local modeのメモリ保持はDashboardへ届かない。
 - MCPサーバー名は `long-term-memory` に統一し、Claude Codeのツール名も `mcp__long-term-memory__*` を使用する。curatorのファイル名・launchdラベルは運用サービス識別子として既存の `ltm-shared-curator` を維持する。
-- MCP endpointはqueryなしの`POST /api/mcp`とし、17 toolsのうち`list_projects`と`setup_client_environment`はproject指定なし、それ以外の15 toolsは必須top-level `project_id`で対象を選ぶ。projectの作成とmembership管理はDashboardを唯一の設定画面として維持し、projectを扱う15 toolsの各callでFirestore membershipとtool別権限を再評価する。認証主体が不在・無効ならHTTP 401、認証済みtool callのmembership/role拒否はHTTP 200のJSON-RPC tool error (`isError: true`) とする。`__shared__`はread-onlyとし、書き込みはcurator UIDのPATとmaintenance tokenを必要とする。`project_id` queryはHTTP 400で拒否する。
-- `setup_client_environment`はMCP add/login完了後に`client: "claude-code"`又は`client: "codex"`で呼ぶ。version/hash付きguideとassetsを返し、呼び出し側agentがローカルへ適用する。Claude Codeはuser config、Codexはクライアント側で解決したcurrent repositoryを対象にし、Cloud Runはclient filesystemへ書き込まない。Dashboardのproject/member変更は手動、curator/CI用PATは通常設定の対象外とする。Cloud Run smokeはproject_idなしのCodex setup応答のclient・schema version・asset hash・guideも確認する。
+- MCP endpointはqueryなしの`POST /api/mcp`とし、17 toolsのうち`list_projects`と`setup_client_environment`はproject指定なし、それ以外の15 toolsは必須top-level `project_id`で対象を選ぶ。projectの作成とmembership管理はプロジェクト管理画面(`/projects`)を唯一の設定画面として維持し、projectを扱う15 toolsの各callでFirestore membershipとtool別権限を再評価する。認証主体が不在・無効ならHTTP 401、認証済みtool callのmembership/role拒否はHTTP 200のJSON-RPC tool error (`isError: true`) とする。`__shared__`はread-onlyとし、書き込みはcurator UIDのPATとmaintenance tokenを必要とする。`project_id` queryはHTTP 400で拒否する。
+- `setup_client_environment`はMCP add/login完了後に`client: "claude-code"`又は`client: "codex"`で呼ぶ。version/hash付きguideとassetsを返し、呼び出し側agentがローカルへ適用する。Claude Codeはuser config、Codexはクライアント側で解決したcurrent repositoryを対象にし、Cloud Runはclient filesystemへ書き込まない。プロジェクト管理画面のproject/member変更は手動、curator/CI用PATは通常設定の対象外とする。Cloud Run smokeはproject_idなしのCodex setup応答のclient・schema version・asset hash・guideも確認する。
 - production runtimeからClerk、Redis、Vercel Blob adapter、Vercel remote serviceを削除した。旧Vercel Blob/Tursoのmigration専用スクリプト、テスト、devDependenciesも、旧データを移行せず空スタートする方針により削除済みである。
 - ローカル検証時点で全テスト、lint、型検査、`NODE_ENV=production pnpm build`を実行する。Cloud Run smoke scriptはinitialize、tools/list、setup_client_environment、save、get、update、link、reindex、search、deleteを実行し、renameは`CloudMemoryService`の回帰テストで検証する。Cloud Run/Firebase/GCSの実環境smokeは外部資格情報が必要な未完了ゲートであり、旧データのexport/import/verifyは対象外、旧Vercel Project削除はユーザー報告で完了している。
 - `main`へのPRマージ後は、`push`イベントでGitHub Actionsのverify完了後に`production` Environmentを使ってCloud Runへ自動deployする。手動dispatchもmainブランチだけを許可し、Production deployは同時実行しない。Environmentの設定値は`docs/cloud-run-production-deployment.md`に記録する。
@@ -73,3 +74,13 @@
 5. Durable preferences, corrections, decisions, and reusable gotchas are written actively without確認不要の質問を挟まない。
 6. subagent には、作業前に search_memories を呼び、関連結果を get_memory で読むことを明示する。
 <!-- ltm:end -->
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

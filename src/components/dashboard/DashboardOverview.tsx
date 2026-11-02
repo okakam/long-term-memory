@@ -1,7 +1,7 @@
 import { Bar } from '@/components/dashboard/Bar';
 import { Delta } from '@/components/dashboard/Delta';
 import { Sparkline } from '@/components/dashboard/Sparkline';
-import { ProjectManagementPanel, type AccessibleProject } from '@/components/project-management/ProjectManagementPanel';
+import type { AccessibleProject } from '@/components/project-management/ProjectManagementPanel';
 import type {
   CuratorMetric,
   DailyMetric,
@@ -14,8 +14,6 @@ import type {
 interface DashboardOverviewProps {
   days: number;
   selectedProjectId?: string;
-  currentUserId: string;
-  canManageShared: boolean;
   accessibleProjects: AccessibleProject[];
   telemetryUnavailable?: boolean;
   windowLabel: string;
@@ -32,12 +30,13 @@ interface DashboardOverviewProps {
   displayDay(date: string): string;
   displayIso(value: string | null): string;
   queryLink(days: number): string;
+  projectLink(projectId?: string): string;
 }
 
 export function DashboardOverview({
-  days, selectedProjectId, currentUserId, canManageShared, accessibleProjects, telemetryUnavailable, windowLabel, summary, previous,
+  days, selectedProjectId, accessibleProjects, telemetryUnavailable, windowLabel, summary, previous,
   series, tools, projects, errors, curator, projectFacts, sessionSummaries, maxDailyCalls,
-  displayDay, displayIso, queryLink,
+  displayDay, displayIso, queryLink, projectLink,
 }: DashboardOverviewProps) {
   const cards = [
     ['呼び出し', summary.calls, previous.calls],
@@ -64,12 +63,14 @@ export function DashboardOverview({
         </nav>
       </header>
 
-      <ProjectManagementPanel
-        initialProjects={accessibleProjects}
-        currentUserId={currentUserId}
-        selectedProjectId={selectedProjectId}
-        canManageShared={canManageShared}
-      />
+      {accessibleProjects.length > 0 ? (
+        <nav className="period-filter project-filter" aria-label="プロジェクト">
+          <a className={selectedProjectId ? undefined : 'is-active'} href={projectLink()}>全体</a>
+          {accessibleProjects.map(({ project_id: projectId }) => (
+            <a key={projectId} className={selectedProjectId === projectId ? 'is-active' : undefined} href={projectLink(projectId)}>{projectId}</a>
+          ))}
+        </nav>
+      ) : null}
 
       <section className="analytics-panel" aria-labelledby="summary-heading">
         <div className="section-heading"><p className="eyebrow">TELEMETRY</p><h2 id="summary-heading">概要</h2></div>

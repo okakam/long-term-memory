@@ -46,7 +46,7 @@ test('Claude CodeとCodexで共有できるskillとinstruction blockを保持す
 
 test('設置手順はClaude CodeとCodexの冪等配置と自己検証を定義する', () => {
   const setup = read('docs/post-mcp-setup.md');
-  for (const requirement of ['Dashboardでプロジェクトを作成', 'owner', 'project_id']) {
+  for (const requirement of ['プロジェクト管理画面でプロジェクトを作成', 'owner', 'project_id']) {
     expect(setup).toContain(requirement);
   }
   for (const requirement of [
@@ -182,7 +182,7 @@ test('接続後setupは17-tool契約とクライアント側適用を案内す�
     'setup_client_environment', '"client": "codex"', '"client": "claude-code"',
     'MCP add/loginが完了した後', '呼び出し側agentがローカル',
     'schema_version', 'config_version', 'assets', 'sha256',
-    'Dashboardでの手動操作', '通常client設定へ適用しません',
+    'プロジェクト管理画面(`/projects`)での手動操作', '通常client設定へ適用しません',
   ]) expect(setup).toContain(requirement);
   for (const file of ['docs/reproduction-spec.md', 'AGENTS.md']) {
     const doc = read(file);

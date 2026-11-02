@@ -41,7 +41,7 @@ test('dashboard は JST 窓、7/30/90 プリセット、日次系列、全 tool 
     searchParams: Promise.resolve({ days: '999', project: 'project' }),
   }));
   expect(html).toContain('（JST・365日）');
-  expect(html).toContain('プロジェクト管理');
+  expect(html).not.toContain('project-management-panel');
   expect(html).toContain('利用状況');
   expect(html).toContain('/dashboard?days=7&amp;project=project');
   expect(html).toContain('/dashboard?days=30&amp;project=project');
@@ -49,6 +49,18 @@ test('dashboard は JST 窓、7/30/90 プリセット、日次系列、全 tool 
   expect(html).toContain('get_memory');
   expect(html).toContain('readless connection');
   expect((html.match(/<time /g) ?? []).length).toBe(365);
+});
+
+test('dashboard のproject絞り込みは選択中の期間を保持して全体へ戻せる', async () => {
+  vi.stubEnv('AUTH_REQUIRED', '0');
+  setTelemetryStoreForTests(TelemetryStore.open());
+
+  const html = renderToStaticMarkup(await DashboardPage({
+    searchParams: Promise.resolve({ days: '7', project: 'project' }),
+  }));
+  expect(html).toContain('aria-label="プロジェクト"');
+  expect(html).toContain('href="/dashboard?days=7">全体</a>');
+  expect(html).toContain('class="is-active" href="/dashboard?days=7&amp;project=project">project</a>');
 });
 
 test('dashboard は昨日までの利用を期間内に集計する', async () => {

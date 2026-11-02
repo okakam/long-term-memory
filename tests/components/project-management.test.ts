@@ -6,7 +6,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
-import { ProjectManagementPanel } from '@/components/project-management/ProjectManagementPanel';
+import { ProjectManagementPanel, projectManagementHref } from '@/components/project-management/ProjectManagementPanel';
 
 test('ownerにはproject作成とemailによるmember追加を表示する', () => {
   const html = renderToStaticMarkup(createElement(ProjectManagementPanel, {
@@ -38,4 +38,8 @@ test('project作成と対象選択を左列にまとめ、member管理を右列�
   }));
 
   expect(html).toMatch(/<div class="project-management-sidebar"><form class="project-create-form"[\s\S]*id="managed-project"[\s\S]*?<\/select><\/div><section class="member-management"/);
+});
+
+test('対象projectの選択先はDashboardではなくプロジェクト管理画面にする', () => {
+  expect(projectManagementHref('a b')).toBe('/projects?project=a%20b');
 });
