@@ -7,6 +7,7 @@ import type { TelemetryKind } from './store';
 export interface InstrumentContext {
   projectIdForInput?: (input: unknown) => string;
   sessionId?: string | null;
+  userId?: string | null;
   maintenance?: boolean;
 }
 
@@ -97,12 +98,14 @@ export function instrumentRegistrar(
         const projectId = name === 'list_projects'
           ? '__global__'
           : ctx.projectIdForInput?.(input) ?? '__global__';
+        const userId = projectId === '__global__' ? ctx.userId ?? null : null;
         try {
           const value = await handler(input, extra);
           const measured = measure(value);
           await record({
             projectId,
             sessionId: ctx.sessionId,
+            userId,
             tool: name,
             kind: toolKind(name, kind),
             ok: true,
@@ -117,6 +120,7 @@ export function instrumentRegistrar(
           await record({
             projectId,
             sessionId: ctx.sessionId,
+            userId,
             tool: name,
             kind: toolKind(name, kind),
             ok: false,

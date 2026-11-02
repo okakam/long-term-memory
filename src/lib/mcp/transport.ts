@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 import { getMemoryService } from '@/lib/memory/singleton';
@@ -24,10 +26,22 @@ function defaultMode(): McpTransportMode {
   return 'stateless';
 }
 
-function jsonResponse(value: unknown, status = 200, request: Request | null = null): Response {
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Telemetry-only connection ID. initialize issues a new one and clients echo it, so
+ * calls can be tied to their connection although each request gets its own server.
+ */
+function resolveSessionId(req: Request, message: JSONRPCMessage & { method: string }): string | undefined {
+  if (message.method === 'initialize') return randomUUID();
+  const sent = req.headers.get('mcp-session-id');
+  return sent && SESSION_ID_PATTERN.test(sent) ? sent : undefined;
+}
+
+function jsonResponse(value: unknown, status = 200, request: Request | null = null, sessionId?: string): Response {
   const headers = new Headers({ 'content-type': 'application/json' });
-  const diagnosticSessionId = request?.headers.get('mcp-session-id');
-  if (diagnosticSessionId) headers.set('mcp-session-id', diagnosticSessionId);
+  const responseSessionId = sessionId ?? request?.headers.get('mcp-session-id');
+  if (responseSessionId) headers.set('mcp-session-id', responseSessionId);
   return new Response(JSON.stringify(value), { status, headers });
 }
 
@@ -112,7 +126,9 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
   if (operationMode === 'curation' && !canWriteShared) {
     return new Response('curator access required', { status: 403 });
   }
+  const sessionId = resolveSessionId(req, message);
   const ctx: ToolContext = {
+    sessionId,
     svc: options.service ?? getMemoryService(),
     canWriteShared,
     principal,
@@ -132,7 +148,7 @@ export async function handleMcpRequest(req: Request, options: McpRequestOptions 
       return new Response(null, { status: 202 });
     }
     if (mode === 'stateless') await session.close();
-    return jsonResponse(response, 200, req);
+    return jsonResponse(response, 200, req, sessionId);
   } catch (error) {
     if (mode === 'stateless' && session!) await session.close().catch(() => undefined);
     if (error instanceof McpRequestTimeoutError) {

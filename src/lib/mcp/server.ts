@@ -18,7 +18,8 @@ export function createMcpServer(ctx: ToolContext): McpServer {
       const projectId = (input as Record<string, unknown>).project_id;
       return typeof projectId === 'string' ? projectId : '__global__';
     },
-    sessionId: ctx.sessionId,
+    get sessionId() { return ctx.sessionId; },
+    get userId() { return ctx.principal?.userId; },
     maintenance: ctx.canWriteShared || Boolean(ctx.automationCredential),
   });
   if (ctx.operationMode === 'curation') {

@@ -1,7 +1,7 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 
 import { TOOL_CATALOG } from '@/lib/telemetry/catalog';
-import { curatorStatus, dailySeries, perProject, perTool, summarize } from '@/lib/telemetry/query';
+import { curatorStatus, dailySeries, perProject, perTool, summarize, visibleRows } from '@/lib/telemetry/query';
 import type { TelemetryRow } from '@/lib/telemetry/store';
 import { resolveTelemetryWindow } from '@/lib/telemetry/window';
 
@@ -32,4 +32,36 @@ test('dailySeries は zero-count day と write 限定 maintenance を返す', ()
   expect(series).toHaveLength(2);
   expect(series[1]).toMatchObject({ reads: 1, writes: 2, maintenanceWrites: 2 });
   expect(TOOL_CATALOG).toHaveLength(16);
+});
+
+describe('visibleRows', () => {
+  const row = (fields: Partial<TelemetryRow>): TelemetryRow => ({
+    id: 1, ts: '2026-11-01T00:00:00.000Z', event: 'tool_call', project_id: 'alpha', session_id: null, user_id: null,
+    tool: 'get_memory', kind: 'read', ok: 1, error_code: null, duration_ms: 0, result_count: null, result_chars: null, maintenance: 0,
+    ...fields,
+  });
+  const mineConnect = row({ event: 'connect', project_id: '__global__', session_id: 's1', user_id: 'me', tool: null, kind: null });
+  const otherConnect = row({ event: 'connect', project_id: '__global__', session_id: 's2', user_id: 'other', tool: null, kind: null });
+  const legacyConnect = row({ event: 'connect', project_id: '__global__', session_id: 's3', tool: null, kind: null });
+  const mineList = row({ project_id: '__global__', session_id: 's1', user_id: 'me', tool: 'list_projects', kind: 'meta' });
+  const otherList = row({ project_id: '__global__', session_id: 's2', user_id: 'other', tool: 'list_projects', kind: 'meta' });
+  const alphaCall = row({ session_id: 's1' });
+  const betaCall = row({ project_id: 'beta', session_id: 's4' });
+  const rows = [mineConnect, otherConnect, legacyConnect, mineList, otherList, alphaCall, betaCall];
+
+  test('全体表示ではアクセス可能なprojectと自分の__global__だけを返す', () => {
+    expect(visibleRows(rows, { projectIds: new Set(['alpha']), userId: 'me' }))
+      .toEqual([mineConnect, mineList, alphaCall]);
+  });
+
+  test('project絞り込みではそのprojectを呼んだ自分の接続を含める', () => {
+    expect(visibleRows(rows, { projectIds: new Set(['alpha']), userId: 'me', selectedProject: 'alpha' }))
+      .toEqual([mineConnect, alphaCall]);
+    expect(visibleRows(rows, { projectIds: new Set(['beta']), userId: 'me', selectedProject: 'beta' }))
+      .toEqual([betaCall]);
+  });
+
+  test('認証なしで絞り込みもなければ全件を返す', () => {
+    expect(visibleRows(rows, {})).toEqual(rows);
+  });
 });
