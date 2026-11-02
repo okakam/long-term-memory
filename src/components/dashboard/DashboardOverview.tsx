@@ -17,6 +17,7 @@ interface DashboardOverviewProps {
   currentUserId: string;
   canManageShared: boolean;
   accessibleProjects: AccessibleProject[];
+  telemetryUnavailable?: boolean;
   windowLabel: string;
   summary: TelemetrySummary;
   previous: TelemetrySummary;
@@ -34,7 +35,7 @@ interface DashboardOverviewProps {
 }
 
 export function DashboardOverview({
-  days, selectedProjectId, currentUserId, canManageShared, accessibleProjects, windowLabel, summary, previous,
+  days, selectedProjectId, currentUserId, canManageShared, accessibleProjects, telemetryUnavailable, windowLabel, summary, previous,
   series, tools, projects, errors, curator, projectFacts, sessionSummaries, maxDailyCalls,
   displayDay, displayIso, queryLink,
 }: DashboardOverviewProps) {
@@ -54,6 +55,7 @@ export function DashboardOverview({
           <p className="eyebrow">OPERATIONS</p>
           <h1>利用状況</h1>
           <p className="muted">{windowLabel}（JST・{days}日）{selectedProjectId ? ' / project: ' + selectedProjectId : ''}</p>
+          {telemetryUnavailable ? <p className="error-message" role="alert">利用履歴を読み込めませんでした。表示中の件数は実際の利用状況を反映していません。</p> : null}
         </div>
         <nav className="period-filter" aria-label="期間">
           {[7, 30, 90].map((preset) => (

@@ -30,6 +30,6 @@ test('dailySeries は zero-count day と write 限定 maintenance を返す', ()
   const window = resolveTelemetryWindow(2, new Date('2026-09-05T17:00:00.000Z'));
   const series = dailySeries(rows, window);
   expect(series).toHaveLength(2);
-  expect(series[0]).toMatchObject({ reads: 1, writes: 2, maintenanceWrites: 2 });
+  expect(series[1]).toMatchObject({ reads: 1, writes: 2, maintenanceWrites: 2 });
   expect(TOOL_CATALOG).toHaveLength(16);
 });

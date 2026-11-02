@@ -69,8 +69,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   }
 
   const store = getTelemetryStore();
-  const allVisibleRows = filterRows(await Promise.resolve(store.rows()), projectIds);
   const window = resolveTelemetryWindow(days);
+  let telemetryUnavailable = false;
+  let storedRows: TelemetryRow[] = [];
+  try {
+    storedRows = await Promise.resolve(store.rows({ from: window.previousStart, to: window.end }));
+  } catch (error) {
+    telemetryUnavailable = true;
+    console.error(`telemetry read failed: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown'}`);
+  }
+  const allVisibleRows = filterRows(storedRows, projectIds);
   const currentRows = allVisibleRows.filter((row) => inRange(row, window.start, window.end));
   const previousRows = allVisibleRows.filter((row) => inRange(row, window.previousStart, window.previousEnd));
   const summary = summarize(currentRows, allVisibleRows);
@@ -90,6 +98,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     currentUserId={principal.userId}
     canManageShared={Boolean(process.env.LTM_CURATOR_USER_ID && principal.userId === process.env.LTM_CURATOR_USER_ID)}
     accessibleProjects={accessibleProjects}
+    telemetryUnavailable={telemetryUnavailable}
     windowLabel={displayIso(window.start.toISOString()) + ' — ' + displayIso(window.end.toISOString())}
     summary={summary}
     previous={previous}

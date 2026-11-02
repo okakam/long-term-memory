@@ -1,3 +1,7 @@
+import { resolveStorageMode } from '@/lib/storage/contracts';
+
+import { createFirestoreTelemetryStore } from './firestore-store';
+
 export type TelemetryKind = 'read' | 'write' | 'meta';
 export type TelemetryEventName = 'tool_call' | 'connect';
 export type TelemetryErrorCode = 'not_found' | 'conflict' | 'validation' | 'internal';
@@ -45,7 +49,7 @@ export interface TelemetryStoreLike {
   close(): void | Promise<void>;
 }
 
-/** Cloud Run instance-local, best-effort telemetry. It is never persisted. */
+/** Process-local telemetry for local development and tests. Cloud mode uses FirestoreTelemetryStore. */
 export class TelemetryStore implements TelemetryStoreLike {
   private readonly events: TelemetryRow[] = [];
   private nextId = 1;
@@ -95,7 +99,7 @@ let testStore: TelemetryStoreLike | null = null;
 
 export function getTelemetryStore(): TelemetryStoreLike {
   if (testStore) return testStore;
-  if (!singleton) singleton = TelemetryStore.openDefault();
+  if (!singleton) singleton = resolveStorageMode() === 'cloud' ? createFirestoreTelemetryStore() : TelemetryStore.openDefault();
   return singleton;
 }
 

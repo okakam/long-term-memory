@@ -305,6 +305,16 @@ OAuthのrate counterは `oauthRateLimits` collection groupの `expires_at` times
     gcloud firestore fields ttls list \
       --collection-group=oauthRateLimits
 
+### 利用履歴のTTL
+
+Dashboardの利用履歴 `telemetryEvents` は `expires_at` のTTLで保存から400日後に削除します。TTL未設定でもアプリは動作しますが、文書が削除されず増え続けます。
+
+    gcloud firestore fields ttls update expires_at \
+      --collection-group=telemetryEvents \
+      --enable-ttl
+    gcloud firestore fields ttls list \
+      --collection-group=telemetryEvents
+
 ## 10. 専用 Service Account と IAM を設定する
 
 既存 service account を確認してから、Cloud Run deploy 用と runtime 用を分離して作成します。
