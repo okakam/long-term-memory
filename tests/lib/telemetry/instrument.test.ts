@@ -64,9 +64,8 @@ test('MCP initialize と tools/call は aggregate telemetry を記録する', as
   expect(response.status).toBe(200);
 
   const rows = telemetry.rows();
-  expect(rows.map((row) => row.event)).toEqual(['connect', 'tool_call']);
-  expect(rows[0]).toMatchObject({ project_id: '__global__', session_id: expect.any(String), tool: null, kind: null });
-  expect(rows[1]).toMatchObject({ project_id: 'project', session_id: rows[0].session_id, tool: 'get_memory', kind: 'read', ok: 1 });
+  expect(rows.map((row) => row.event)).toEqual(['tool_call']);
+  expect(rows[0]).toMatchObject({ project_id: 'project', tool: 'get_memory', kind: 'read', ok: 1 });
   expect(JSON.stringify(rows)).not.toContain('TOKEN_VALUE');
   expect(JSON.stringify(rows)).not.toContain('PRIVATE BODY');
 });

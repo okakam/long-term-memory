@@ -27,7 +27,7 @@ test('tool callを本文なしの集計fieldとTTL付きで保存し、rowとし
   });
 
   expect(documents[0]).toStrictEqual({
-    ts: '2026-11-01T00:00:00.000Z', event: 'tool_call', project_id: 'alpha', session_id: null,
+    ts: '2026-11-01T00:00:00.000Z', event: 'tool_call', project_id: 'alpha', session_id: null, user_id: null,
     tool: 'get_memory', kind: 'read', ok: 1, error_code: null, duration_ms: 4,
     result_count: 1, result_chars: 12, maintenance: 0,
     expires_at: new Date(Date.parse('2026-11-01T00:00:00.000Z') + TELEMETRY_RETENTION_DAYS * 86_400_000),

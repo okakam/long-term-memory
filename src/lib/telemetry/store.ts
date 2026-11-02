@@ -12,6 +12,8 @@ export interface TelemetryRow {
   event: TelemetryEventName;
   project_id: string;
   session_id: string | null;
+  /** Firebase UID. Set only on events without a project; absent on older documents. */
+  user_id?: string | null;
   tool: string | null;
   kind: TelemetryKind | null;
   ok: number;
@@ -26,6 +28,7 @@ export interface ToolCallEvent {
   ts?: string;
   projectId: string;
   sessionId?: string | null;
+  userId?: string | null;
   tool: string;
   kind: TelemetryKind;
   ok: boolean;
@@ -40,6 +43,7 @@ export interface ConnectEvent {
   ts?: string;
   projectId: string;
   sessionId: string;
+  userId?: string | null;
 }
 
 export interface TelemetryStoreLike {
@@ -66,7 +70,7 @@ export class TelemetryStore implements TelemetryStoreLike {
   recordToolCall(event: ToolCallEvent): void {
     this.events.push({
       id: this.nextId++, ts: event.ts ?? new Date().toISOString(), event: 'tool_call',
-      project_id: event.projectId, session_id: event.sessionId ?? null, tool: event.tool, kind: event.kind,
+      project_id: event.projectId, session_id: event.sessionId ?? null, user_id: event.userId ?? null, tool: event.tool, kind: event.kind,
       ok: event.ok ? 1 : 0, error_code: event.errorCode ?? null,
       duration_ms: Math.max(0, Math.floor(event.durationMs)), result_count: event.resultCount ?? null,
       result_chars: event.resultChars ?? null, maintenance: event.maintenance ? 1 : 0,
@@ -76,7 +80,7 @@ export class TelemetryStore implements TelemetryStoreLike {
   recordConnect(event: ConnectEvent): void {
     this.events.push({
       id: this.nextId++, ts: event.ts ?? new Date().toISOString(), event: 'connect',
-      project_id: event.projectId, session_id: event.sessionId, tool: null, kind: null,
+      project_id: event.projectId, session_id: event.sessionId, user_id: event.userId ?? null, tool: null, kind: null,
       ok: 1, error_code: null, duration_ms: 0, result_count: null, result_chars: null, maintenance: 0,
     });
   }

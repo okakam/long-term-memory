@@ -44,7 +44,7 @@ export class FirestoreTelemetryStore implements TelemetryStoreLike {
   async recordToolCall(event: ToolCallEvent): Promise<void> {
     const ts = event.ts ?? new Date().toISOString();
     await this.write({
-      ts, event: 'tool_call', project_id: event.projectId, session_id: event.sessionId ?? null,
+      ts, event: 'tool_call', project_id: event.projectId, session_id: event.sessionId ?? null, user_id: event.userId ?? null,
       tool: event.tool, kind: event.kind, ok: event.ok ? 1 : 0, error_code: event.errorCode ?? null,
       duration_ms: Math.max(0, Math.floor(event.durationMs)), result_count: event.resultCount ?? null,
       result_chars: event.resultChars ?? null, maintenance: event.maintenance ? 1 : 0,
@@ -55,7 +55,7 @@ export class FirestoreTelemetryStore implements TelemetryStoreLike {
   async recordConnect(event: ConnectEvent): Promise<void> {
     const ts = event.ts ?? new Date().toISOString();
     await this.write({
-      ts, event: 'connect', project_id: event.projectId, session_id: event.sessionId,
+      ts, event: 'connect', project_id: event.projectId, session_id: event.sessionId, user_id: event.userId ?? null,
       tool: null, kind: null, ok: 1, error_code: null, duration_ms: 0,
       result_count: null, result_chars: null, maintenance: 0, expires_at: expiresAt(ts),
     });

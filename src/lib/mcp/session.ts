@@ -40,8 +40,7 @@ let syntheticId = 0;
 
 export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const sessionId = randomUUID();
-  const sessionContext: ToolContext = { ...ctx, sessionId };
+  const sessionContext: ToolContext = { ...ctx };
   const server = createMcpServer(sessionContext);
   const pending = new Map<string, Resolver>();
   let initialization: Promise<void> | null = null;
@@ -101,7 +100,11 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
     acceptInitialize: async (message, timeoutMs = 30_000) => {
       if (initialization) return session.send(message, timeoutMs);
       const responsePromise = session.send(message, timeoutMs).then(async (response) => {
-        await recordConnect({ projectId: '__global__', sessionId });
+        await recordConnect({
+          projectId: '__global__',
+          sessionId: sessionContext.sessionId ?? randomUUID(),
+          userId: sessionContext.principal?.userId ?? null,
+        });
         return response;
       });
       initialization = responsePromise.then(() => undefined).catch((error) => {
@@ -125,7 +128,6 @@ export async function createMcpSession(ctx: ToolContext): Promise<McpSession> {
           },
         }, timeoutMs);
         await session.send({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
-        await recordConnect({ projectId: '__global__', sessionId });
       })().catch((error) => {
         initialization = null;
         throw error;
