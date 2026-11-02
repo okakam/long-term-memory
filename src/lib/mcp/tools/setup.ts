@@ -9,7 +9,7 @@ const commonInstructions = [
   '正本はこの応答のassetsです。呼び出し側repositoryに同名sourceがあると仮定せず、各contentのUTF-8 sha256がasset.sha256と一致することを配置前後に確認してください。schema_versionとconfig_versionも確認し、不一致なら中断してください。',
   'ローカルのbashとjqを確認してください。必要な環境がない場合、壊れたJSON/TOML、片方だけ・複数・壊れたltm markerがある場合は自動修復せず中断し、原因を報告してください。',
   '同一内容は変更せず、異なる既存ファイルは更新前に*.bak-<timestamp>へバックアップしてください。他の設定、hook、文書sectionを保持してください。instruction blockはltm:begin/endが各1個なら置換、旧見出し ## long-term-memory MCP なら次の ## まで置換、それ以外は追記してください。',
-  'list_projectsで接続と利用可能projectを確認してください。project作成やmember追加など不足する操作はDashboardでの手動操作として案内してください。OAuth同意はmembershipを作成しません。',
+  'list_projectsで接続と利用可能projectを確認してください。project作成やmember追加など不足する操作はプロジェクト管理画面(`/projects`)での手動操作として案内してください。OAuth同意はmembershipを作成しません。',
   'guide_markdownのcurator・CI・Cloud Run smoke専用PAT節は通常client設定へ適用しないでください。PAT、OAuth token、maintenance token、MCP URLを補助設定ファイルへ追加せず、認証情報を応答・ログ・version stampへ保存しないでください。',
 ];
 
@@ -28,7 +28,7 @@ const codexInstructions = [
 
 export function registerClientSetupTool(server: McpServer): void {
   server.registerTool('setup_client_environment', {
-    description: 'Call only when the user requests client setup after MCP add/login. No project_id is needed. Returns canonical versioned setup guide/assets; the calling agent must apply them locally for the selected client, not stop at an explanation. Dashboard membership changes remain manual and machine-only curator PAT setup is excluded.',
+    description: 'Call only when the user requests client setup after MCP add/login. No project_id is needed. Returns canonical versioned setup guide/assets; the calling agent must apply them locally for the selected client, not stop at an explanation. Membership changes on the project management page (`/projects`) remain manual and machine-only curator PAT setup is excluded.',
     inputSchema: SetupClientEnvironmentInput,
   }, async ({ client }) => json({
     ...SETUP_MANIFEST,

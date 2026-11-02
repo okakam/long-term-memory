@@ -346,7 +346,7 @@ function isTimestamp(value: unknown): value is { toDate(): Date } {
   return typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function';
 }
 
-// The shared scope has no Dashboard owner, so its revision document is created by its first write.
+// The shared scope has no project owner, so its revision document is created by its first write.
 function writableProjectRecord(document: FirestoreDocument, projectId: string, now: string): FirestoreProjectRecord {
   if (document.exists) return projectRecord(document);
   if (projectId !== SHARED_PROJECT_ID) throw new Error(`project not found: ${projectId}`);

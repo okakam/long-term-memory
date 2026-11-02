@@ -26,7 +26,7 @@ test('dated runnerはproposal onlyで、shared restoreは専用requestから処�
   expect(skill).toContain('empty MCP configuration');
   expect(skill).toContain('Return a JSON array of proposals');
   expect(skill).toContain('never request `curation_apply` or `curation_checkpoint`');
-  expect(skill).toContain('Only the configured curator UID may create it in the Dashboard.');
+  expect(skill).toContain('Only the configured curator UID may create it on the project management page (`/projects`).');
   expect(skill).toContain('Do not call the ordinary project restore endpoint');
 });
 

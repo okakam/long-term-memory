@@ -19,6 +19,10 @@ type ProjectManagementPanelProps = {
   canManageShared?: boolean;
 };
 
+export function projectManagementHref(projectId: string): string {
+  return `/projects?project=${encodeURIComponent(projectId)}`;
+}
+
 function apiError(response: Response, fallback: string): Promise<never> {
   return response.text().then((text) => { throw new Error(text || fallback); });
 }
@@ -50,7 +54,7 @@ export function ProjectManagementPanel({ initialProjects, currentUserId, selecte
   function selectProject(nextId: string) {
     setSelectedId(nextId);
     setError(null);
-    router.push(`/dashboard?project=${encodeURIComponent(nextId)}`);
+    router.push(projectManagementHref(nextId));
     router.refresh();
   }
 
@@ -131,7 +135,7 @@ export function ProjectManagementPanel({ initialProjects, currentUserId, selecte
   }
 
   return <section className="project-management-panel" aria-labelledby="project-management-heading">
-    <div className="section-heading"><div><p className="eyebrow">ACCESS</p><h2 id="project-management-heading">プロジェクト管理</h2></div></div>
+    <div className="section-heading"><div><p className="eyebrow">ACCESS</p><h2 id="project-management-heading">プロジェクトとメンバー</h2></div></div>
     <div className="project-management-sidebar"><form className="project-create-form" onSubmit={createProject}>
       <label htmlFor="project-slug">新しいプロジェクト</label>
       <div className="inline-form"><input id="project-slug" value={projectSlug} onChange={(event) => setProjectSlug(event.target.value)} placeholder="project-slug" required />

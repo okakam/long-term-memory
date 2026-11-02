@@ -6,7 +6,7 @@
 
 curatorはGitHub Actionsで実行しません。このrepositoryはpublicで、self-hosted runnerを登録すると外部PRのworkflowがrunner上で任意のcodeを実行できるためです。ローカルではログイン済みの`claude` CLI(サブスクリプション)を使い、Anthropic API keyは使いません。wrapperは`~/.local/state/ltm-curator/run.lock`で定期実行と手動実行の重複を防ぎます。
 
-通常projectの棚卸しはDashboardでownerが有効化したprojectだけを対象にします。初期値はdisabledです。Dashboardではmemory type別review周期とsession archive日数をprojectごとに変更できます。`__shared__`は通常棚卸しの対象外です。
+通常projectの棚卸しはプロジェクト管理画面(`/projects`)でownerが有効化したprojectだけを対象にします。初期値はdisabledです。この画面ではmemory type別review周期とsession archive日数をprojectごとに変更できます。`__shared__`は通常棚卸しの対象外です。
 
 通常棚卸しrunnerは`LTM_AUTO_MAINTENANCE_TOKEN`で専用MCP registryへ接続します。Claudeは読み取り専用のprivate snapshotを確認してproposalだけを返し、trusted Node runnerがschema、memory hash、出典引用を検証してから`maintenance_apply`を呼びます。公開URLを取得する場合はHTTPS、公開IP、最大3回redirect、10秒、展開後1 MiBの制限を適用します。生のmodel出力、本文、URL、tokenはActions logへ書きません。
 
@@ -71,7 +71,7 @@ launchdはmacOSのローカル時刻10:00に実行します。変更後にrunner
 
 ## 履歴と復元
 
-Dashboardのproject管理からownerが自動棚卸し設定、最新処理status、archive、revisionを確認できます。project memoryの復元はrevisionを選択して実行します。設定更新はversion競合を検出し、記憶復元は現在hash競合をHTTP 409で返します。shared履歴と復元requestはcurator UIDだけが扱えます。共有の復元ボタンはpending requestを作るだけで、次のscheduleまたはmanual writeのcuration jobがcurator PATとmaintenance tokenを再検証してから適用します。dry-runでは適用しません。読み取り・revision確認・適用時の一時障害は`pending`を保ち、次のwrite実行で再試行します。現在hashの不一致、memory消失、revision消失、CAS競合など安全に再試行できないrequestは`failed`として記録します。
+プロジェクト管理画面(`/projects`)からownerが自動棚卸し設定、最新処理status、archive、revisionを確認できます。project memoryの復元はrevisionを選択して実行します。設定更新はversion競合を検出し、記憶復元は現在hash競合をHTTP 409で返します。shared履歴と復元requestはcurator UIDだけが扱えます。共有の復元ボタンはpending requestを作るだけで、次のscheduleまたはmanual writeのcuration jobがcurator PATとmaintenance tokenを再検証してから適用します。dry-runでは適用しません。読み取り・revision確認・適用時の一時障害は`pending`を保ち、次のwrite実行で再試行します。現在hashの不一致、memory消失、revision消失、CAS競合など安全に再試行できないrequestは`failed`として記録します。
 
 履歴APIはevent、revision hash、operation ID、memory ID、理由コードだけを返します。本文、source URL、GCS object keyはブラウザへ返しません。自動棚卸しと共通集約は完全削除を行いません。利用者による手動の完全削除は従来どおりです。
 
@@ -79,7 +79,7 @@ Dashboardのproject管理からownerが自動棚卸し設定、最新処理statu
 
 - 通常棚卸しのsummaryはproject数、適用数、skip数、失敗数だけを出します。`failed`が1以上なら通常棚卸しを失敗扱いにし、共有集約は続行します。
 - 共有集約が失敗した場合、日次cursorは未完了projectで進みません。次回の定期実行で再試行します。
-- 共有restore requestの読み取り・revision確認・適用で一時障害が起きた場合はrequestをpendingのまま保ち、runnerは結果checkpointを送らず次のwrite実行で再試行します。hash/revision競合など安全に再試行できない状態はrequestをfailedとしてDashboardへ表示します。
+- 共有restore requestの読み取り・revision確認・適用で一時障害が起きた場合はrequestをpendingのまま保ち、runnerは結果checkpointを送らず次のwrite実行で再試行します。hash/revision競合など安全に再試行できない状態はrequestをfailedとしてプロジェクト管理画面へ表示します。
 - URL取得の失敗・曖昧な根拠・矛盾は候補を変更せず、再確認予定にします。
 - `LTM_AUTO_MAINTENANCE_TOKEN`が欠落・無効なら通常棚卸しjobが失敗します。共有集約tokenの代替にはしません。
 - runnerのraw Claude stdoutやstderrはlogへ出しません。原因調査にはsafe summary、systemd・launchdのlogと終了status、memory IDと監査eventを使います。

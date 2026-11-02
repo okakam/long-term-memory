@@ -90,18 +90,19 @@ OAuth consentの`/oauth/authorize`では、transaction保存済みのredirect UR
 - `/.well-known/oauth-protected-resource/api/mcp`、`/.well-known/oauth-authorization-server`、`/oauth/register`、`/oauth/authorize`、`/oauth/token`、`/oauth/revoke`: Codex向けDCR/PKCE OAuth endpoint。metadataとOAuth endpointは`Cache-Control: no-store`を返す。
 - `/api/mcp`: queryなしのStreamable HTTP endpoint。`project_id` queryがあるrequestはHTTP 400で拒否する。`initialize`、`tools/list`、`list_projects`と`setup_client_environment`はproject scopeを取らず、それ以外の15 toolsはtop-level必須`project_id`を受ける。requestごとにOAuth access tokenまたはPATを検証し、projectを扱う15 toolsのinvocationごとにmembershipとtool別権限を再評価する。principal不在・無効はHTTP 401、認証済みtool callのmembership/role拒否はJSON-RPC tool error (`isError: true`) をHTTP 200で返す。失効済みgrantを拒否し、認証主体やproject stateをmodule globalへ保存しない。
 - `/api/auth/oauth-grants`: Firebase session本人のOAuth接続一覧と失効だけを許可し、token本文・hash・refresh familyは返さない。
-- `/dashboard`: Firebaseでログインした作成者がprojectを作成するとFirestore membershipの`owner`になる。ownerだけが登録済み許可ドメインのメールアドレスをmemberへ追加し、role変更・削除を行える。OAuth同意はmembershipを変更せず、MCP requestごとにmembershipを再評価する。ownerは通常project単位で自動棚卸しを有効化し、memory type別review日数とsession archive日数を設定できる。設定はversion付きで保存し、更新競合はHTTP 409として再読み込みを促す。初期状態はdisabledとする。
-- Dashboardの`/api/projects/:id/maintenance/history`はowner向けにeventとarchive一覧をページングし、選択した記憶のrevision metadataと現在hashを返す。本文・source URL・内部GCS keyは返さない。`/api/projects/:id/maintenance/restore`はsame-originとowner membershipを再確認してからrevisionを復元し、hash競合時はHTTP 409を返す。
-- `__shared__`の履歴GETと`/api/projects/__shared__/maintenance/restore-requests`はcurator UIDだけに許可する。Dashboardから共有restore requestを作成できるが、本文やrevision内容を直接書き込まない。共有curator jobはcurator PATと`LTM_MAINTENANCE_TOKEN`を専用curation registryで再検証し、現在hashとrevisionを照合してrequestを適用し、pending/succeeded/failedを記録する。
+- `/dashboard`: Firebaseでログインした本人がアクセスできる範囲の利用状況を表示し、期間とprojectで絞り込む。
+- `/projects`: Firebaseでログインした作成者がprojectを作成するとFirestore membershipの`owner`になる。ownerだけが登録済み許可ドメインのメールアドレスをmemberへ追加し、role変更・削除を行える。OAuth同意はmembershipを変更せず、MCP requestごとにmembershipを再評価する。ownerは通常project単位で自動棚卸しを有効化し、memory type別review日数とsession archive日数を設定できる。設定はversion付きで保存し、更新競合はHTTP 409として再読み込みを促す。初期状態はdisabledとする。
+- プロジェクト管理画面の`/api/projects/:id/maintenance/history`はowner向けにeventとarchive一覧をページングし、選択した記憶のrevision metadataと現在hashを返す。本文・source URL・内部GCS keyは返さない。`/api/projects/:id/maintenance/restore`はsame-originとowner membershipを再確認してからrevisionを復元し、hash競合時はHTTP 409を返す。
+- `__shared__`の履歴GETと`/api/projects/__shared__/maintenance/restore-requests`はcurator UIDだけに許可する。プロジェクト管理画面から共有restore requestを作成できるが、本文やrevision内容を直接書き込まない。共有curator jobはcurator PATと`LTM_MAINTENANCE_TOKEN`を専用curation registryで再検証し、現在hashとrevisionを照合してrequestを適用し、pending/succeeded/failedを記録する。
 - Web UIは `/sign-in` と `/sign-up` をpublicにし、Firebase client SDKのemail/password・Google providerを使う。Firebase公開設定は `/api/auth/config` からno-storeで取得でき、client bundleへ秘密値を埋め込まない。共有scopeでは編集・削除を表示しない。
 
 MCP toolsは次の17個を維持する。
 
 `list_memories_by_type`、`search_by_tag`、`find_related`、`search_memories`、`get_memory`、`get_memory_index`、`remember_user_fact`、`remember_reference`、`remember_session_summary`、`remember_feedback`、`remember_project_fact`、`update_memory`、`forget_memory`、`link_memories`、`list_projects`、`setup_client_environment`、`reindex`。
 
-`list_projects`で利用可能projectを確認してから、projectを扱う15 toolsでは同じcallのtop-level `project_id`へ対象slugを渡す。Dashboardがprojectのallowlistとowner/member管理の正本であり、MCP接続ごとのproject設定はない。認証済み利用者の`list_projects`応答は`project_id`、`role`、`created_at`、`updated_at`のみを含み、`owner_user_id`は公開しない。
+`list_projects`で利用可能projectを確認してから、projectを扱う15 toolsでは同じcallのtop-level `project_id`へ対象slugを渡す。プロジェクト管理画面がprojectのallowlistとowner/member管理の正本であり、MCP接続ごとのproject設定はない。認証済み利用者の`list_projects`応答は`project_id`、`role`、`created_at`、`updated_at`のみを含み、`owner_user_id`は公開しない。
 
-利用者が初期設定・更新を依頼した場合、`setup_client_environment`はMCP add/login完了後に`client: "claude-code"`又は`client: "codex"`で呼び、project_idは渡さない。schema_version、config_version、guide_markdown、SHA-256付きassetsを返し、呼び出し側agentがローカルへ適用する。Claude Codeはuser config directory、Codexはagent自身が`git rev-parse --show-toplevel`で解決したcurrent repositoryを対象にする。Cloud Runはclient filesystemへ書き込まない。Dashboardのproject/member変更は手動で行い、curator/CI用PAT設定を通常clientへ適用しない。
+利用者が初期設定・更新を依頼した場合、`setup_client_environment`はMCP add/login完了後に`client: "claude-code"`又は`client: "codex"`で呼び、project_idは渡さない。schema_version、config_version、guide_markdown、SHA-256付きassetsを返し、呼び出し側agentがローカルへ適用する。Claude Codeはuser config directory、Codexはagent自身が`git rev-parse --show-toplevel`で解決したcurrent repositoryを対象にする。Cloud Runはclient filesystemへ書き込まない。プロジェクト管理画面のproject/member変更は手動で行い、curator/CI用PAT設定を通常clientへ適用しない。
 
 ## 7. 初期セットアップと旧環境の扱い
 

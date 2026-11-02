@@ -47,7 +47,7 @@ for (const client of ['claude-code', 'codex'] as const) {
     const instructions = payload.setup_instructions.join('\n');
     expect(instructions).toContain('MCP add/login');
     expect(instructions).toContain('ローカル');
-    expect(instructions).toContain('Dashboard');
+    expect(instructions).toContain('/projects');
     expect(instructions).toContain('PAT');
     expect(instructions).toContain('sha256');
     expect(instructions).toContain('バックアップ');
