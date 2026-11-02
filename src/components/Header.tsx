@@ -9,6 +9,7 @@ export function Header() {
       <nav aria-label="メインナビゲーション">
         <Link href="/dashboard">ダッシュボード</Link>
         <Link href="/">プロジェクト</Link>
+        <Link href="/projects">プロジェクト管理</Link>
         <Link href="/search">検索</Link>
         <Link href="/settings/tokens">設定</Link>
         <AuthControls />

@@ -95,8 +95,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   return <DashboardOverview
     days={days}
     selectedProjectId={requestedProject}
-    currentUserId={principal.userId}
-    canManageShared={Boolean(process.env.LTM_CURATOR_USER_ID && principal.userId === process.env.LTM_CURATOR_USER_ID)}
     accessibleProjects={accessibleProjects}
     telemetryUnavailable={telemetryUnavailable}
     windowLabel={displayIso(window.start.toISOString()) + ' — ' + displayIso(window.end.toISOString())}
@@ -113,5 +111,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     displayDay={displayDay}
     displayIso={displayIso}
     queryLink={(preset) => queryLink(preset, requestedProject)}
+    projectLink={(projectId) => queryLink(days, projectId)}
   />;
 }

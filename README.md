@@ -4,7 +4,7 @@ Markdownを正本にする長期記憶アプリケーションです。Cloud Run
 
 ## Codexから接続する
 
-次のURLを一度だけ登録してOAuthログインします。利用可能なプロジェクトは`list_projects`で確認し、各tool callのtop-level `project_id`で対象を選びます。projectの作成とmember管理はDashboardで行います。
+次のURLを一度だけ登録してOAuthログインします。利用可能なプロジェクトは`list_projects`で確認し、各tool callのtop-level `project_id`で対象を選びます。projectの作成とmember管理はプロジェクト管理画面(`/projects`)で行います。
 
 ```bash
 codex mcp add long-term-memory \
