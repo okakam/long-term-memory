@@ -90,7 +90,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   const curator = curatorStatus(allVisibleRows);
   const projectFacts = tools.find((tool) => tool.tool === 'remember_project_fact')?.calls ?? 0;
   const sessionSummaries = tools.find((tool) => tool.tool === 'remember_session_summary')?.calls ?? 0;
-  const maxDailyCalls = Math.max(1, ...series.map((item) => item.reads + item.writes + item.meta));
 
   return <DashboardOverview
     days={days}
@@ -107,7 +106,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     curator={curator}
     projectFacts={projectFacts}
     sessionSummaries={sessionSummaries}
-    maxDailyCalls={maxDailyCalls}
     displayDay={displayDay}
     displayIso={displayIso}
     queryLink={(preset) => queryLink(preset, requestedProject)}

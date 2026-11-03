@@ -87,3 +87,14 @@ test('dashboard は履歴の読み込み失敗を0件と区別して表示する
   expect(html).toContain('利用履歴を読み込めませんでした');
   expect(error).toHaveBeenCalled();
 });
+
+test('dashboard の日次推移は read・write・meta の折れ線グラフで表示する', async () => {
+  vi.stubEnv('AUTH_REQUIRED', '0');
+  setTelemetryStoreForTests(TelemetryStore.open());
+
+  const html = renderToStaticMarkup(await DashboardPage({ searchParams: Promise.resolve({ days: '7' }) }));
+  expect(html).toContain('日次推移の折れ線グラフ');
+  expect((html.match(/<polyline /g) ?? []).length).toBe(3);
+  expect(html).toContain('表で表示');
+  expect((html.match(/<time /g) ?? []).length).toBe(7);
+});

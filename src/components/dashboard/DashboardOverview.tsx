@@ -1,6 +1,5 @@
-import { Bar } from '@/components/dashboard/Bar';
 import { Delta } from '@/components/dashboard/Delta';
-import { Sparkline } from '@/components/dashboard/Sparkline';
+import { DailyLineChart } from '@/components/dashboard/DailyLineChart';
 import type { AccessibleProject } from '@/components/project-management/ProjectManagementPanel';
 import type {
   CuratorMetric,
@@ -26,7 +25,6 @@ interface DashboardOverviewProps {
   curator: CuratorMetric;
   projectFacts: number;
   sessionSummaries: number;
-  maxDailyCalls: number;
   displayDay(date: string): string;
   displayIso(value: string | null): string;
   queryLink(days: number): string;
@@ -35,7 +33,7 @@ interface DashboardOverviewProps {
 
 export function DashboardOverview({
   days, selectedProjectId, accessibleProjects, telemetryUnavailable, windowLabel, summary, previous,
-  series, tools, projects, errors, curator, projectFacts, sessionSummaries, maxDailyCalls,
+  series, tools, projects, errors, curator, projectFacts, sessionSummaries,
   displayDay, displayIso, queryLink, projectLink,
 }: DashboardOverviewProps) {
   const cards = [
@@ -90,15 +88,9 @@ export function DashboardOverview({
 
       <section className="analytics-panel" aria-labelledby="daily-heading">
         <div className="section-heading"><p className="eyebrow">ACTIVITY</p><h2 id="daily-heading">日次推移</h2></div>
-        <div className="daily-series">
-          {series.map((day) => (
-            <div key={day.date} className="daily-row">
-              <time dateTime={day.date}>{displayDay(day.date)}</time>
-              <Bar value={day.reads + day.writes + day.meta} max={maxDailyCalls} label={day.date + ' calls'} />
-              <Sparkline values={[day.reads, day.writes, day.meta]} />
-            </div>
-          ))}
-        </div>
+        <DailyLineChart points={series.map((day) => ({
+          date: day.date, label: displayDay(day.date), reads: day.reads, writes: day.writes, meta: day.meta,
+        }))} />
       </section>
 
       <section className="analytics-panel" aria-labelledby="alerts-heading">
